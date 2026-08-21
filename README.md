@@ -146,6 +146,25 @@ podman build -t localhost/sketchlab:v0.5.0 .
 systemctl --user restart sketchlab.service
 ```
 
+### ComfyUI / DeepSeek Harness custom builds
+
+These services build from Containerfiles in `containers/comfyui/` and
+`containers/deepseek-harness/`. The installer builds them automatically,
+but skips rebuilding if the image already exists. To force a rebuild
+after Containerfile changes:
+
+```bash
+FORCE_REBUILD=1 curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/install.sh | bash
+```
+
+Or manually:
+
+```bash
+podman rmi -f localhost/comfyui-cpu:v0.30.2      # ComfyUI CPU
+podman rmi -f localhost/deepseek-harness:0.1.0-rc.6  # DSH
+curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/install.sh | bash
+```
+
 ### avahi hostname conflicts
 
 If avahi publishes a name like `host-2.local` or `host-13.local`, something
