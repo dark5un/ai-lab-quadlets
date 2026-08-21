@@ -279,36 +279,34 @@ cp "${SOURCE_DIR}/scripts/hf-download.sh" "${HOME}/.local/bin/hf-download" 2>/de
 chmod +x "${HOME}/.local/bin/hf-download" 2>/dev/null
 echo "  ✓ ~/.local/bin/hf-download"
 
-# Ensure the Hugging Face CLI is available (needed by hf-download).
-# Note: `huggingface-cli` is deprecated and BROKEN (prints "use hf instead"
-# and exits non-zero) — only `hf` counts as a working CLI.
+# Ensure the Hugging Face CLI (hf) is available (needed by hf-download).
 if command -v hf &>/dev/null; then
     echo "  ✓ hf CLI (Hugging Face): $(hf --version 2>/dev/null | head -1)"
 elif command -v brew &>/dev/null; then
-    echo "  ~ Installing Hugging Face CLI via brew..."
-    brew install huggingface-cli 2>/dev/null && echo "  ✓ installed via brew" || \
+    echo "  ~ Installing hf CLI via brew..."
+    brew install hf 2>/dev/null && echo "  ✓ installed via brew" || \
         echo "  ! brew install failed — trying pip..."
     if ! command -v hf &>/dev/null && command -v pip3 &>/dev/null; then
-        pip3 install --user --upgrade huggingface_hub 2>/dev/null && echo "  ✓ installed via pip" || \
+        pip3 install --user --upgrade "huggingface_hub" 2>/dev/null && echo "  ✓ installed via pip" || \
             echo "  ! pip install failed"
     fi
 elif command -v pip3 &>/dev/null; then
-    echo "  ~ Installing Hugging Face CLI via pip..."
-    pip3 install --user --upgrade huggingface_hub 2>/dev/null && echo "  ✓ installed via pip" || \
+    echo "  ~ Installing hf CLI via pip..."
+    pip3 install --user --upgrade "huggingface_hub" 2>/dev/null && echo "  ✓ installed via pip" || \
         echo "  ! pip install failed"
-elif command -v uv &>/dev/null; then
-    echo "  ~ Installing Hugging Face CLI via uv..."
-    uv tool install --upgrade huggingface-hub 2>/dev/null && echo "  ✓ installed via uv" || \
-        echo "  ! uv install failed"
+elif command -v curl &>/dev/null; then
+    echo "  ~ Installing hf CLI via standalone installer..."
+    curl -LsSf https://hf.co/cli/install.sh | bash 2>/dev/null && echo "  ✓ installed" || \
+        echo "  ! standalone install failed"
 fi
 
 # Final check — warn clearly if no working CLI is available
 if ! command -v hf &>/dev/null; then
     echo "  ! No working Hugging Face CLI (hf) found."
-    echo "  ! hf-download needs it. Install with one of:"
-    echo "      brew install huggingface-cli"
-    echo "      pip install --user huggingface-hub"
-    echo "      uv tool install huggingface-hub"
+    echo "  ! hf-download needs it. Install one of:"
+    echo "      brew install hf"
+    echo "      pip install --user huggingface_hub"
+    echo "      curl -LsSf https://hf.co/cli/install.sh | bash"
 fi
 echo ""
 

@@ -13,7 +13,7 @@
 # Downloads to: ~/.local/share/llama.cpp/models/
 # Updates:      ~/.config/containers/config/llama.cpp/presets.ini
 #
-# Uses the `hf` CLI (huggingface_hub ≥ 0.38). Falls back to huggingface-cli.
+# Requires the `hf` CLI (huggingface_hub).
 
 set -euo pipefail
 
@@ -44,17 +44,12 @@ case "$FILTER" in
 esac
 
 # ─── Prerequisites ────────────────────────────────────────────────────────
-DOWNLOAD_CMD=""
-if command -v hf &>/dev/null; then
-    DOWNLOAD_CMD="hf"
-elif command -v huggingface-cli &>/dev/null; then
-    DOWNLOAD_CMD="huggingface-cli"
-else
-    echo "Error: neither 'hf' nor 'huggingface-cli' found."
+if ! command -v hf &>/dev/null; then
+    echo "Error: Hugging Face CLI (hf) not found."
     echo "Install one of:"
-    echo "  brew install huggingface-cli"
-    echo "  pip install huggingface-hub"
-    echo "  uv tool install huggingface-hub"
+    echo "  brew install hf"
+    echo "  pip install huggingface_hub"
+    echo "  curl -LsSf https://hf.co/cli/install.sh | bash"
     exit 1
 fi
 
@@ -71,15 +66,8 @@ echo ""
 
 # ─── Download ─────────────────────────────────────────────────────────────
 echo "Downloading (this may take a while)..."
-if [ "$DOWNLOAD_CMD" = "hf" ]; then
-    hf download "$REPO" --include "$FILTER" --local-dir "$TARGET_DIR" \
-        || { echo "Download failed (filter may match nothing)."; exit 1; }
-else
-    huggingface-cli download "$REPO" "$FILTER" \
-        --local-dir "$TARGET_DIR" \
-        --resume-download \
-        || { echo "Download failed (filter may match nothing)."; exit 1; }
-fi
+hf download "$REPO" --include "$FILTER" --local-dir "$TARGET_DIR" \
+    || { echo "Download failed (filter may match nothing)."; exit 1; }
 echo ""
 
 # ─── Find what we got ─────────────────────────────────────────────────────

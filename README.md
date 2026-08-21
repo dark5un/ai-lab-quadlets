@@ -218,8 +218,8 @@ hf-download unsloth/Qwen3.8-27B-GGUF UD-IQ1_M
 
 It downloads to `~/.local/share/llama.cpp/models/` and appends the model
 section to `~/.config/containers/config/llama.cpp/presets.ini`, then restarts
-llama-cpp-main. Requires `hf` or `huggingface-cli` (the installer tries brew,
-then pip, and tells you what's missing).
+llama-cpp-main. Requires `hf` (the installer tries brew, then pip,
+then standalone installer, and tells you what's missing).
 
 To place files manually instead, drop GGUF files in
 `~/.local/share/llama.cpp/models/` and add a section to the presets.ini.
