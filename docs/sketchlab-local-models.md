@@ -14,7 +14,8 @@ It connects to any **OpenAI-compatible API** endpoint — no special integration
 
 ### From the host (outside the container network)
 
-Open Sketch Lab at `https://dark5un.local:3004` and click the AI button (magic wand
+Open Sketch Lab at `https://<your-hostname>.local:3004` (the avahi/mDNS name,
+e.g. `framework.local`) and click the AI button (magic wand
 or brain icon in the editor toolbar). In the settings panel:
 
 | Setting | Value (example) |

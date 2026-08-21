@@ -205,7 +205,7 @@ For a custom build, place a Containerfile at `containers/comfyui/Containerfile`.
 
 Sketch Lab's AI panel connects to any OpenAI-compatible endpoint:
 
-1. Open Sketch Lab (https://dark5un.local:3004)
+1. Open Sketch Lab (https://<your-hostname>.local:3004 — the avahi/mDNS name)
 2. Click the AI button in the editor
 3. Set endpoint to: `http://llama-cpp:8080` (within the network)
    or `http://127.0.0.1:11435` (from the host)

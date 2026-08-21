@@ -73,8 +73,10 @@ install:
         echo "  ✓ $fname"
     done
 
-    # Configs (preserve existing)
-    echo "  → Deploying configs (existing .env and presets preserved)..."
+    # Configs (preserve existing) — substitute HOSTNAME.local with avahi .local name
+    HOSTNAME_SHORT=$(hostname -s 2>/dev/null || echo "localhost")
+    LOCAL_HOSTNAME="${HOSTNAME_SHORT}.local"
+    echo "  → Deploying configs (existing .env and presets preserved, hostname: ${LOCAL_HOSTNAME})..."
     for config_item in "$ROOT/config/"*; do
         item_name=$(basename "$config_item")
         target="$CONFIG_DIR/$item_name"
@@ -82,10 +84,14 @@ install:
             mkdir -p "$target"
             for file in "$config_item"/*; do
                 fname=$(basename "$file")
-                if [[ "$fname" == *.example ]]; then
+                if [[ "$fname" == "Caddyfile.example" ]]; then
+                    if [ ! -f "$target/Caddyfile" ]; then
+                        sed "s/HOSTNAME\.local/${LOCAL_HOSTNAME}/g" "$file" > "$target/Caddyfile" 2>/dev/null || cp "$file" "$target/Caddyfile"
+                    fi
+                elif [[ "$fname" == *.example ]]; then
                     cp "$file" "$target/" 2>/dev/null || true
                 elif [ ! -f "$target/$fname" ]; then
-                    cp "$file" "$target/" 2>/dev/null || true
+                    sed "s/HOSTNAME\.local/${LOCAL_HOSTNAME}/g" "$file" > "$target/$fname" 2>/dev/null || cp "$file" "$target/$fname"
                 fi
             done
         fi

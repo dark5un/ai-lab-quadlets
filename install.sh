@@ -139,6 +139,11 @@ for quadlet in "${SOURCE_DIR}/quadlets/"*.container; do
 done
 
 # Configs (don't overwrite existing service.env or presets.ini on reinstall)
+# HOSTNAME.local placeholders are substituted with the real hostname (avahi .local name)
+HOSTNAME_SHORT=$(hostname -s 2>/dev/null || echo "localhost")
+LOCAL_HOSTNAME="${HOSTNAME_SHORT}.local"
+echo "  → Using local hostname: ${LOCAL_HOSTNAME} (from avahi/mDNS)"
+
 mkdir -p "$CONFIG_DIR"
 echo "  → Deploying configs to $CONFIG_DIR/ (existing .env and presets preserved)..."
 for config_item in "${SOURCE_DIR}/config/"*; do
@@ -149,12 +154,20 @@ for config_item in "${SOURCE_DIR}/config/"*; do
         mkdir -p "$target"
         for file in "$config_item"/*; do
             fname=$(basename "$file")
-            if [[ "$fname" == *.example ]]; then
+            # Caddyfile.example becomes Caddyfile with hostname substitution
+            if [[ "$fname" == "Caddyfile.example" ]]; then
+                if [ ! -f "${target}/Caddyfile" ]; then
+                    sed "s/HOSTNAME\.local/${LOCAL_HOSTNAME}/g" "$file" > "${target}/Caddyfile" 2>/dev/null || cp "$file" "${target}/Caddyfile"
+                    echo "  ✓ caddy/Caddyfile (hostname substituted)"
+                fi
+            elif [[ "$fname" == *.example ]]; then
                 # Always copy .example files (they're templates)
                 cp "$file" "$target/" 2>/dev/null || true
             elif [ ! -f "${target}/${fname}" ]; then
                 # Only copy non-example files if they don't exist yet
-                cp "$file" "$target/" 2>/dev/null || true
+                # Substitute HOSTNAME.local with the real hostname
+                sed "s/HOSTNAME\.local/${LOCAL_HOSTNAME}/g" "$file" > "${target}/${fname}" 2>/dev/null || cp "$file" "${target}/${fname}"
+                echo "  ✓ ${item_name}/${fname} (hostname substituted)"
             fi
         done
     fi
@@ -259,8 +272,8 @@ echo ""
 echo "Next steps:"
 echo "  1. Place GGUF model files in ~/.local/share/llama.cpp/models/"
 echo "  2. Edit presets in ~/.config/containers/config/llama.cpp/presets.ini"
-echo "  3. Access services via Caddy (tls internal — localhost only):"
-echo "     • Open WebUI:  https://dark5un.local:3001"
-echo "     • Sketch Lab:  https://dark5un.local:3004"
+echo "  3. Access services via Caddy (tls internal — avahi .local name):"
+echo "     • Open WebUI:  https://${LOCAL_HOSTNAME}:3001"
+echo "     • Sketch Lab:  https://${LOCAL_HOSTNAME}:3004"
 echo "  4. See https://github.com/dark5un/sketchlab.app for the sketchlab skill"
 echo "     that lets AI agents generate diagrams into Sketch Lab."
