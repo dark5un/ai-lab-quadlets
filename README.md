@@ -14,7 +14,7 @@ reboots, and can be rehydrated on a fresh machine with one command.
 │                                                       │
 │  ai.network ──── podman network (internal)            │
 │       │                                              │
-│       ├── caddy:3001-3004  ──── HTTPS reverse proxy   │
+│       ├── caddy:3001-3005  ──── HTTPS reverse proxy   │
 │       │    ├─ :3001 → open-webui:8080                 │
 │       │    ├─ :3002 → comfyui:8188                    │
 │       │    ├─ :3003 → hermes:9119                     │
@@ -43,7 +43,7 @@ reboots, and can be rehydrated on a fresh machine with one command.
 | **llama-cpp-main** | core | `11435` | llama.cpp on the largest GPU (long context, big models) |
 | **llama-cpp-research** | optional | `11436` | llama.cpp on the 2nd GPU (conservative settings) |
 | **open-webui** | web | `3000` | AI chat UI (OpenAI-compatible backend) |
-| **caddy** | proxy | `3001-3004` | HTTPS reverse proxy, internal TLS |
+| **caddy** | proxy | `3001-3005` | HTTPS reverse proxy, internal TLS |
 || **comfyui** | image | `8188` | Stable Diffusion / AI image generation |
 || **sketchlab** | diagram | `8080` | Diagramming SPA with local LLM support |
 || **deepseek-harness** | agent | `3080` | Agent runtime (plugin-based, community image) |
@@ -99,13 +99,14 @@ If that returns `200`, open a browser to `https://<avahi-name>.local:3001`.
 | ComfyUI | `https://<avahi-name>.local:3002` |
 | Hermes Agent | `https://<avahi-name>.local:3003` |
 | Sketch Lab | `https://<avahi-name>.local:3004` |
+| DeepSeek Harness | `https://<avahi-name>.local:3005` |
 
 ### Firewall
 
 mDNS (`.local` name resolution) needs UDP port 5353 open:
 
 ```bash
-sudo firewall-cmd --permanent --add-service=mdns --add-port=3001-3004/tcp
+sudo firewall-cmd --permanent --add-service=mdns --add-port=3001-3005/tcp
 sudo firewall-cmd --reload
 ```
 

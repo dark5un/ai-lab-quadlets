@@ -72,7 +72,7 @@ Recommended models:
 - Your machine's avahi-published name may differ from the kernel hostname due
   to LAN conflicts. Check the actual name: `systemctl status avahi-daemon 2>/dev/null | grep -o 'running \[[^]]*\]'`
 - The firewall needs mDNS and the service ports open:
-  `sudo firewall-cmd --permanent --add-service=mdns --add-port=3001-3004/tcp && sudo firewall-cmd --reload`
+  `sudo firewall-cmd --permanent --add-service=mdns --add-port=3001-3005/tcp && sudo firewall-cmd --reload`
 
 **"No models available"**
 - Verify the endpoint is running: `curl http://127.0.0.1:11435/v1/models`

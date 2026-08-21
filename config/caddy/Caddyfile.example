@@ -56,3 +56,16 @@ https://HOSTNAME.local:3004 {
 
 	reverse_proxy sketchlab:8080
 }
+
+https://HOSTNAME.local:3005 {
+	tls internal
+
+	header {
+		Strict-Transport-Security "max-age=300"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	reverse_proxy deepseek-harness:3080
+}
