@@ -90,6 +90,15 @@ podman ps && echo "---" && curl -k https://$(systemctl status avahi-daemon --no-
 
 If that returns `200`, open a browser to `https://<avahi-name>.local:3001`.
 
+### Service endpoints
+
+| Service | URL |
+|---|---|
+| Open WebUI | `https://<avahi-name>.local:3001` |
+| ComfyUI | `https://<avahi-name>.local:3002` |
+| Hermes Agent | `https://<avahi-name>.local:3003` |
+| Sketch Lab | `https://<avahi-name>.local:3004` |
+
 ### Firewall
 
 mDNS (`.local` name resolution) needs UDP port 5353 open:
