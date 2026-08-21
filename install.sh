@@ -279,15 +279,18 @@ cp "${SOURCE_DIR}/scripts/hf-download.sh" "${HOME}/.local/bin/hf-download" 2>/de
 chmod +x "${HOME}/.local/bin/hf-download" 2>/dev/null
 echo "  ✓ ~/.local/bin/hf-download"
 
-# Ensure huggingface-cli is available (needed by hf-download)
-if command -v huggingface-cli &>/dev/null; then
+# Ensure huggingface-cli or hf CLI is available (needed by hf-download)
+if command -v hf &>/dev/null; then
+    echo "  ✓ hf CLI: $(hf --version 2>/dev/null | head -1)"
+elif command -v huggingface-cli &>/dev/null; then
     echo "  ✓ huggingface-cli: $(huggingface-cli --version 2>/dev/null | head -1)"
+    echo "  ~ Note: huggingface-cli is deprecated; upgrade with: pip install --upgrade huggingface-hub"
 elif command -v brew &>/dev/null; then
     echo "  ~ Installing huggingface-cli via brew..."
     brew install huggingface-cli 2>/dev/null && echo "  ✓ huggingface-cli installed via brew" || \
         echo "  ! brew install failed — try: pip install huggingface-hub"
 elif command -v pip3 &>/dev/null; then
-    echo "  ~ Installing huggingface-cli via pip..."
+    echo "  ~ Installing huggingface-hub via pip..."
     pip3 install --user --upgrade huggingface_hub 2>/dev/null && echo "  ✓ huggingface-cli installed via pip" || \
         echo "  ! pip install failed"
 else

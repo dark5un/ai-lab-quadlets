@@ -207,19 +207,19 @@ The `detect-gpus.sh` script:
 ## Downloading models (hf-download)
 
 The installer puts `hf-download` in `~/.local/bin/` — a simple wrapper around
-`huggingface-cli` that downloads a model and registers it with llama.cpp:
+the HuggingFace CLI that downloads a model and registers it with llama.cpp:
 
 ```bash
-hf-download unsloth/Qwen3.8-27B-GGUF Q4_K_M
+hf-download unsloth/Qwen3.8-27B-GGUF UD-IQ1_M
 ```
 
-- `arg1` — HuggingFace repo (e.g. `unsloth/Qwen3.8-27B-GGUF`)
-- `arg2` (optional) — quantization or filename filter (e.g. `Q4_K_M`, `*IQ4_XS.gguf`)
+- arg1 — HuggingFace repo ID (e.g. `unsloth/Qwen3.8-27B-GGUF`)
+- arg2 (optional) — quantization or filename filter (e.g. `UD-IQ1_M`, `*IQ4_XS.gguf`)
 
 It downloads to `~/.local/share/llama.cpp/models/` and appends the model
 section to `~/.config/containers/config/llama.cpp/presets.ini`, then restarts
-llama-cpp-main. Requires `huggingface-cli` (the installer tries brew, then
-pip, and tells you what's missing).
+llama-cpp-main. Requires `hf` or `huggingface-cli` (the installer tries brew,
+then pip, and tells you what's missing).
 
 To place files manually instead, drop GGUF files in
 `~/.local/share/llama.cpp/models/` and add a section to the presets.ini.

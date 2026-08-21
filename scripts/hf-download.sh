@@ -6,12 +6,14 @@
 #   hf-download <repo> [filter]
 #
 # Examples:
-#   hf-download unsloth/Qwen3.8-27B-GGUF Q4_K_M
+#   hf-download unsloth/Qwen3.8-27B-GGUF UD-IQ1_M
 #   hf-download bartowski/Llama-3.2-3B-Instruct-GGUF IQ4_XS
-#   hf-download unsloth/Qwen3.8-27B-GGUF            (downloads *.gguf)
+#   hf-download unsloth/Qwen3.8-27B-GGUF            (downloads all *.gguf)
 #
 # Downloads to: ~/.local/share/llama.cpp/models/
 # Updates:      ~/.config/containers/config/llama.cpp/presets.ini
+#
+# Uses the `hf` CLI (huggingface_hub ≥ 0.38). Falls back to huggingface-cli.
 
 set -euo pipefail
 
@@ -22,7 +24,7 @@ usage() {
     echo "Usage: hf-download <repo> [quantization-or-filter]"
     echo ""
     echo "Examples:"
-    echo "  hf-download unsloth/Qwen3.8-27B-GGUF Q4_K_M"
+    echo "  hf-download unsloth/Qwen3.8-27B-GGUF UD-IQ1_M"
     echo "  hf-download bartowski/Llama-3.2-3B-Instruct-GGUF IQ4_XS"
     echo "  hf-download unsloth/Qwen3.8-27B-GGUF"
     exit 0
@@ -34,16 +36,21 @@ usage() {
 REPO="$1"
 FILTER="${2:-*.gguf}"
 
-# Allow bare quant like "Q4_K_M" → "*.Q4_K_M.gguf" pattern
+# Allow bare quant like "UD-IQ1_M" → "*UD-IQ1_M*.gguf" pattern
 case "$FILTER" in
-    *\.gguf) ;;                    # already a full filename pattern
+    *\.gguf) ;;                    # already a filename pattern
     *\**) ;;                       # already a glob
     *) FILTER="*${FILTER}*.gguf" ;; # bare quant → glob
 esac
 
 # ─── Prerequisites ────────────────────────────────────────────────────────
-if ! command -v huggingface-cli &>/dev/null; then
-    echo "Error: huggingface-cli not found."
+DOWNLOAD_CMD=""
+if command -v hf &>/dev/null; then
+    DOWNLOAD_CMD="hf"
+elif command -v huggingface-cli &>/dev/null; then
+    DOWNLOAD_CMD="huggingface-cli"
+else
+    echo "Error: neither 'hf' nor 'huggingface-cli' found."
     echo "Install one of:"
     echo "  brew install huggingface-cli"
     echo "  pip install huggingface-hub"
@@ -64,10 +71,15 @@ echo ""
 
 # ─── Download ─────────────────────────────────────────────────────────────
 echo "Downloading (this may take a while)..."
-huggingface-cli download "$REPO" "$FILTER" \
-    --local-dir "$TARGET_DIR" \
-    --resume-download \
-    || { echo "Download failed (filter may match nothing)."; exit 1; }
+if [ "$DOWNLOAD_CMD" = "hf" ]; then
+    hf download "$REPO" --include "$FILTER" --local-dir "$TARGET_DIR" \
+        || { echo "Download failed (filter may match nothing)."; exit 1; }
+else
+    huggingface-cli download "$REPO" "$FILTER" \
+        --local-dir "$TARGET_DIR" \
+        --resume-download \
+        || { echo "Download failed (filter may match nothing)."; exit 1; }
+fi
 echo ""
 
 # ─── Find what we got ─────────────────────────────────────────────────────
