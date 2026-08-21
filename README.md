@@ -44,9 +44,10 @@ reboots, and can be rehydrated on a fresh machine with one command.
 | **llama-cpp-research** | optional | `11436` | llama.cpp on the 2nd GPU (conservative settings) |
 | **open-webui** | web | `3000` | AI chat UI (OpenAI-compatible backend) |
 | **caddy** | proxy | `3001-3004` | HTTPS reverse proxy, internal TLS |
-| **comfyui** | image | `8188` | Stable Diffusion / AI image generation |
-| **sketchlab** | diagram | `8080` | Diagramming SPA with local LLM support |
-| **hermes** | agents | `9119` | Nous Research Hermes Agent gateway |
+|| **comfyui** | image | `8188` | Stable Diffusion / AI image generation |
+|| **sketchlab** | diagram | `8080` | Diagramming SPA with local LLM support |
+|| **deepseek-harness** | agent | `3080` | Agent runtime (plugin-based, community image) |
+|| **hermes** | agents | `9119` | Nous Research Hermes Agent gateway |
 
 ## Quick Install
 

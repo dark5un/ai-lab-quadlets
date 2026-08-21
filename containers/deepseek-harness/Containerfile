@@ -1,0 +1,61 @@
+# DeepSeek Harness (dsh) — container image
+#
+# Build:
+#   podman build -t localhost/deepseek-harness:0.1.0-rc.6 -f containers/deepseek-harness/Containerfile containers/deepseek-harness/
+#
+# DeepSeek Harness has no official Docker image or Containerfile.
+# This build is inspired by https://github.com/AlliotTech/deepseek-harness-docker
+# which packages the official npm package (@deepseek-ai/dsh) in a minimal container.
+#
+# Upstream: https://github.com/deepseek-ai/deepseek-harness
+# npm:      https://www.npmjs.com/package/@deepseek-ai/dsh
+
+# syntax=docker/dockerfile:1.7
+FROM node:24-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 AS build
+
+WORKDIR /opt/deepseek-harness
+
+RUN apt-get update \
+ && apt-get install --yes --no-install-recommends \
+    g++ \
+    make \
+    python3 \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY package.json ./
+RUN npm install --omit=dev --no-audit --no-fund @deepseek-ai/dsh@0.1.0-rc.6 && npm cache clean --force
+
+FROM node:24-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 AS runtime
+
+RUN apt-get update \
+ && apt-get install --yes --no-install-recommends \
+    bash \
+    ca-certificates \
+    git \
+    openssh-client \
+    ripgrep \
+    tini \
+ && rm -rf /var/lib/apt/lists/*
+
+ENV DSH_HOME=/home/node/.dsh \
+    DSH_PORT=3080 \
+    DSH_TELEMETRY_DISABLED=1 \
+    NPM_CONFIG_AUDIT=false \
+    NPM_CONFIG_FUND=false \
+    NPM_CONFIG_UPDATE_NOTIFIER=false \
+    XDG_CACHE_HOME=/home/node/.dsh/.cache \
+    PATH=/opt/deepseek-harness/node_modules/.bin:${PATH}
+
+WORKDIR /workspace
+
+COPY --from=build --chown=node:node /opt/deepseek-harness /opt/deepseek-harness
+
+RUN mkdir -p /home/node/.dsh /workspace \
+ && chown -R node:node /home/node/.dsh /workspace
+
+USER node
+
+EXPOSE 3080
+
+ENTRYPOINT ["tini", "--", "dsh"]
+CMD ["web", "--host", "0.0.0.0", "--port", "3080"]

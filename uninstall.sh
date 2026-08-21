@@ -26,7 +26,7 @@ fi
 
 # ─── Stop and disable services ────────────────────────────────────────────
 echo "[1/3] Stopping and disabling services..."
-SERVICES="hermes comfyui sketchlab caddy open-webui llama-cpp-research llama-cpp-main ai-network"
+SERVICES="hermes comfyui sketchlab caddy open-webui deepseek-harness llama-cpp-research llama-cpp-main ai-network"
 for svc in $SERVICES; do
     if systemctl --user is-enabled "${svc}.service" &>/dev/null 2>/dev/null; then
         systemctl --user disable --now "${svc}.service" 2>/dev/null && echo "  ✓ disabled $svc" || echo "  ~ $svc (stopped with warnings)"
@@ -39,6 +39,7 @@ echo ""
 # ─── Remove quadlet files ─────────────────────────────────────────────────
 echo "[2/3] Removing quadlet files..."
 for f in ai.network caddy.container comfyui.container hermes.container \
+         deepseek-harness.container \
          llama-cpp-main.container llama-cpp-research.container \
          llama-cpp-extra-*.container open-webui.container sketchlab.container; do
     # shellcheck disable=SC2086
@@ -66,6 +67,7 @@ echo "  • ~/.local/share/llama.cpp/              (logs, config)"
 echo "  • ~/.local/share/comfyui/                (workflows, custom nodes)"
 echo "  • ~/.local/share/sketchlab/              (diagrams)"
 echo "  • ~/.local/share/hermes-service/         (agent data)"
+echo "  • ~/.local/share/deepseek-harness/      (dsh config, sessions)"
 echo "  • Container volumes (podman volume ls)   (DB data, caddy certs)"
 echo ""
 echo "To also remove configs and data, run these manually:"
@@ -74,6 +76,7 @@ echo "  rm -rf ~/.local/share/llama.cpp"
 echo "  rm -rf ~/.local/share/comfyui"
 echo "  rm -rf ~/.local/share/sketchlab"
 echo "  rm -rf ~/.local/share/hermes-service"
+echo "  rm -rf ~/.local/share/deepseek-harness"
 echo "  podman volume prune -f"
 echo ""
 echo "============================================="

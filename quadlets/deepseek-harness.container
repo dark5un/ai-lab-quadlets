@@ -1,0 +1,23 @@
+[Unit]
+Description=DeepSeek Harness (dsh) agent runtime
+After=network-online.target ai-network.service
+Wants=network-online.target
+
+[Container]
+ContainerName=deepseek-harness
+# Local build — see containers/deepseek-harness/Containerfile.
+# Build with: podman build -t localhost/deepseek-harness:0.1.0-rc.6 containers/deepseek-harness/
+Image=localhost/deepseek-harness:0.1.0-rc.6
+Network=ai.network
+PublishPort=127.0.0.1:3080:3080/tcp
+# Persist dsh config, sessions, and API keys.
+Volume=%h/.local/share/deepseek-harness:/home/node/.dsh:Z
+
+[Service]
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=900
+TimeoutStopSec=120
+
+[Install]
+WantedBy=default.target

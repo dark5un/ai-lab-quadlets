@@ -236,6 +236,7 @@ mkdir -p \
     "${HOME}/.local/share/sketchlab" \
     "${HOME}/.local/share/comfyui" \
     "${HOME}/.local/share/hermes-service" \
+    "${HOME}/.local/share/deepseek-harness" \
     "${HOME}/.local/share/llama.cpp/models"
 echo "  → Runtime data directories created (including models/)"
 
@@ -306,6 +307,19 @@ else
 fi
 echo ""
 
+# ─── DeepSeek Harness image ────────────────────────────────────────────
+echo "  ~ DeepSeek Harness image..."
+if podman image exists localhost/deepseek-harness:0.1.0-rc.6 2>/dev/null; then
+    echo "  ✓ localhost/deepseek-harness:0.1.0-rc.6 (already exists)"
+elif [ -f "${SOURCE_DIR}/containers/deepseek-harness/Containerfile" ]; then
+    echo "  ~ Building DeepSeek Harness image (this takes a while)..."
+    (cd "${SOURCE_DIR}/containers/deepseek-harness" && podman build -t localhost/deepseek-harness:0.1.0-rc.6 -f Containerfile .) && \
+        echo "  ✓ built deepseek-harness" || echo "  ! DeepSeek Harness build failed — see containers/deepseek-harness/Containerfile"
+else
+    echo "  ! No deepseek-harness Containerfile found"
+fi
+echo ""
+
 # llama.cpp server (pulled automatically by systemd, but ensure it's available)
 echo "  ~ Pulling llama.cpp server image (background)..."
 podman pull ghcr.io/ggml-org/llama.cpp:server 2>/dev/null &
@@ -373,6 +387,7 @@ if [ "$SYSTEMD_AVAILABLE" = true ]; then
     restart_service open-webui
     restart_service caddy
     restart_service sketchlab
+    restart_service deepseek-harness
 
     echo ""
     echo "============================================="
