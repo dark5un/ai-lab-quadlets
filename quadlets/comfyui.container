@@ -1,0 +1,26 @@
+[Unit]
+Description=ComfyUI
+After=network-online.target ai-network.service
+Wants=network-online.target
+
+[Container]
+ContainerName=comfyui
+Image=localhost/comfyui:v0.30.2-cu130
+Network=ai.network
+PublishPort=127.0.0.1:8188:8188/tcp
+Volume=%h/.local/share/comfyui:/data:Z
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=XDG_CACHE_HOME=/data/user/.cache
+Environment=HF_HOME=/data/user/.cache/huggingface
+AddDevice=nvidia.com/gpu=all
+SecurityLabelDisable=true
+
+[Service]
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=900
+TimeoutStopSec=120
+
+[Install]
+WantedBy=default.target

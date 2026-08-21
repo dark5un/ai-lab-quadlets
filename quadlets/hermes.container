@@ -1,0 +1,26 @@
+[Unit]
+Description=Hermes Agent web and Telegram service
+After=network-online.target llama-cpp-main.service
+Wants=network-online.target llama-cpp-main.service
+
+[Container]
+ContainerName=hermes
+Image=docker.io/nousresearch/hermes-agent:latest
+Network=ai.network
+UserNS=keep-id
+User=0
+EnvironmentFile=%h/.config/containers/config/hermes-service/service.env
+Volume=%h/.local/share/hermes-service:/opt/data:Z
+ShmSize=1g
+Exec=gateway run
+
+[Service]
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=900
+TimeoutStopSec=120
+MemoryMax=4G
+CPUQuota=200%
+
+[Install]
+WantedBy=default.target

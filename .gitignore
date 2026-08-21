@@ -1,0 +1,18 @@
+# Generated service env (from .example templates)
+config/*/service.env
+config/*/presets.ini
+config/llama.cpp/keys.txt
+
+# Generated quadlets (from detect-gpus.sh)
+quadlets/llama-cpp-main.container
+quadlets/llama-cpp-research.container
+quadlets/llama-cpp-extra-*.container
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor swap files
+*.swp
+*.swo
+*~

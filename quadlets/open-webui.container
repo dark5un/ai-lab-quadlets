@@ -1,0 +1,20 @@
+[Unit]
+Description=Open WebUI
+After=network-online.target llama-cpp-main.service
+Wants=network-online.target llama-cpp-main.service
+
+[Container]
+ContainerName=open-webui
+Image=ghcr.io/open-webui/open-webui:v0.11.0
+Network=ai.network
+PublishPort=127.0.0.1:3000:8080
+Volume=open-webui-data:/app/backend/data
+EnvironmentFile=%h/.config/containers/config/open-webui/service.env
+
+[Service]
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=900
+
+[Install]
+WantedBy=default.target

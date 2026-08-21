@@ -1,0 +1,58 @@
+{
+	auto_https disable_redirects
+	skip_install_trust
+}
+
+https://dark5un.local:3001 {
+	tls internal
+
+	header {
+		Strict-Transport-Security "max-age=300"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	reverse_proxy open-webui:8080
+}
+
+https://dark5un.local:3002 {
+	tls internal
+
+	header {
+		Strict-Transport-Security "max-age=300"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		-Server
+	}
+
+	reverse_proxy comfyui:8188
+}
+
+https://dark5un.local:3003 {
+	tls internal
+
+	header {
+		Strict-Transport-Security "max-age=300"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		-Server
+	}
+
+	reverse_proxy hermes:9119
+}
+
+https://dark5un.local:3004 {
+	tls internal
+
+	header {
+		Strict-Transport-Security "max-age=300"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	reverse_proxy sketchlab:8080
+}

@@ -1,0 +1,31 @@
+[Unit]
+Description=llama.cpp CPU-only server
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+ContainerName=llama-cpp
+Image=ghcr.io/ggml-org/llama.cpp:server
+
+Network=ai.network
+
+# Native host clients:
+# http://127.0.0.1:11435/v1
+PublishPort=0.0.0.0:11435:8080
+
+# Shared read-only model library.
+Volume=%h/.local/share/llama.cpp/models:/models:ro
+
+# Per-model preset config.
+Volume=%h/.config/containers/config/llama.cpp/presets.ini:/etc/llama-cpp/presets.ini:ro
+
+EnvironmentFile=%h/.config/containers/config/llama.cpp/service.env
+
+[Service]
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=1800
+TimeoutStopSec=120
+
+[Install]
+WantedBy=default.target

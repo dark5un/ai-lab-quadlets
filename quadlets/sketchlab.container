@@ -1,0 +1,20 @@
+[Unit]
+Description=Sketchlab - diagramming SPA with save/load backend
+After=network-online.target ai-network.service
+Wants=network-online.target
+
+[Container]
+ContainerName=sketchlab
+Image=localhost/sketchlab:v0.5.0
+Network=ai.network
+UserNS=keep-id
+Volume=%h/.local/share/sketchlab:/data:Z
+
+[Service]
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=900
+TimeoutStopSec=120
+
+[Install]
+WantedBy=default.target
