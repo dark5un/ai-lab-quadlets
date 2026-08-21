@@ -14,8 +14,9 @@ set -euo pipefail
 REPO_URL="https://github.com/dark5un/ai-lab-quadlets"
 QUADLET_DIR="${HOME}/.config/containers/systemd"
 CONFIG_DIR="${HOME}/.config/containers/config"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd 2>/dev/null || pwd)"
+# PROJECT_DIR intentionally omitted — $0 is unreliable under piped stdin (curl | bash).
+# The clone-fallback logic below handles that case.
 
 echo "============================================="
 echo "  AI Lab Quadlets — Reproducible Deployment  "
@@ -67,11 +68,12 @@ done
 echo ""
 
 # ─── Determine source directory ───────────────────────────────────────────
-# If the script is inside a git checkout, use that. Otherwise clone.
-if [ -d "${PROJECT_DIR}/.git" ] && [ -f "${PROJECT_DIR}/quadlets/ai.network" ]; then
-    SOURCE_DIR="$PROJECT_DIR"
+# If the script is inside a git checkout (local file), use that. Otherwise clone.
+if [ -d "${SCRIPT_DIR}/quadlets" ] && [ -f "${SCRIPT_DIR}/quadlets/ai.network" ]; then
+    SOURCE_DIR="$SCRIPT_DIR"
     echo "[2/6] Using local checkout at $SOURCE_DIR"
-elif [ -d "${SCRIPT_DIR}/../quadlets" ]; then
+elif [ -d "${SCRIPT_DIR}/../quadlets" ] && [ -f "${SCRIPT_DIR}/../quadlets/ai.network" ]; then
+    # Fallback: script is inside a subdirectory of the checkout
     SOURCE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
     echo "[2/6] Using local checkout at $SOURCE_DIR"
 else
