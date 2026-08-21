@@ -60,6 +60,28 @@ cd ai-lab-quadlets
 ./install.sh
 ```
 
+## Using `just` (recommended workflow)
+
+The repo ships an `ai-lab.just` file with `install`, `uninstall`, and `status` recipes:
+
+```bash
+git clone https://github.com/dark5un/ai-lab-quadlets.git
+cd ai-lab-quadlets
+
+# Install everything
+just -f ai-lab.just install
+
+# Check what's running
+just -f ai-lab.just status
+
+# Tear it all down
+just -f ai-lab.just uninstall
+```
+
+> **On Universal Blue?** See [docs/ujust-integration.md](docs/ujust-integration.md)
+> for three ways to make these recipes available as native `ujust` commands —
+> from zero-config direct invocation to permanent system-level registration.
+
 ## Manual setup
 
 ### 1. Prerequisites
