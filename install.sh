@@ -6,6 +6,7 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/install.sh | bash
+#   FORCE_REBUILD=1 bash -c 'curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/install.sh | bash'
 #   # or from a local checkout:
 #   ./install.sh
 

@@ -154,8 +154,11 @@ but skips rebuilding if the image already exists. To force a rebuild
 after Containerfile changes:
 
 ```bash
-FORCE_REBUILD=1 curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/install.sh | bash
+FORCE_REBUILD=1 bash -c 'curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/install.sh | bash'
 ```
+
+> Note: `FORCE_REBUILD=1 curl ... | bash` does NOT work — the env var is
+> consumed by curl, not by the piped bash. Use the `bash -c` form above.
 
 Or manually:
 
