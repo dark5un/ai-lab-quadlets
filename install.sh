@@ -11,6 +11,8 @@
 
 set -uo pipefail
 
+FORCE_REBUILD="${FORCE_REBUILD:-0}"
+
 # ─── Config ───────────────────────────────────────────────────────────────
 REPO_URL="https://github.com/dark5un/ai-lab-quadlets"
 QUADLET_DIR="${HOME}/.config/containers/systemd"
@@ -284,6 +286,10 @@ fi
 echo "  ~ ComfyUI image..."
 if [ "$NVIDIA_AVAILABLE" = true ]; then
     # CUDA build — see containers/comfyui/Containerfile
+    if [ "${FORCE_REBUILD:-0}" = "1" ]; then
+        podman rm -f comfyui 2>/dev/null || true
+        podman rmi -f localhost/comfyui:v0.30.2-cu130 2>/dev/null || true
+    fi
     if podman image exists localhost/comfyui:v0.30.2-cu130 2>/dev/null; then
         echo "  ✓ localhost/comfyui:v0.30.2-cu130 (already exists)"
     elif [ -f "${SOURCE_DIR}/containers/comfyui/Containerfile" ]; then
@@ -295,6 +301,10 @@ if [ "$NVIDIA_AVAILABLE" = true ]; then
     fi
 else
     # CPU build — see containers/comfyui/Containerfile.cpu
+    if [ "${FORCE_REBUILD:-0}" = "1" ]; then
+        podman rm -f comfyui 2>/dev/null || true
+        podman rmi -f localhost/comfyui-cpu:v0.30.2 2>/dev/null || true
+    fi
     if podman image exists localhost/comfyui-cpu:v0.30.2 2>/dev/null; then
         echo "  ✓ localhost/comfyui-cpu:v0.30.2 (already exists)"
     elif [ -f "${SOURCE_DIR}/containers/comfyui/Containerfile.cpu" ]; then
