@@ -28,12 +28,13 @@ RUN apt-get update \
        build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# CPU-only PyTorch (no --index-url → default PyPI wheels, CPU variant)
+# CPU-only PyTorch (explicit cpu index — default PyPI now ships CUDA wheels)
 RUN python -m pip install --upgrade pip setuptools wheel \
     && python -m pip install \
        torch \
        torchvision \
-       torchaudio
+       torchaudio \
+       --index-url https://download.pytorch.org/whl/cpu
 
 RUN git clone \
       --depth 1 \
