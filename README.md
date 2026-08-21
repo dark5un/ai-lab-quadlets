@@ -149,21 +149,22 @@ systemctl --user restart sketchlab.service
 ### ComfyUI / DeepSeek Harness custom builds
 
 These services build from Containerfiles in `containers/comfyui/` and
-`containers/deepseek-harness/`. The installer builds them automatically,
-but skips rebuilding if the image already exists. To force a rebuild
-after Containerfile changes:
+`containers/deepseek-harness/`. The installer builds them automatically.
+It skips rebuilding if the image exists, unless:
+
+- `--force-rebuild` is passed, or
+- the Containerfile changed (hash-tracked in `~/.config/containers/config/`)
 
 ```bash
-FORCE_REBUILD=1 bash -c 'curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/install.sh | bash'
+# Force rebuild of all custom images:
+curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/install.sh | bash -s -- --force-rebuild
 ```
-
-> Note: `FORCE_REBUILD=1 curl ... | bash` does NOT work — the env var is
-> consumed by curl, not by the piped bash. Use the `bash -c` form above.
 
 Or manually:
 
 ```bash
-podman rmi -f localhost/comfyui-cpu:v0.30.2      # ComfyUI CPU
+podman rmi -f localhost/comfyui-cpu:v0.30.2          # ComfyUI CPU
+podman rmi -f localhost/comfyui:v0.30.2-cu130        # ComfyUI CUDA
 podman rmi -f localhost/deepseek-harness:0.1.0-rc.6  # DSH
 curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/install.sh | bash
 ```

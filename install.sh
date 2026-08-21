@@ -6,13 +6,20 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/install.sh | bash
-#   FORCE_REBUILD=1 bash -c 'curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/install.sh | bash'
+#   curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/install.sh | bash -s -- --force-rebuild
 #   # or from a local checkout:
-#   ./install.sh
+#   ./install.sh [--force-rebuild]
 
 set -uo pipefail
 
-FORCE_REBUILD="${FORCE_REBUILD:-0}"
+FORCE_REBUILD=0
+# Parse CLI args: ./install.sh --force-rebuild  OR  curl ... | bash -s -- --force-rebuild
+for arg in "$@"; do
+    case "$arg" in
+        --force-rebuild) FORCE_REBUILD=1 ;;
+        *) echo "Unknown option: $arg (supported: --force-rebuild)"; exit 1 ;;
+    esac
+done
 
 # ─── Config ───────────────────────────────────────────────────────────────
 REPO_URL="https://github.com/dark5un/ai-lab-quadlets"
@@ -284,10 +291,13 @@ else
 fi
 
 # ─── ComfyUI image (CUDA or CPU based on hardware) ───────────────────────
+# Rebuilds when FORCE_REBUILD=1, or when the Containerfile hash changed since
+# the last build (marker file in the persistent config dir).
 echo "  ~ ComfyUI image..."
 if [ "$NVIDIA_AVAILABLE" = true ]; then
     # CUDA build — see containers/comfyui/Containerfile
-    if [ "${FORCE_REBUILD:-0}" = "1" ]; then
+    CF_HASH=$(sha256sum "${SOURCE_DIR}/containers/comfyui/Containerfile" 2>/dev/null | cut -d' ' -f1)
+    if [ "${FORCE_REBUILD:-0}" = "1" ] || [ "$(cat "${CONFIG_DIR}/.comfyui-cu130-built" 2>/dev/null)" != "$CF_HASH" ]; then
         podman rm -f comfyui 2>/dev/null || true
         podman rmi -f localhost/comfyui:v0.30.2-cu130 2>/dev/null || true
     fi
@@ -296,13 +306,15 @@ if [ "$NVIDIA_AVAILABLE" = true ]; then
     elif [ -f "${SOURCE_DIR}/containers/comfyui/Containerfile" ]; then
         echo "  ~ Building CUDA ComfyUI image (this takes a while)..."
         (cd "${SOURCE_DIR}/containers/comfyui" && podman build -t localhost/comfyui:v0.30.2-cu130 -f Containerfile .) && \
+            echo "$CF_HASH" > "${CONFIG_DIR}/.comfyui-cu130-built" && \
             echo "  ✓ built CUDA comfyui" || echo "  ! CUDA ComfyUI build failed — see containers/comfyui/Containerfile"
     else
         echo "  ! No comfyui Containerfile found"
     fi
 else
     # CPU build — see containers/comfyui/Containerfile.cpu
-    if [ "${FORCE_REBUILD:-0}" = "1" ]; then
+    CF_HASH=$(sha256sum "${SOURCE_DIR}/containers/comfyui/Containerfile.cpu" 2>/dev/null | cut -d' ' -f1)
+    if [ "${FORCE_REBUILD:-0}" = "1" ] || [ "$(cat "${CONFIG_DIR}/.comfyui-cpu-built" 2>/dev/null)" != "$CF_HASH" ]; then
         podman rm -f comfyui 2>/dev/null || true
         podman rmi -f localhost/comfyui-cpu:v0.30.2 2>/dev/null || true
     fi
@@ -311,6 +323,7 @@ else
     elif [ -f "${SOURCE_DIR}/containers/comfyui/Containerfile.cpu" ]; then
         echo "  ~ Building CPU ComfyUI image (this takes a while)..."
         (cd "${SOURCE_DIR}/containers/comfyui" && podman build -t localhost/comfyui-cpu:v0.30.2 -f Containerfile.cpu .) && \
+            echo "$CF_HASH" > "${CONFIG_DIR}/.comfyui-cpu-built" && \
             echo "  ✓ built CPU comfyui" || echo "  ! CPU ComfyUI build failed — see containers/comfyui/Containerfile.cpu"
     else
         echo "  ! No comfyui Containerfile.cpu found"
@@ -319,12 +332,19 @@ fi
 echo ""
 
 # ─── DeepSeek Harness image ────────────────────────────────────────────
+# Rebuilds when --force-rebuild, or when the Containerfile hash changed.
 echo "  ~ DeepSeek Harness image..."
+DSH_HASH=$(sha256sum "${SOURCE_DIR}/containers/deepseek-harness/Containerfile" 2>/dev/null | cut -d' ' -f1)
+if [ "$FORCE_REBUILD" = "1" ] || [ "$(cat "${CONFIG_DIR}/.deepseek-harness-built" 2>/dev/null)" != "$DSH_HASH" ]; then
+    podman rm -f deepseek-harness 2>/dev/null || true
+    podman rmi -f localhost/deepseek-harness:0.1.0-rc.6 2>/dev/null || true
+fi
 if podman image exists localhost/deepseek-harness:0.1.0-rc.6 2>/dev/null; then
     echo "  ✓ localhost/deepseek-harness:0.1.0-rc.6 (already exists)"
 elif [ -f "${SOURCE_DIR}/containers/deepseek-harness/Containerfile" ]; then
     echo "  ~ Building DeepSeek Harness image (this takes a while)..."
     (cd "${SOURCE_DIR}/containers/deepseek-harness" && podman build -t localhost/deepseek-harness:0.1.0-rc.6 -f Containerfile .) && \
+        echo "$DSH_HASH" > "${CONFIG_DIR}/.deepseek-harness-built" && \
         echo "  ✓ built deepseek-harness" || echo "  ! DeepSeek Harness build failed — see containers/deepseek-harness/Containerfile"
 else
     echo "  ! No deepseek-harness Containerfile found"
