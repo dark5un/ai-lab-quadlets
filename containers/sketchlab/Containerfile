@@ -21,9 +21,9 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-# Production stage — nginx serves the static files
-FROM nginx:alpine
+# Production stage — nginx serves the static files (unprivileged for rootless podman)
+FROM nginxinc/nginx-unprivileged:alpine
 COPY --from=build /app/dist /usr/share/nginx/html
-EXPOSE 80
+EXPOSE 8080
 
 CMD ["nginx", "-g", "daemon off;"]

@@ -15,10 +15,10 @@ config_dir := home + "/.config/containers/config"
 # ─── Recipes ──────────────────────────────────────────────────────────────
 
 # Install all AI Lab Quadlet services
-# Detects GPUs, generates configs, builds images, copies files, enables services
+# Idempotent — safe to re-run. Detects GPUs, generates configs, ensures images, starts services.
 install:
     #!/usr/bin/env bash
-    set -euo pipefail
+    set -uo pipefail
     ROOT="{{root}}"
     QUADLET_DIR="{{quadlet_dir}}"
     CONFIG_DIR="{{config_dir}}"
@@ -30,17 +30,35 @@ install:
     echo "[1/5] Detecting GPUs..."
     bash "$ROOT/scripts/detect-gpus.sh" \
         --output-dir "$ROOT/quadlets" \
-        --config-dir "$ROOT/config"
+        --config-dir "$ROOT/config" || true
 
-    # 2. Generate secrets (if .env doesn't exist yet)
+    # 2. Generate secrets (don't overwrite existing)
     echo "[2/5] Generating secrets..."
-    bash "$ROOT/scripts/generate-secrets.sh"
+    bash "$ROOT/scripts/generate-secrets.sh" || true
 
-    # 3. Build custom images
-    echo "[3/5] Building custom container images..."
-    bash "$ROOT/scripts/build-images.sh"
+    # 3. Ensure container images
+    echo "[3/5] Ensuring container images..."
+    podman pull docker.io/library/caddy:2-alpine 2>/dev/null && echo "  ✓ caddy"
+    podman pull ghcr.io/open-webui/open-webui:v0.11.0 2>/dev/null && echo "  ✓ open-webui"
 
-    # 4. Copy files to runtime locations
+    # Sketch Lab — try GHCR then local build
+    if podman image exists localhost/sketchlab:v0.5.0 2>/dev/null; then
+        echo "  ✓ sketchlab (already exists)"
+    elif podman pull ghcr.io/dark5un/sketchlab:v0.5.0 2>/dev/null; then
+        podman tag ghcr.io/dark5un/sketchlab:v0.5.0 localhost/sketchlab:v0.5.0 2>/dev/null || true
+        echo "  ✓ sketchlab (from GHCR)"
+    elif [ -d "$HOME/sketchlab.app" ]; then
+        echo "  ~ Building sketchlab from sources..."
+        (cd "$HOME/sketchlab.app" && podman build -t localhost/sketchlab:v0.5.0 .) && echo "  ✓ sketchlab" || echo "  ! sketchlab build failed"
+    else
+        TMP_CLONE=$(mktemp -d /tmp/sketchlab-XXXXX)
+        git clone --depth=1 https://github.com/dark5un/sketchlab.app.git "$TMP_CLONE" 2>/dev/null && \
+            (cd "$TMP_CLONE" && podman build -t localhost/sketchlab:v0.5.0 .) && echo "  ✓ sketchlab (built)" || \
+            echo "  ! sketchlab image unavailable"
+        rm -rf "$TMP_CLONE" 2>/dev/null || true
+    fi
+
+    # 4. Deploy files to runtime locations
     echo "[4/5] Deploying to runtime directories..."
     mkdir -p "$QUADLET_DIR" "$CONFIG_DIR"
 
@@ -48,7 +66,6 @@ install:
     cp "$ROOT/quadlets/ai.network" "$QUADLET_DIR/"
     for q in "$ROOT/quadlets/"*.container; do
         fname=$(basename "$q")
-        # Skip CPU fallback if main was generated
         if [[ "$fname" == llama-cpp-cpu.container ]] && [ -f "$ROOT/quadlets/llama-cpp-main.container" ]; then
             continue
         fi
@@ -56,28 +73,42 @@ install:
         echo "  ✓ $fname"
     done
 
-    # Configs
-    cp -r "$ROOT/config/"* "$CONFIG_DIR/"
-    echo "  → Configs deployed"
-
-    # Runtime data directories
-    mkdir -p "$HOME/.local/share/sketchlab" "$HOME/.local/share/comfyui" "$HOME/.local/share/hermes-service"
-
-    # 5. Enable and start services
-    echo "[5/5] Starting services..."
-    systemctl --user daemon-reload 2>/dev/null || true
-    systemctl --user enable --now ai-network.service 2>/dev/null || echo "  ! ai-network (may need rootful podman)"
-    systemctl --user enable --now llama-cpp-main.service 2>/dev/null || echo "  ! llama-cpp-main (GPU check)"
-    for svc in caddy open-webui sketchlab comfyui hermes; do
-        if [ -f "$QUADLET_DIR/${svc}.container" ]; then
-            systemctl --user enable --now "${svc}.service" 2>/dev/null || echo "  ! ${svc}"
+    # Configs (preserve existing)
+    echo "  → Deploying configs (existing .env and presets preserved)..."
+    for config_item in "$ROOT/config/"*; do
+        item_name=$(basename "$config_item")
+        target="$CONFIG_DIR/$item_name"
+        if [ -d "$config_item" ]; then
+            mkdir -p "$target"
+            for file in "$config_item"/*; do
+                fname=$(basename "$file")
+                if [[ "$fname" == *.example ]]; then
+                    cp "$file" "$target/" 2>/dev/null || true
+                elif [ ! -f "$target/$fname" ]; then
+                    cp "$file" "$target/" 2>/dev/null || true
+                fi
+            done
         fi
     done
 
-    echo ""
-    echo "=== Install complete ==="
-    echo "Place GGUF models in ~/.local/share/llama.cpp/models/"
-    echo "Edit presets in ~/.config/containers/config/llama.cpp/presets.ini"
+    # Runtime data + models dir
+    mkdir -p "$HOME/.local/share/sketchlab" "$HOME/.local/share/comfyui" \
+             "$HOME/.local/share/hermes-service" "$HOME/.local/share/llama.cpp/models"
+
+    # Podman network
+    podman network exists ai.network 2>/dev/null || podman network create ai.network
+
+    # 5. Restart services
+    echo "[5/5] Starting services..."
+    systemctl --user daemon-reload 2>/dev/null || true
+
+    for svc in ai-network llama-cpp-main open-webui caddy sketchlab comfyui hermes; do
+        if [ -f "$QUADLET_DIR/${svc}.container" ]; then
+            echo "  → ${svc}..."
+            systemctl --user enable "${svc}.service" 2>/dev/null || true
+            systemctl --user restart "${svc}.service" 2>/dev/null || echo "  ! ${svc}"
+        fi
+    done
 
 
 # Uninstall all AI Lab Quadlet services
