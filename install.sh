@@ -272,6 +272,33 @@ echo "  ~ Pulling llama.cpp server image (background)..."
 podman pull ghcr.io/ggml-org/llama.cpp:server 2>/dev/null &
 echo ""
 
+# ─── hf-download tool ────────────────────────────────────────────────────
+echo "  ~ Deploying hf-download tool to ~/.local/bin/..."
+mkdir -p "${HOME}/.local/bin"
+cp "${SOURCE_DIR}/scripts/hf-download.sh" "${HOME}/.local/bin/hf-download" 2>/dev/null
+chmod +x "${HOME}/.local/bin/hf-download" 2>/dev/null
+echo "  ✓ ~/.local/bin/hf-download"
+
+# Ensure huggingface-cli is available (needed by hf-download)
+if command -v huggingface-cli &>/dev/null; then
+    echo "  ✓ huggingface-cli: $(huggingface-cli --version 2>/dev/null | head -1)"
+elif command -v brew &>/dev/null; then
+    echo "  ~ Installing huggingface-cli via brew..."
+    brew install huggingface-cli 2>/dev/null && echo "  ✓ huggingface-cli installed via brew" || \
+        echo "  ! brew install failed — try: pip install huggingface-hub"
+elif command -v pip3 &>/dev/null; then
+    echo "  ~ Installing huggingface-cli via pip..."
+    pip3 install --user --upgrade huggingface_hub 2>/dev/null && echo "  ✓ huggingface-cli installed via pip" || \
+        echo "  ! pip install failed"
+else
+    echo "  ! huggingface-cli NOT installed."
+    echo "  ! To use hf-download, install one of:"
+    echo "      brew install huggingface-cli"
+    echo "      pip install huggingface-hub"
+    echo "      uv tool install huggingface-hub"
+fi
+echo ""
+
 # ─── Enable and start services ────────────────────────────────────────────
 echo "[6/6] Starting services..."
 
@@ -316,7 +343,8 @@ fi
 
 echo ""
 echo "Next steps:"
-echo "  1. Place GGUF model files in ~/.local/share/llama.cpp/models/"
+echo "  1. Download models with hf-download:"
+echo "     hf-download unsloth/Qwen3.8-27B-GGUF Q4_K_M"
 echo "  2. Edit presets in ~/.config/containers/config/llama.cpp/presets.ini"
 echo "  3. Access services via Caddy (tls internal — avahi .local name):"
 echo "     • Open WebUI:  https://${LOCAL_HOSTNAME}:3001"

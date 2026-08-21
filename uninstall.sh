@@ -48,6 +48,12 @@ for f in ai.network caddy.container comfyui.container hermes.container \
 done
 
 systemctl --user daemon-reload 2>/dev/null || true
+
+# Remove hf-download tool
+if [ -f "${HOME}/.local/bin/hf-download" ]; then
+    rm -f "${HOME}/.local/bin/hf-download"
+    echo "  ✓ removed hf-download (tool)"
+fi
 echo ""
 
 # ─── Report what's preserved ──────────────────────────────────────────────

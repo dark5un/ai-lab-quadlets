@@ -204,6 +204,26 @@ The `detect-gpus.sh` script:
 
 **No GPUs?** Falls back to a single CPU-based llama.cpp service.
 
+## Downloading models (hf-download)
+
+The installer puts `hf-download` in `~/.local/bin/` — a simple wrapper around
+`huggingface-cli` that downloads a model and registers it with llama.cpp:
+
+```bash
+hf-download unsloth/Qwen3.8-27B-GGUF Q4_K_M
+```
+
+- `arg1` — HuggingFace repo (e.g. `unsloth/Qwen3.8-27B-GGUF`)
+- `arg2` (optional) — quantization or filename filter (e.g. `Q4_K_M`, `*IQ4_XS.gguf`)
+
+It downloads to `~/.local/share/llama.cpp/models/` and appends the model
+section to `~/.config/containers/config/llama.cpp/presets.ini`, then restarts
+llama-cpp-main. Requires `huggingface-cli` (the installer tries brew, then
+pip, and tells you what's missing).
+
+To place files manually instead, drop GGUF files in
+`~/.local/share/llama.cpp/models/` and add a section to the presets.ini.
+
 ## Sketch Lab local models
 
 Sketch Lab's AI panel connects to any OpenAI-compatible endpoint:
