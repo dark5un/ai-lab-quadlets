@@ -169,9 +169,21 @@ for quadlet in "${SOURCE_DIR}/quadlets/"*.container; do
             continue
         fi
     fi
+    # Skip comfyui-cpu variant — handled separately below
+    if [[ "$fname" == comfyui-cpu.container ]]; then
+        continue
+    fi
     cp "$quadlet" "$QUADLET_DIR/"
     echo "  ✓ $fname"
 done
+
+# ComfyUI: deploy the right variant based on hardware
+if [ "$NVIDIA_AVAILABLE" = true ]; then
+    echo "  ✓ comfyui.container (CUDA — AddDevice configured)"
+else
+    cp "${SOURCE_DIR}/quadlets/comfyui-cpu.container" "$QUADLET_DIR/comfyui.container"
+    echo "  ✓ comfyui.container (CPU — no GPU detected)"
+fi
 
 # Configs (don't overwrite existing service.env or presets.ini on reinstall)
 # Determine the REAL avahi-published .local name (handles hostname conflicts,
@@ -266,6 +278,33 @@ elif command -v git &>/dev/null; then
 else
     echo "  ! Sketch Lab image not available — build manually: see README"
 fi
+
+# ─── ComfyUI image (CUDA or CPU based on hardware) ───────────────────────
+echo "  ~ ComfyUI image..."
+if [ "$NVIDIA_AVAILABLE" = true ]; then
+    # CUDA build — see containers/comfyui/Containerfile
+    if podman image exists localhost/comfyui:v0.30.2-cu130 2>/dev/null; then
+        echo "  ✓ localhost/comfyui:v0.30.2-cu130 (already exists)"
+    elif [ -f "${SOURCE_DIR}/containers/comfyui/Containerfile" ]; then
+        echo "  ~ Building CUDA ComfyUI image (this takes a while)..."
+        (cd "${SOURCE_DIR}/containers/comfyui" && podman build -t localhost/comfyui:v0.30.2-cu130 -f Containerfile .) && \
+            echo "  ✓ built CUDA comfyui" || echo "  ! CUDA ComfyUI build failed — see containers/comfyui/Containerfile"
+    else
+        echo "  ! No comfyui Containerfile found"
+    fi
+else
+    # CPU build — see containers/comfyui/Containerfile.cpu
+    if podman image exists localhost/comfyui-cpu:v0.30.2 2>/dev/null; then
+        echo "  ✓ localhost/comfyui-cpu:v0.30.2 (already exists)"
+    elif [ -f "${SOURCE_DIR}/containers/comfyui/Containerfile.cpu" ]; then
+        echo "  ~ Building CPU ComfyUI image (this takes a while)..."
+        (cd "${SOURCE_DIR}/containers/comfyui" && podman build -t localhost/comfyui-cpu:v0.30.2 -f Containerfile.cpu .) && \
+            echo "  ✓ built CPU comfyui" || echo "  ! CPU ComfyUI build failed — see containers/comfyui/Containerfile.cpu"
+    else
+        echo "  ! No comfyui Containerfile.cpu found"
+    fi
+fi
+echo ""
 
 # llama.cpp server (pulled automatically by systemd, but ensure it's available)
 echo "  ~ Pulling llama.cpp server image (background)..."

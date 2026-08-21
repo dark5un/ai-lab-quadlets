@@ -1,0 +1,84 @@
+# ComfyUI CPU-only build (no CUDA, no GPU required)
+#
+# Build:
+#   podman build -t localhost/comfyui-cpu:v0.30.2 -f containers/comfyui/Containerfile.cpu containers/comfyui/
+#
+# The CPU quadlet references localhost/comfyui-cpu:v0.30.2.
+# Use this on machines without NVIDIA GPUs.
+
+FROM docker.io/library/python:3.13-slim-bookworm
+
+ARG COMFYUI_VERSION=v0.30.2
+
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+ENV PIP_NO_CACHE_DIR=1
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV XDG_CACHE_HOME=/data/user/.cache
+ENV HF_HOME=/data/user/.cache/huggingface
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+       ffmpeg \
+       git \
+       libgl1 \
+       libglib2.0-0 \
+       libgomp1 \
+       ca-certificates \
+       build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# CPU-only PyTorch (no --index-url → default PyPI wheels, CPU variant)
+RUN python -m pip install --upgrade pip setuptools wheel \
+    && python -m pip install \
+       torch \
+       torchvision \
+       torchaudio
+
+RUN git clone \
+      --depth 1 \
+      --branch "${COMFYUI_VERSION}" \
+      https://github.com/Comfy-Org/ComfyUI.git \
+      /opt/ComfyUI \
+    && python -m pip install \
+       --requirement /opt/ComfyUI/requirements.txt \
+    && python -m pip install \
+       --requirement /opt/ComfyUI/manager_requirements.txt \
+    && git clone \
+       --depth 1 \
+       https://github.com/slahiri/ComfyUI-Workflow-Models-Downloader.git \
+       /opt/ComfyUI/custom_nodes/ComfyUI-Workflow-Models-Downloader \
+    && python -m pip install \
+       --requirement /opt/ComfyUI/custom_nodes/ComfyUI-Workflow-Models-Downloader/requirements.txt \
+    && mv /opt/ComfyUI/custom_nodes/ComfyUI-Workflow-Models-Downloader/server.py \
+          /opt/ComfyUI/custom_nodes/ComfyUI-Workflow-Models-Downloader/wmd_server.py \
+    && sed -i 's/from \. import server/from . import wmd_server/' \
+          /opt/ComfyUI/custom_nodes/ComfyUI-Workflow-Models-Downloader/__init__.py \
+    && python -m pip install \
+       comfy-cli \
+    && git -C /opt/ComfyUI rev-parse HEAD \
+       > /opt/ComfyUI/IMAGE_COMMIT
+
+WORKDIR /opt/ComfyUI
+
+# Write entrypoint script that copies built-in custom nodes to the data volume on first boot
+RUN printf '#!/bin/bash\n\
+if [ -d /opt/ComfyUI/custom_nodes ] && [ -d /data/custom_nodes ]; then\n\
+    for item in /opt/ComfyUI/custom_nodes/*; do\n\
+        name=$(basename "$item")\n\
+        if [ ! -e "/data/custom_nodes/$name" ]; then\n\
+            cp -r "$item" "/data/custom_nodes/$name"\n\
+        fi\n\
+    done\n\
+fi\n\
+exec python main.py "$@"\n' > /entrypoint.sh && chmod +x /entrypoint.sh
+
+EXPOSE 8188
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["--listen", "0.0.0.0", \
+     "--port", "8188", \
+     "--base-directory", "/data", \
+     "--disable-auto-launch", \
+     "--enable-manager", \
+     "--max-upload-size", "500"]

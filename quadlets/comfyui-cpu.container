@@ -1,13 +1,13 @@
 [Unit]
-Description=ComfyUI
+Description=ComfyUI (CPU)
 After=network-online.target ai-network.service
 Wants=network-online.target
 
 [Container]
 ContainerName=comfyui
-# Custom build — see containers/comfyui/Containerfile.
-# Build with: podman build -t localhost/comfyui:v0.30.2-cu130 containers/comfyui/
-Image=localhost/comfyui:v0.30.2-cu130
+# CPU build — see containers/comfyui/Containerfile.cpu.
+# Build with: podman build -t localhost/comfyui-cpu:v0.30.2 containers/comfyui/ -f Containerfile.cpu
+Image=localhost/comfyui-cpu:v0.30.2
 Network=ai.network
 PublishPort=127.0.0.1:8188:8188/tcp
 Volume=%h/.local/share/comfyui:/data:Z
@@ -15,8 +15,6 @@ Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=XDG_CACHE_HOME=/data/user/.cache
 Environment=HF_HOME=/data/user/.cache/huggingface
-AddDevice=nvidia.com/gpu=all
-SecurityLabelDisable=true
 
 [Service]
 Restart=on-failure
