@@ -73,9 +73,14 @@ install:
         echo "  ✓ $fname"
     done
 
-    # Configs (preserve existing) — substitute HOSTNAME.local with avahi .local name
+    # Configs (preserve existing) — detect real avahi-published .local name
     HOSTNAME_SHORT=$(hostname -s 2>/dev/null || echo "localhost")
-    LOCAL_HOSTNAME="${HOSTNAME_SHORT}.local"
+    AVAHI_NAME=""
+    if command -v avahi-resolve &>/dev/null; then
+        AVAHI_NAME=$(systemctl status avahi-daemon 2>/dev/null | grep -o 'running \[[^]]*\]' | sed 's/running \[\(.*\)\]/\1/' | head -1)
+    fi
+    [ -z "$AVAHI_NAME" ] && AVAHI_NAME="${HOSTNAME_SHORT}.local"
+    LOCAL_HOSTNAME="$AVAHI_NAME"
     echo "  → Deploying configs (existing .env and presets preserved, hostname: ${LOCAL_HOSTNAME})..."
     for config_item in "$ROOT/config/"*; do
         item_name=$(basename "$config_item")

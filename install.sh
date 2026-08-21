@@ -139,10 +139,21 @@ for quadlet in "${SOURCE_DIR}/quadlets/"*.container; do
 done
 
 # Configs (don't overwrite existing service.env or presets.ini on reinstall)
-# HOSTNAME.local placeholders are substituted with the real hostname (avahi .local name)
+# Determine the REAL avahi-published .local name (handles hostname conflicts,
+# e.g. framework → framework-13.local). Fall back to hostname -s + .local.
 HOSTNAME_SHORT=$(hostname -s 2>/dev/null || echo "localhost")
-LOCAL_HOSTNAME="${HOSTNAME_SHORT}.local"
-echo "  → Using local hostname: ${LOCAL_HOSTNAME} (from avahi/mDNS)"
+
+# 1. Try reading the name avahi actually publishes
+AVAHI_NAME=""
+if command -v avahi-resolve &>/dev/null; then
+    AVAHI_NAME=$(systemctl status avahi-daemon 2>/dev/null | grep -o 'running \[[^]]*\]' | sed 's/running \[\(.*\)\]/\1/' | head -1)
+fi
+# 2. Fall back to hostname -s .local
+if [ -z "$AVAHI_NAME" ]; then
+    AVAHI_NAME="${HOSTNAME_SHORT}.local"
+fi
+LOCAL_HOSTNAME="$AVAHI_NAME"
+echo "  → Using published hostname: ${LOCAL_HOSTNAME}"
 
 mkdir -p "$CONFIG_DIR"
 echo "  → Deploying configs to $CONFIG_DIR/ (existing .env and presets preserved)..."
