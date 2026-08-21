@@ -27,7 +27,7 @@ PublishPort=0.0.0.0:11436:8080
 Volume=%h/.local/share/llama.cpp/models:/models:ro,Z
 
 # Per-model preset config.
-Volume=%h/.config/containers/config/llama.cpp-research/presets.ini:/etc/llama-cpp/presets.ini:ro
+Volume=%h/.config/containers/config/llama.cpp-research/presets.ini:/etc/llama-cpp/presets.ini:ro,Z
 
 EnvironmentFile=%h/.config/containers/config/llama.cpp-research/service.env
 
