@@ -81,6 +81,7 @@ ENTRYPOINT ["/entrypoint.sh"]
 CMD ["--listen", "0.0.0.0", \
      "--port", "8188", \
      "--base-directory", "/data", \
+     "--cpu", \
      "--disable-auto-launch", \
      "--enable-manager", \
      "--max-upload-size", "500"]
