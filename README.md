@@ -60,6 +60,15 @@ cd ai-lab-quadlets
 ./install.sh
 ```
 
+## Uninstall
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/uninstall.sh | bash
+```
+
+Stops all services, removes quadlet files, preserves data and configs.
+No `just` or `ujust` needed.
+
 ## Using `just` (recommended workflow)
 
 The repo ships an `ai-lab.just` file with `install`, `uninstall`, and `status` recipes:
