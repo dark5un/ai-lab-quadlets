@@ -15,6 +15,9 @@ Image=ghcr.io/ggml-org/llama.cpp:server-cuda
 AddDevice=nvidia.com/gpu={GPU_UUID}
 SecurityLabelDisable=true
 
+# Keep container user mapped to host user for volume access.
+UserNS=keep-id
+
 Network=ai.network
 
 # Native host clients:
@@ -22,7 +25,7 @@ Network=ai.network
 PublishPort=0.0.0.0:11435:8080
 
 # Shared read-only model library.
-Volume=%h/.local/share/llama.cpp/models:/models:ro
+Volume=%h/.local/share/llama.cpp/models:/models:ro,Z
 
 # Per-model preset config.
 Volume=%h/.config/containers/config/llama.cpp/presets.ini:/etc/llama-cpp/presets.ini:ro

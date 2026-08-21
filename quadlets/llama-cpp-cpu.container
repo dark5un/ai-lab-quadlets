@@ -9,12 +9,15 @@ Image=ghcr.io/ggml-org/llama.cpp:server
 
 Network=ai.network
 
+# Keep container user mapped to host user for volume access.
+UserNS=keep-id
+
 # Native host clients:
 # http://127.0.0.1:11435/v1
 PublishPort=0.0.0.0:11435:8080
 
 # Shared read-only model library.
-Volume=%h/.local/share/llama.cpp/models:/models:ro
+Volume=%h/.local/share/llama.cpp/models:/models:ro,Z
 
 # Per-model preset config.
 Volume=%h/.config/containers/config/llama.cpp/presets.ini:/etc/llama-cpp/presets.ini:ro
