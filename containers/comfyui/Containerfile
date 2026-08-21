@@ -63,9 +63,10 @@ RUN git clone \
 
 WORKDIR /opt/ComfyUI
 
-# Write entrypoint script that copies built-in custom nodes to the data volume on first boot
+# Write entrypoint script that creates the data dirs and copies built-in custom nodes on first boot
 RUN printf '#!/bin/bash\n\
-if [ -d /opt/ComfyUI/custom_nodes ] && [ -d /data/custom_nodes ]; then\n\
+mkdir -p /data/custom_nodes /data/models /data/input /data/output /data/temp /data/user\n\
+if [ -d /opt/ComfyUI/custom_nodes ]; then\n\
     for item in /opt/ComfyUI/custom_nodes/*; do\n\
         name=$(basename "$item")\n\
         if [ ! -e "/data/custom_nodes/$name" ]; then\n\
