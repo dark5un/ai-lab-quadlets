@@ -10,6 +10,8 @@ ContainerName=deepseek-harness
 Image=localhost/deepseek-harness:0.1.0-rc.6
 Network=ai.network
 PublishPort=127.0.0.1:3080:3080/tcp
+# Map container node user (uid 1000) to host user so the volume stays writable.
+UserNS=keep-id
 # Persist dsh config, sessions, and API keys.
 Volume=%h/.local/share/deepseek-harness:/home/node/.dsh:Z
 
