@@ -280,14 +280,20 @@ for config_item in "${SOURCE_DIR}/config/"*; do
         mkdir -p "$target"
         for file in "$config_item"/*; do
             fname=$(basename "$file")
-            # Caddyfile.example becomes Caddyfile with hostname substitution
-            # ALWAYS overwrites — avahi-published hostname can change between
-            # reboots (e.g. framework-13.local → framework.local), and Caddy
-            # needs the current one to bind correctly.
-            if [[ "$fname" == "Caddyfile.example" ]]; then
-                sed "s/HOSTNAME\.local/${LOCAL_HOSTNAME}/g" "$file" > "${target}/Caddyfile" 2>/dev/null || cp "$file" "${target}/Caddyfile"
-                echo "  ✓ caddy/Caddyfile (hostname substituted)"
-            elif [[ "$fname" == *.example ]]; then
+                        # Caddyfile.example becomes Caddyfile with hostname substitution
+                        # ALWAYS overwrites — avahi-published hostname can change between
+                        # reboots (e.g. framework-13.local → framework.local), and Caddy
+                        # needs the current one to bind correctly.
+                        if [[ "$fname" == "Caddyfile.example" ]]; then
+                            sed "s/HOSTNAME\\.local/${LOCAL_HOSTNAME}/g" "$file" > "${target}/Caddyfile" 2>/dev/null || cp "$file" "${target}/Caddyfile"
+                            echo "  ✓ caddy/Caddyfile (hostname substituted)"
+                        # Open WebUI service.env contains HOSTNAME in WEBUI_URL and
+                        # CORS_ALLOW_ORIGIN — must be regenerated on every reinstall
+                        # so the avahi hostname stays in sync.
+                        elif [[ "$item_name" == "open-webui" && "$fname" == "service.env.example" ]]; then
+                            sed "s/HOSTNAME\\.local/${LOCAL_HOSTNAME}/g" "$file" > "${target}/service.env" 2>/dev/null || cp "$file" "${target}/service.env"
+                            echo "  ✓ open-webui/service.env (hostname substituted)"
+                        elif [[ "$fname" == *.example ]]; then
                 # Always copy .example files (they're templates)
                 cp "$file" "$target/" 2>/dev/null || true
             elif [ ! -f "${target}/${fname}" ]; then
