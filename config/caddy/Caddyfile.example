@@ -6,13 +6,6 @@
 https://HOSTNAME.local:3001 {
 	tls internal
 
-	# WebSocket-specific route — no security headers (they break the upgrade).
-	# Open WebUI uses Socket.IO for real-time streaming.
-	handle_path /ws/* {
-		reverse_proxy open-webui:8080
-	}
-
-	# API and UI routes — apply security headers.
 	header {
 		Strict-Transport-Security "max-age=300"
 		X-Content-Type-Options "nosniff"
