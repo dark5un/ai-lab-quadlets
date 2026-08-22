@@ -52,6 +52,7 @@ if [ ! -f "$DST" ] || [ "$FORCE" = true ]; then
             -e "s/change-me-to-another-random-hex-string/$SECRET/" \
             "$SRC" > "$DST"
         echo "  Created: $DST"
+        echo "  Dashboard username: admin"
         echo "  Dashboard password: $PASSWORD"
     else
         echo "  SKIP: $SRC not found"
