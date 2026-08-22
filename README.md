@@ -235,6 +235,29 @@ systemctl --user enable --now caddy.service
 systemctl --user enable --now open-webui.service
 ```
 
+### iGPU/Vulkan acceleration (non-NVIDIA machines)
+
+On machines without NVIDIA GPUs, the installer checks for `/dev/dri` — the
+presence of an integrated GPU (iGPU) or any other DRM device. If found:
+
+- The **llama.cpp** quadlet is switched to the `:server-vulkan` image
+- The host GPU is passed through to the container via `AddDevice=/dev/dri`
+- Offload is enabled via `LLAMA_ARG_N_GPU_LAYERS=99` in the service.env
+
+This provides significant speedup on modern laptop iGPUs. For example, on a
+**Ryzen AI 9 HX 370** (Radeon 890M) running a 27B model, tok/s goes from
+~3 (CPU-only) to **~15-30** (Vulkan iGPU offload), depending on quantization.
+
+If no `/dev/dri` is present (e.g. headless server), the plain CPU image is
+used and no device passthrough is configured. The `:server-vulkan` image
+also handles this gracefully — it falls back to CPU-only if no Vulkan device
+is available at runtime.
+
+**Note:** ComfyUI uses PyTorch, not Vulkan, so its CPU variant remains
+CPU-only even when an iGPU is present. For ComfyUI on AMD iGPUs, ROCm
+support for `gfx1150` (Radeon 890M) is experimental in ROCm 7.10.0 but
+requires Ubuntu 24.04 with a specific kernel — not practical on Bluefin.
+
 ## GPU detection details
 
 The `detect-gpus.sh` script:
