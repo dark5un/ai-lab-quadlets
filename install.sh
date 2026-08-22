@@ -222,6 +222,22 @@ echo "[4/6] Generating secrets..."
 bash "${SOURCE_DIR}/scripts/generate-secrets.sh" || true
 echo ""
 
+# ─── Determine current .local hostname ────────────────────────────────────
+# Used to substitute HOSTNAME.local in config files (Caddyfile, open-webui).
+# The avahi-published name can change between reboots (e.g. framework-13.local
+# vs framework.local), so any file containing HOSTNAME.local is always
+# regenerated on every install run.
+HOSTNAME_SHORT=$(hostname -s 2>/dev/null || echo "localhost")
+AVAHI_NAME=""
+if command -v avahi-resolve &>/dev/null; then
+    AVAHI_NAME=$(systemctl status avahi-daemon 2>/dev/null | grep -o 'running \[[^]]*\]' | sed 's/running \[\(.*\)\]/\1/' | head -1)
+fi
+if [ -z "$AVAHI_NAME" ]; then
+    AVAHI_NAME="${HOSTNAME_SHORT}.local"
+fi
+LOCAL_HOSTNAME="$AVAHI_NAME"
+echo "  → Using published hostname: ${LOCAL_HOSTNAME}"
+
 # ─── Copy files to runtime locations ──────────────────────────────────────
 echo "[5/6] Deploying to system directories..."
 
@@ -253,54 +269,31 @@ else
     echo "  ✓ comfyui.container (CPU — no GPU detected)"
 fi
 
-# Configs (don't overwrite existing service.env or presets.ini on reinstall)
-# Determine the REAL avahi-published .local name (handles hostname conflicts,
-# e.g. framework → framework-13.local). Fall back to hostname -s + .local.
-HOSTNAME_SHORT=$(hostname -s 2>/dev/null || echo "localhost")
-
-# 1. Try reading the name avahi actually publishes
-AVAHI_NAME=""
-if command -v avahi-resolve &>/dev/null; then
-    AVAHI_NAME=$(systemctl status avahi-daemon 2>/dev/null | grep -o 'running \[[^]]*\]' | sed 's/running \[\(.*\)\]/\1/' | head -1)
-fi
-# 2. Fall back to hostname -s .local
-if [ -z "$AVAHI_NAME" ]; then
-    AVAHI_NAME="${HOSTNAME_SHORT}.local"
-fi
-LOCAL_HOSTNAME="$AVAHI_NAME"
-echo "  → Using published hostname: ${LOCAL_HOSTNAME}"
-
+# Config files — always regenerate files that contain HOSTNAME.local
+# (avahi name can change between reboots). Preserve other existing files.
 mkdir -p "$CONFIG_DIR"
-echo "  → Deploying configs to $CONFIG_DIR/ (existing .env and presets preserved)..."
+echo "  → Deploying configs to $CONFIG_DIR/ ..."
 for config_item in "${SOURCE_DIR}/config/"*; do
     item_name=$(basename "$config_item")
     target="${CONFIG_DIR}/${item_name}"
     if [ -d "$config_item" ]; then
-        # Directory — merge contents without overwriting
         mkdir -p "$target"
         for file in "$config_item"/*; do
             fname=$(basename "$file")
-                        # Caddyfile.example becomes Caddyfile with hostname substitution
-                        # ALWAYS overwrites — avahi-published hostname can change between
-                        # reboots (e.g. framework-13.local → framework.local), and Caddy
-                        # needs the current one to bind correctly.
-                        if [[ "$fname" == "Caddyfile.example" ]]; then
-                            sed "s/HOSTNAME\\.local/${LOCAL_HOSTNAME}/g" "$file" > "${target}/Caddyfile" 2>/dev/null || cp "$file" "${target}/Caddyfile"
-                            echo "  ✓ caddy/Caddyfile (hostname substituted)"
-                        # Open WebUI service.env contains HOSTNAME in WEBUI_URL and
-                        # CORS_ALLOW_ORIGIN — must be regenerated on every reinstall
-                        # so the avahi hostname stays in sync.
-                        elif [[ "$item_name" == "open-webui" && "$fname" == "service.env.example" ]]; then
-                            sed "s/HOSTNAME\\.local/${LOCAL_HOSTNAME}/g" "$file" > "${target}/service.env" 2>/dev/null || cp "$file" "${target}/service.env"
-                            echo "  ✓ open-webui/service.env (hostname substituted)"
-                        elif [[ "$fname" == *.example ]]; then
-                # Always copy .example files (they're templates)
+
+            # If the source contains HOSTNAME.local, always regenerate the
+            # destination with the current hostname (avahi name can change).
+            if grep -q 'HOSTNAME\.local' "$file" 2>/dev/null; then
+                target_file="${target}/${fname%.example}"
+                sed "s/HOSTNAME\.local/${LOCAL_HOSTNAME}/g" "$file" > "$target_file" 2>/dev/null
+                echo "  ✓ ${item_name}/${target_file##*/} (hostname substituted)"
+            # Example files: always copy as-is (templates for new installs).
+            elif [[ "$fname" == *.example ]]; then
                 cp "$file" "$target/" 2>/dev/null || true
+            # Other files: only copy if they don't exist yet (preserve manual edits).
             elif [ ! -f "${target}/${fname}" ]; then
-                # Only copy non-example files if they don't exist yet
-                # Substitute HOSTNAME.local with the real hostname
-                sed "s/HOSTNAME\.local/${LOCAL_HOSTNAME}/g" "$file" > "${target}/${fname}" 2>/dev/null || cp "$file" "${target}/${fname}"
-                echo "  ✓ ${item_name}/${fname} (hostname substituted)"
+                cp "$file" "${target}/${fname}" 2>/dev/null || true
+                echo "  ✓ ${item_name}/${fname}"
             fi
         done
     fi
