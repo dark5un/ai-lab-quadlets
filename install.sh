@@ -223,11 +223,12 @@ for config_item in "${SOURCE_DIR}/config/"*; do
         for file in "$config_item"/*; do
             fname=$(basename "$file")
             # Caddyfile.example becomes Caddyfile with hostname substitution
+            # ALWAYS overwrites — avahi-published hostname can change between
+            # reboots (e.g. framework-13.local → framework.local), and Caddy
+            # needs the current one to bind correctly.
             if [[ "$fname" == "Caddyfile.example" ]]; then
-                if [ ! -f "${target}/Caddyfile" ]; then
-                    sed "s/HOSTNAME\.local/${LOCAL_HOSTNAME}/g" "$file" > "${target}/Caddyfile" 2>/dev/null || cp "$file" "${target}/Caddyfile"
-                    echo "  ✓ caddy/Caddyfile (hostname substituted)"
-                fi
+                sed "s/HOSTNAME\.local/${LOCAL_HOSTNAME}/g" "$file" > "${target}/Caddyfile" 2>/dev/null || cp "$file" "${target}/Caddyfile"
+                echo "  ✓ caddy/Caddyfile (hostname substituted)"
             elif [[ "$fname" == *.example ]]; then
                 # Always copy .example files (they're templates)
                 cp "$file" "$target/" 2>/dev/null || true

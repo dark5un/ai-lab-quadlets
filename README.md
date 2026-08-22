@@ -169,7 +169,24 @@ podman rmi -f localhost/deepseek-harness:0.1.0-rc.6  # DSH
 curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/install.sh | bash
 ```
 
-### avahi hostname conflicts
+### avahi hostname changes between reboots
+
+If avahi publishes a name like `hostname-13.local` one day and `hostname.local`
+the next, the Caddyfile becomes stale and services become unreachable. This happens
+because mDNS name deduplication can produce different suffixes depending on what's
+on the LAN at each boot.
+
+**Fix:** simply re-run the installer — it always regenerates `Caddyfile` from the
+template with the current published hostname:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/install.sh | bash
+```
+
+No other configs (service.env, presets.ini) are touched on reinstall, so this is
+always safe.
+
+### avahi hostname conflicts (persistent)
 
 If avahi publishes a name like `host-2.local` or `host-13.local`, something
 else on your LAN already claims the base name. The installer auto-detects
