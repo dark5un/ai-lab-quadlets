@@ -1,10 +1,10 @@
 [Unit]
 Description=Hermes Agent web and Telegram service
-After=network-online.target llama-cpp-main.service
-Wants=network-online.target llama-cpp-main.service
+After=network-online.target systemd-llama-cpp.service
+Wants=network-online.target systemd-llama-cpp.service
 
 [Container]
-ContainerName=hermes
+ContainerName=systemd-hermes-gateway
 Image=docker.io/nousresearch/hermes-agent:latest
 Network=ai.network
 UserNS=keep-id

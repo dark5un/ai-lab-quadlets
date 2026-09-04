@@ -41,6 +41,19 @@ function loadSecretFile(variable, fileVariable) {
   }
 }
 
+function parseTrustedHosts() {
+  const raw = process.env['DSH_TRUSTED_HOSTS']
+  if (!raw) return []
+  return raw.split(',').map(h => h.trim()).filter(Boolean)
+}
+
+function parseAllowRemoteConfiguration() {
+  const raw = process.env['DSH_ALLOW_REMOTE_CONFIGURATION']
+  // Upstream dsh (0.1.2-rc.1+) doesn't have --allow-remote-configuration.
+  // This hook is reserved for when it does; currently a no-op.
+  return false
+}
+
 function runWeb(webArgs) {
   const publicPort = parsePort('DSH_PORT', DEFAULT_PUBLIC_PORT)
   const internalPort = parsePort('DSH_INTERNAL_PORT', DEFAULT_INTERNAL_PORT)
@@ -48,16 +61,27 @@ function runWeb(webArgs) {
 
   loadSecretFile('DEEPSEEK_API_KEY', 'DEEPSEEK_API_KEY_FILE')
 
+  const trustedHosts = parseTrustedHosts()
+
+  const dshArgs = [
+    'web',
+    '--port',
+    String(internalPort),
+  ]
+
+  for (const host of trustedHosts) {
+    dshArgs.push('--trusted-host', host)
+  }
+
+  dshArgs.push(...webArgs)
+
   // Launch dsh bound to loopback only. --expose-internals is required by the
   // HMR service used by `dsh web`; invoking the CLI via Node directly avoids
   // spawning a fresh interpreter without the flag.
   const child = spawn(process.execPath, [
     '--expose-internals',
     DSH_CLI,
-    'web',
-    '--port',
-    String(internalPort),
-    ...webArgs,
+    ...dshArgs,
   ], {
     cwd: process.cwd(),
     env: process.env,

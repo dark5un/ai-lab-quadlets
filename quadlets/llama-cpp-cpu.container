@@ -4,7 +4,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Container]
-ContainerName=llama-cpp
+ContainerName=systemd-llama-cpp
 Image=ghcr.io/ggml-org/llama.cpp:server
 
 Network=ai.network

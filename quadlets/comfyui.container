@@ -4,7 +4,7 @@ After=network-online.target ai-network.service
 Wants=network-online.target
 
 [Container]
-ContainerName=comfyui
+ContainerName=systemd-comfyui
 # Custom build — see containers/comfyui/Containerfile.
 # Build with: podman build -t localhost/comfyui:v0.30.2-cu130 containers/comfyui/
 Image=localhost/comfyui:v0.30.2-cu130

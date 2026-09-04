@@ -13,11 +13,11 @@ When you run `./scripts/detect-gpus.sh`, the script:
 
 | Priority | GPU (sorted by VRAM) | Service name | Port |
 |---|---|---|---|
-| 1st (largest VRAM) | e.g. RTX 5090 (32 GB) | `llama-cpp-main` | `11435` |
-| 2nd | e.g. RTX 4070 Ti (12 GB) | `llama-cpp-research` | `11436` |
-| 3rd | e.g. RTX 4080 (16 GB) | `llama-cpp-extra-1` | `11431` |
-| 4th | ... | `llama-cpp-extra-2` | `11432` |
-| No GPU | CPU | `llama-cpp-main` | `11435` |
+| 1st (largest VRAM) | e.g. RTX 5090 (32 GB) | `systemd-llama-cpp-main` | `11435` |
+| 2nd | e.g. RTX 4070 Ti (12 GB) | `systemd-llama-cpp-research` | `11436` |
+| 3rd | e.g. RTX 4080 (16 GB) | `systemd-llama-cpp-extra-1` | `11431` |
+| 4th | ... | `systemd-llama-cpp-extra-2` | `11432` |
+| No GPU | CPU | `systemd-llama-cpp-main` | `11435` |
 
 > **Why UUIDs?** Quadlet's `AddDevice=nvidia.com/gpu=GPU-xxxx` accepts UUIDs,
 > not indices. Using UUIDs guarantees the correct GPU is assigned even if the

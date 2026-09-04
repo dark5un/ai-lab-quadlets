@@ -1,10 +1,10 @@
 [Unit]
 Description=Caddy HTTPS reverse proxy
-After=network-online.target open-webui.service
-Wants=network-online.target open-webui.service
+After=network-online.target systemd-open-webui.service
+Wants=network-online.target systemd-open-webui.service
 
 [Container]
-ContainerName=caddy
+ContainerName=systemd-caddy
 Image=docker.io/library/caddy:2-alpine
 Network=ai.network
 PublishPort=3001:3001/tcp

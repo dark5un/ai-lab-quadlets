@@ -7,7 +7,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Container]
-ContainerName=llama-cpp-research
+ContainerName=systemd-llama-cpp-research
 Image=ghcr.io/ggml-org/llama.cpp:server-cuda
 
 # GPU assignment: {GPU_NAME} ({GPU_VRAM} GB)

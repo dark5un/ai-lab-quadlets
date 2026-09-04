@@ -1,7 +1,7 @@
 # DeepSeek Harness (dsh) — container image
 #
 # Build:
-#   podman build -t localhost/deepseek-harness:0.1.0-rc.6 -f containers/deepseek-harness/Containerfile containers/deepseek-harness/
+#   podman build -t localhost/deepseek-harness:0.1.2-rc.1 -f containers/deepseek-harness/Containerfile containers/deepseek-harness/
 #
 # DeepSeek Harness has no official Docker image or Containerfile.
 # This build is inspired by https://github.com/AlliotTech/deepseek-harness-docker
@@ -29,7 +29,11 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 COPY package.json ./
-RUN npm install --omit=dev --no-audit --no-fund @deepseek-ai/dsh@0.1.0-rc.6 && npm cache clean --force
+RUN npm install --omit=dev --no-audit --no-fund @deepseek-ai/dsh@0.1.2-rc.1 && npm cache clean --force
+
+# Patch client-side isLoopback check and inject trusted hostnames into SPA.
+COPY patch-client-loopback.mjs ./
+RUN node patch-client-loopback.mjs && rm patch-client-loopback.mjs
 
 FROM node:24-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489337ba3275657f93595428be4fc03 AS runtime
 

@@ -1,0 +1,28 @@
+[Unit]
+Description=HyperFrames Render Server
+After=network-online.target ai-network.service
+Wants=network-online.target ai-network.service
+
+[Container]
+ContainerName=systemd-hyperframes
+# Build from HyperFrames repo:
+#   podman build -f packages/gcp-cloud-run/Dockerfile \
+#     -t localhost/hyperframes:latest /path/to/hyperframes
+Image=localhost/hyperframes:latest
+Network=ai.network
+PublishPort=127.0.0.1:3006:8080/tcp
+# Mount compositions from host for rendering
+Volume=hyperframes-compositions:/project/compositions:Z
+Volume=hyperframes-output:/project/output:Z
+Environment=PORT=8080
+# Software rendering (no GPU needed for headless Chrome)
+# If GPU acceleration desired, add: AddDevice=nvidia.com/gpu=all
+
+[Service]
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=900
+TimeoutStopSec=60
+
+[Install]
+WantedBy=default.target

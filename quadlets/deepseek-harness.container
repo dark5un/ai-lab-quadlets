@@ -4,16 +4,19 @@ After=network-online.target ai-network.service
 Wants=network-online.target
 
 [Container]
-ContainerName=deepseek-harness
+ContainerName=systemd-deepseek-harness
 # Local build — see containers/deepseek-harness/Containerfile.
 # Build with: podman build -t localhost/deepseek-harness:0.1.0-rc.6 containers/deepseek-harness/
-Image=localhost/deepseek-harness:0.1.0-rc.6
+Image=localhost/deepseek-harness:0.1.2-rc.1
 Network=ai.network
 PublishPort=127.0.0.1:3080:3080/tcp
 # Map container node user (uid 1000) to host user so the volume stays writable.
 UserNS=keep-id
 # Persist dsh config, sessions, and API keys.
 Volume=%h/.local/share/deepseek-harness:/home/node/.dsh:Z
+
+# Environment file for trusted hosts and provider configuration.
+EnvironmentFile=%h/.config/containers/config/deepseek-harness/service.env
 
 [Service]
 Restart=on-failure
