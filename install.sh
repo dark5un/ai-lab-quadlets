@@ -13,11 +13,21 @@
 set -uo pipefail
 
 FORCE_REBUILD=0
-# Parse CLI args: ./install.sh --force-rebuild  OR  curl ... | bash -s -- --force-rebuild
+RESET_COMFYUI=0
+DRY_RUN=0
+BACKUP=0
+# Parse CLI args: ./install.sh [--force-rebuild] [--reset-comfyui] [--dry-run] [--backup]
+#   --force-rebuild   rebuild container images
+#   --reset-comfyui   wipe ComfyUI configuration/runtime (settings, DB, manager state, logs, temp, caches); keeps models/input/output/custom_nodes
+#   --dry-run         with --reset-comfyui, only report what would be removed
+#   --backup          with --reset-comfyui, tar ~/.local/share/comfyui/user before deleting
 for arg in "$@"; do
     case "$arg" in
         --force-rebuild) FORCE_REBUILD=1 ;;
-        *) echo "Unknown option: $arg (supported: --force-rebuild)"; exit 1 ;;
+        --reset-comfyui) RESET_COMFYUI=1 ;;
+        --dry-run) DRY_RUN=1 ;;
+        --backup) BACKUP=1 ;;
+        *) echo "Unknown option: $arg (supported: --force-rebuild --reset-comfyui --dry-run --backup)"; exit 1 ;;
     esac
 done
 
@@ -79,6 +89,82 @@ for img in docker.io/library/caddy:2-alpine ghcr.io/open-webui/open-webui:v0.11.
 done
 
 echo ""
+
+# ─── ComfyUI config reset (standalone: ./install.sh --reset-comfyui) ──────
+# Wipes ComfyUI configuration/runtime (settings, DB, manager state, logs, temp,
+# caches) while preserving models/input/output/custom_nodes. Caches live under
+# user/.cache, so wiping user/ covers them. The user/ dir is recreated so the
+# SQLite DB — managed by Alembic and auto-migrated on first start — can open
+# cleanly (ComfyUI issue #11233: the DB fails to open when user/ is missing).
+# --dry-run only reports what would be removed; --backup tars user/ first.
+if [ "$RESET_COMFYUI" = 1 ]; then
+    COMFYUI_DIR="${HOME}/.local/share/comfyui"
+    echo "============================================="
+    echo "  ComfyUI Config Reset                    "
+    echo "============================================="
+    echo ""
+
+    # Stop comfyui so we don't wipe data it is writing to.
+    if [ "$SYSTEMD_AVAILABLE" = true ]; then
+        systemctl --user stop comfyui.service 2>/dev/null || true
+        sleep 1
+    else
+        podman stop systemd-comfyui 2>/dev/null || true
+    fi
+
+    # Optional backup of user/ before deleting.
+    if [ "$BACKUP" = 1 ]; then
+        BACKUP_TAR="${COMFYUI_DIR}/user-backup-$(date +%Y%m%d-%H%M%S).tar.gz"
+        if [ "$DRY_RUN" = 1 ]; then
+            echo "  ~ [dry-run] would back up user/ → ${BACKUP_TAR##*/}"
+        elif tar -czf "$BACKUP_TAR" -C "$COMFYUI_DIR" user 2>/dev/null; then
+            echo "  ✓ backed up user/ → ${BACKUP_TAR##*/}"
+        else
+            echo "  ! backup failed — continuing without it"
+        fi
+    fi
+
+    # Wipe configuration/runtime. Keep models/input/output/custom_nodes.
+    echo "  → Wiping (dry-run: ${DRY_RUN}); keeping models/input/output/custom_nodes..."
+    for target in user temp comfyui.log; do
+        if [ ! -e "${COMFYUI_DIR}/${target}" ]; then
+            echo "  ~ ${target} not present — nothing to remove"
+            continue
+        fi
+        if [ "$DRY_RUN" = 1 ]; then
+            echo "  ~ [dry-run] would remove ${target}"
+        else
+            rm -rf "${COMFYUI_DIR}/${target}" && echo "  ✓ removed ${target}" \
+                || echo "  ! failed to remove ${target}"
+        fi
+    done
+
+    # Recreate user/ so the DB can open on next ComfyUI start.
+    if [ "$DRY_RUN" != 1 ]; then
+        mkdir -p "${COMFYUI_DIR}/user" && echo "  → recreated user/"
+    fi
+
+    # Bring comfyui back up on the clean data, if it was deployed.
+    if [ "$DRY_RUN" != 1 ] && [ "$SYSTEMD_AVAILABLE" = true ] \
+        && [ -f "${QUADLET_DIR}/comfyui.container" ]; then
+        echo "  → Restarting comfyui service..."
+        systemctl --user "restart" "comfyui.service" 2>/dev/null \
+            && echo "  ✓ comfyui restarted" \
+            || echo "  ! comfyui failed to restart"
+    elif [ "$DRY_RUN" != 1 ] && [ "$SYSTEMD_AVAILABLE" != true ]; then
+        podman start systemd-comfyui 2>/dev/null || echo "  ! could not start comfyui"
+    fi
+
+    echo ""
+    if [ "$DRY_RUN" = 1 ]; then
+        echo "  Dry-run complete — nothing was actually removed."
+    else
+        echo "  ComfyUI config reset complete."
+    fi
+    echo "============================================="
+    echo ""
+    exit 0
+fi
 
 # ─── Determine source directory ───────────────────────────────────────────
 # If the script is inside a git checkout (local file), use that. Otherwise clone.
