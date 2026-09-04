@@ -409,7 +409,25 @@ else
 fi
 echo ""
 
-# llama.cpp server (pulled automatically by systemd, but ensure it's available)
+# ─── HyperFrames image (built from the local repo checkout) ───────────────
+# The server role (gcp-cloud-run) reads PORT (default 8080) and is bun-native.
+# Build context must be the monorepo ROOT so the @hyperframes/* workspaces are
+# available. Falls back to GHCR if the local checkout is missing.
+echo "  ~ HyperFrames image..."
+HYPERFRAMES_REPO="${HYPERFRAMES_REPO:-/var/home/px/.distrobox/homes/hermes/repos/github.com/hyperframes}"
+if podman image exists localhost/hyperframes:latest 2>/dev/null; then
+    echo "  ✓ localhost/hyperframes:latest (already exists)"
+elif podman pull ghcr.io/dark5un/hyperframes:latest 2>/dev/null; then
+    podman tag ghcr.io/dark5un/hyperframes:latest localhost/hyperframes:latest 2>/dev/null || true
+    echo "  ✓ pulled hyperframes from GHCR"
+elif [ -d "${HYPERFRAMES_REPO}/packages/gcp-cloud-run/Dockerfile" ]; then
+    echo "  ~ Building HyperFrames image (repo checkout: ${HYPERFRAMES_REPO})..."
+    (cd "${HYPERFRAMES_REPO}" && podman build -t localhost/hyperframes:latest -f packages/gcp-cloud-run/Dockerfile .) && \
+        echo "  ✓ built hyperframes" || echo "  ! HyperFrames build failed — see packages/gcp-cloud-run/Dockerfile"
+else
+    echo "  ! HyperFrames repo checkout not found — build manually: see quadlets/hyperframes.container"
+fi
+echo ""
 echo "  ~ Pulling llama.cpp ${LLAMA_CPP_IMAGE_TAG} image (background)..."
 podman pull "ghcr.io/ggml-org/llama.cpp:${LLAMA_CPP_IMAGE_TAG}" 2>/dev/null &
 echo ""
@@ -428,7 +446,6 @@ elif command -v brew &>/dev/null; then
     echo "  ~ Installing hf CLI..."
     curl -LsSf https://hf.co/cli/install.sh | bash 2>/dev/null && echo "  ✓ installed" || \
         echo "  ! brew install failed — try: brew install huggingface/tap/huggingface-cli"
-    fi
 elif command -v pip3 &>/dev/null; then
     echo "  ~ Installing hf CLI via pip..."
     pip3 install --user --upgrade "huggingface_hub" 2>/dev/null && echo "  ✓ installed via pip" || \
@@ -474,6 +491,7 @@ if [ "$SYSTEMD_AVAILABLE" = true ]; then
     restart_service caddy
     restart_service sketchlab
     restart_service deepseek-harness
+    restart_service hyperframes
 
     echo ""
     echo "============================================="
@@ -481,7 +499,7 @@ if [ "$SYSTEMD_AVAILABLE" = true ]; then
     echo "============================================="
     echo ""
     echo "Running AI Lab services:"
-    systemctl --user list-units --type=service --state=running --no-pager 2>/dev/null | grep -E '\b(ai-network|llama|caddy|open-webui|sketchlab|comfyui|hermes)' || echo "  (none running yet — some may still be pulling images)"
+    systemctl --user list-units --type=service --state=running --no-pager 2>/dev/null | grep -E '\b(ai-network|llama|caddy|open-webui|sketchlab|comfyui|hermes|hyperframes)' || echo "  (none running yet — some may still be pulling images)"
 else
     echo "  ~ Systemd user services not available."
     echo "  ~ Quadlets are installed; start manually with:"

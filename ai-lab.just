@@ -58,6 +58,19 @@ install:
         rm -rf "$TMP_CLONE" 2>/dev/null || true
     fi
 
+    # HyperFrames — build from local repo checkout (server role: gcp-cloud-run).
+    # Context must be the monorepo root so @hyperframes/* workspaces resolve.
+    HYPERFRAMES_REPO="${HYPERFRAMES_REPO:-/var/home/px/.distrobox/homes/hermes/repos/github.com/hyperframes}"
+    if podman image exists localhost/hyperframes:latest 2>/dev/null; then
+        echo "  ✓ hyperframes (already exists)"
+    elif [ -d "${HYPERFRAMES_REPO}/packages/gcp-cloud-run/Dockerfile" ]; then
+        echo "  ~ Building hyperframes from ${HYPERFRAMES_REPO}..."
+        (cd "${HYPERFRAMES_REPO}" && podman build -t localhost/hyperframes:latest -f packages/gcp-cloud-run/Dockerfile .) && \
+            echo "  ✓ hyperframes (built)" || echo "  ! hyperframes build failed"
+    else
+        echo "  ! hyperframes image unavailable — build manually: see quadlets/hyperframes.container"
+    fi
+
     # 4. Deploy files to runtime locations
     echo "[4/5] Deploying to runtime directories..."
     mkdir -p "$QUADLET_DIR" "$CONFIG_DIR"
@@ -113,7 +126,7 @@ install:
     echo "[5/5] Starting services..."
     systemctl --user daemon-reload 2>/dev/null || true
 
-    for svc in ai-network llama-cpp-main open-webui caddy sketchlab comfyui hermes; do
+    for svc in ai-network llama-cpp-main open-webui caddy sketchlab comfyui hermes hyperframes; do
         if [ -f "$QUADLET_DIR/${svc}.container" ]; then
             echo "  → ${svc}..."
             systemctl --user enable "${svc}.service" 2>/dev/null || true
@@ -183,7 +196,7 @@ status:
     echo "=== AI Lab Quadlets — Status ==="
     echo ""
     for unit in ai-network caddy open-webui llama-cpp-main llama-cpp-research \
-                comfyui sketchlab hermes; do
+                comfyui sketchlab hermes hyperframes; do
         if systemctl --user is-active "${unit}.service" &>/dev/null; then
             echo "  ✓ $unit    (active)"
         elif systemctl --user is-enabled "${unit}.service" &>/dev/null; then
