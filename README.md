@@ -43,11 +43,11 @@ reboots, and can be rehydrated on a fresh machine with one command.
 | **systemd-llama-cpp-research** | optional | `11436` | llama.cpp on the 2nd GPU (conservative settings) |
 | **systemd-open-webui** | web | `3000` | AI chat frontend (OpenAI-compatible backend) |
 | **systemd-caddy** | proxy | `3001-3005` | HTTPS reverse proxy, internal TLS |
-| | **systemd-comfyui** | image | `8188` | Stable Diffusion / AI image generation |
-| | **systemd-sketchlab** | diagram | `8080` | Diagramming SPA with local LLM support |
-| | **systemd-deepseek-harness** | agent | `3080` | Agent runtime (plugin-based, official npm) |
-| | **systemd-hermes-gateway** | agents | `9119` | Nous Research Hermes Agent gateway |
-| | **systemd-hyperframes** | video | `3006` | HTML-to-video render API (headless) |
+| **systemd-comfyui** | image | `8188` | Stable Diffusion / AI image generation |
+| **systemd-sketchlab** | diagram | `8080` | Diagramming SPA with local LLM support |
+| **systemd-deepseek-harness** | agent | `3080` | Agent runtime (plugin-based, official npm) |
+| **systemd-hermes-gateway** | agents | `9119` | Nous Research Hermes Agent gateway |
+| **systemd-hyperframes** | video | `3006` | HTML-to-video render API (headless) |
 
 > **Container naming:** All containers are prefixed with `systemd-` to avoid conflicts
 > with distrobox/toolbox containers that may share short names (e.g. `hermes`).
@@ -302,7 +302,7 @@ reboots, and can be rehydrated on a fresh machine with one command.
 ## Services
 
 | Service | Status | Port | Description |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **systemd-ai** | core | — | Podman network for all container communication |
 | **systemd-llama-cpp** | core | `11435` | llama.cpp on the largest GPU (long context, big models) |
 | **systemd-llama-cpp-research** | optional | `11436` | llama.cpp on the 2nd GPU (conservative settings) |
