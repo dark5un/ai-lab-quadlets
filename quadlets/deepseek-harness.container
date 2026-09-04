@@ -6,7 +6,7 @@ Wants=network-online.target
 [Container]
 ContainerName=systemd-deepseek-harness
 # Local build — see containers/deepseek-harness/Containerfile.
-# Build with: podman build -t localhost/deepseek-harness:0.1.0-rc.6 containers/deepseek-harness/
+# Build with: podman build -t localhost/deepseek-harness:0.1.2-rc.1 containers/deepseek-harness/
 Image=localhost/deepseek-harness:0.1.2-rc.1
 Network=ai.network
 PublishPort=127.0.0.1:3080:3080/tcp

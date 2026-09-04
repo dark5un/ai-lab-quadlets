@@ -395,13 +395,13 @@ echo "  ~ DeepSeek Harness image..."
 DSH_HASH=$(sha256sum "${SOURCE_DIR}/containers/deepseek-harness/Containerfile" 2>/dev/null | cut -d' ' -f1)
 if [ "$FORCE_REBUILD" = "1" ] || [ "$(cat "${CONFIG_DIR}/.deepseek-harness-built" 2>/dev/null)" != "$DSH_HASH" ]; then
     podman rm -f deepseek-harness 2>/dev/null || true
-    podman rmi -f localhost/deepseek-harness:0.1.0-rc.6 2>/dev/null || true
+    podman rmi -f localhost/deepseek-harness:0.1.2-rc.1 2>/dev/null || true
 fi
-if podman image exists localhost/deepseek-harness:0.1.0-rc.6 2>/dev/null; then
-    echo "  ✓ localhost/deepseek-harness:0.1.0-rc.6 (already exists)"
+if podman image exists localhost/deepseek-harness:0.1.2-rc.1 2>/dev/null; then
+    echo "  ✓ localhost/deepseek-harness:0.1.2-rc.1 (already exists)"
 elif [ -f "${SOURCE_DIR}/containers/deepseek-harness/Containerfile" ]; then
     echo "  ~ Building DeepSeek Harness image (this takes a while)..."
-    (cd "${SOURCE_DIR}/containers/deepseek-harness" && podman build -t localhost/deepseek-harness:0.1.0-rc.6 -f Containerfile .) && \
+    (cd "${SOURCE_DIR}/containers/deepseek-harness" && podman build -t localhost/deepseek-harness:0.1.2-rc.1 -f Containerfile .) && \
         echo "$DSH_HASH" > "${CONFIG_DIR}/.deepseek-harness-built" && \
         echo "  ✓ built deepseek-harness" || echo "  ! DeepSeek Harness build failed — see containers/deepseek-harness/Containerfile"
 else
