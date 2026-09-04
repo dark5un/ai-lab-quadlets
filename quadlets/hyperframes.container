@@ -6,10 +6,11 @@ Wants=network-online.target ai-network.service
 [Container]
 ContainerName=systemd-hyperframes
 # Build from HyperFrames repo:
+#   cd /var/home/px/.distrobox/homes/hermes/repos/github.com/hyperframes && \
 #   podman build -f packages/gcp-cloud-run/Dockerfile \
-#     -t localhost/hyperframes:latest /path/to/hyperframes
+#     -t localhost/hyperframes:latest .
 Image=localhost/hyperframes:latest
-Network=ai.network
+Network=systemd-ai
 PublishPort=127.0.0.1:3006:8080/tcp
 # Mount compositions from host for rendering
 Volume=hyperframes-compositions:/project/compositions:Z

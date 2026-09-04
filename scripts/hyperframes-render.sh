@@ -10,7 +10,7 @@ set -euo pipefail
 COMPOSITION_DIR="${1:?Usage: $0 <composition-dir> <output.mp4>}"
 OUTPUT_FILE="${2:?Usage: $0 <composition-dir> <output.mp4>}"
 IMAGE_NAME="localhost/hyperframes-render:latest"
-REPO_DIR="$(cd "$(dirname "$0")" && cd ../repos/github.com/hyperframes && pwd)"
+REPO_DIR="$(cd "$(dirname "$0")" && cd ../../hyperframes && pwd)"
 
 # Build image if it doesn't exist
 if ! podman image exists "$IMAGE_NAME" 2>/dev/null; then
