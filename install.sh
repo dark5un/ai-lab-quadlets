@@ -425,12 +425,9 @@ echo "  ✓ ~/.local/bin/hf-download"
 if command -v hf &>/dev/null; then
     echo "  ✓ hf CLI (Hugging Face): $(hf --version 2>/dev/null | head -1)"
 elif command -v brew &>/dev/null; then
-    echo "  ~ Installing hf CLI via brew..."
-    brew install hf 2>/dev/null && echo "  ✓ installed via brew" || \
-        echo "  ! brew install failed — trying pip..."
-    if ! command -v hf &>/dev/null && command -v pip3 &>/dev/null; then
-        pip3 install --user --upgrade "huggingface_hub" 2>/dev/null && echo "  ✓ installed via pip" || \
-            echo "  ! pip install failed"
+    echo "  ~ Installing hf CLI..."
+    curl -LsSf https://hf.co/cli/install.sh | bash 2>/dev/null && echo "  ✓ installed" || \
+        echo "  ! brew install failed — try: brew install huggingface/tap/huggingface-cli"
     fi
 elif command -v pip3 &>/dev/null; then
     echo "  ~ Installing hf CLI via pip..."
