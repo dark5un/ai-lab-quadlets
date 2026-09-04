@@ -39,7 +39,7 @@ install:
     # 3. Ensure container images
     echo "[3/5] Ensuring container images..."
     podman pull docker.io/library/caddy:2-alpine 2>/dev/null && echo "  ✓ caddy"
-    podman pull ghcr.io/open-webui/open-webui:v0.11.0 2>/dev/null && echo "  ✓ open-webui"
+    podman pull ghcr.io/open-webui/open-webui:v0.11.3 2>/dev/null && echo "  ✓ open-webui"
 
     # Sketch Lab — try GHCR then local build
     if podman image exists localhost/sketchlab:v0.5.0 2>/dev/null; then

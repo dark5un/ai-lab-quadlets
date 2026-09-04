@@ -70,7 +70,7 @@ fi
 
 # Container images — check which we already have
 echo "  ~ Checking required container images..."
-for img in docker.io/library/caddy:2-alpine ghcr.io/open-webui/open-webui:v0.11.0 docker.io/nousresearch/hermes-agent:latest; do
+for img in docker.io/library/caddy:2-alpine ghcr.io/open-webui/open-webui:v0.11.3 docker.io/nousresearch/hermes-agent:latest; do
     if podman image exists "$img" 2>/dev/null; then
         echo "  ✓ $img"
     else
@@ -320,7 +320,7 @@ echo "  ~ Ensuring container images..."
 podman pull docker.io/library/caddy:2-alpine 2>/dev/null && echo "  ✓ caddy"
 
 # Open WebUI
-podman pull ghcr.io/open-webui/open-webui:v0.11.0 2>/dev/null && echo "  ✓ open-webui"
+podman pull ghcr.io/open-webui/open-webui:v0.11.3 2>/dev/null && echo "  ✓ open-webui"
 
 # Hermes
 podman pull docker.io/nousresearch/hermes-agent:latest 2>/dev/null && echo "  ✓ hermes"
