@@ -1,14 +1,14 @@
 # ComfyUI CPU-only build (no CUDA, no GPU required)
 #
 # Build:
-#   podman build -t localhost/comfyui-cpu:v0.30.2 -f containers/comfyui/Containerfile.cpu containers/comfyui/
+#   podman build -t localhost/comfyui-cpu:v0.34.0 -f containers/comfyui/Containerfile.cpu containers/comfyui/
 #
-# The CPU quadlet references localhost/comfyui-cpu:v0.30.2.
+# The CPU quadlet references localhost/comfyui-cpu:v0.34.0.
 # Use this on machines without NVIDIA GPUs.
 
 FROM docker.io/library/python:3.13-slim-bookworm
 
-ARG COMFYUI_VERSION=v0.30.2
+ARG COMFYUI_VERSION=v0.34.0
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 ENV PIP_NO_CACHE_DIR=1

@@ -1,15 +1,15 @@
 # ComfyUI with CUDA 13 + ComfyUI Manager + Workflow Models Downloader
 #
 # Build:
-#   podman build -t localhost/comfyui:v0.30.2-cu130 -f containers/comfyui/Containerfile containers/comfyui/
+#   podman build -t localhost/comfyui:v0.34.0-cu130 -f containers/comfyui/Containerfile containers/comfyui/
 #
-# The quadlet references localhost/comfyui:v0.30.2-cu130 — build this image
+# The quadlet references localhost/comfyui:v0.34.0-cu130 — build this image
 # first (it is a custom build, not a public image).
 
 FROM docker.io/library/python:3.13-slim-bookworm
 
 ## ARG COMFYUI_VERSION=v0.28.0
-ARG COMFYUI_VERSION=v0.30.2
+ARG COMFYUI_VERSION=v0.34.0
 ARG TORCH_INDEX_URL=https://download.pytorch.org/whl/cu130
 
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
