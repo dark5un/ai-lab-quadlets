@@ -6,7 +6,7 @@ Wants=network-online.target
 [Container]
 ContainerName=systemd-comfyui
 # CPU build — see containers/comfyui/Containerfile.cpu.
-# Build with: podman build -t localhost/comfyui-cpu:v0.30.2 containers/comfyui/ -f Containerfile.cpu
+# Build with: podman build -t localhost/comfyui-cpu:v0.34.0 containers/comfyui/ -f Containerfile.cpu
 Image=localhost/comfyui-cpu:v0.34.0
 Network=ai.network
 PublishPort=127.0.0.1:8188:8188/tcp

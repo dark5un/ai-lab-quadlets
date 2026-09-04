@@ -357,13 +357,13 @@ if [ "$NVIDIA_AVAILABLE" = true ]; then
     CF_HASH=$(sha256sum "${SOURCE_DIR}/containers/comfyui/Containerfile" 2>/dev/null | cut -d' ' -f1)
     if [ "${FORCE_REBUILD:-0}" = "1" ] || [ "$(cat "${CONFIG_DIR}/.comfyui-cu130-built" 2>/dev/null)" != "$CF_HASH" ]; then
         podman rm -f comfyui 2>/dev/null || true
-        podman rmi -f localhost/comfyui:v0.30.2-cu130 2>/dev/null || true
+        podman rmi -f localhost/comfyui:v0.34.0-cu130 2>/dev/null || true
     fi
-    if podman image exists localhost/comfyui:v0.30.2-cu130 2>/dev/null; then
-        echo "  ✓ localhost/comfyui:v0.30.2-cu130 (already exists)"
+    if podman image exists localhost/comfyui:v0.34.0-cu130 2>/dev/null; then
+        echo "  ✓ localhost/comfyui:v0.34.0-cu130 (already exists)"
     elif [ -f "${SOURCE_DIR}/containers/comfyui/Containerfile" ]; then
         echo "  ~ Building CUDA ComfyUI image (this takes a while)..."
-        (cd "${SOURCE_DIR}/containers/comfyui" && podman build -t localhost/comfyui:v0.30.2-cu130 -f Containerfile .) && \
+        (cd "${SOURCE_DIR}/containers/comfyui" && podman build -t localhost/comfyui:v0.34.0-cu130 -f Containerfile .) && \
             echo "$CF_HASH" > "${CONFIG_DIR}/.comfyui-cu130-built" && \
             echo "  ✓ built CUDA comfyui" || echo "  ! CUDA ComfyUI build failed — see containers/comfyui/Containerfile"
     else
@@ -374,13 +374,13 @@ else
     CF_HASH=$(sha256sum "${SOURCE_DIR}/containers/comfyui/Containerfile.cpu" 2>/dev/null | cut -d' ' -f1)
     if [ "${FORCE_REBUILD:-0}" = "1" ] || [ "$(cat "${CONFIG_DIR}/.comfyui-cpu-built" 2>/dev/null)" != "$CF_HASH" ]; then
         podman rm -f comfyui 2>/dev/null || true
-        podman rmi -f localhost/comfyui-cpu:v0.30.2 2>/dev/null || true
+        podman rmi -f localhost/comfyui-cpu:v0.34.0 2>/dev/null || true
     fi
-    if podman image exists localhost/comfyui-cpu:v0.30.2 2>/dev/null; then
-        echo "  ✓ localhost/comfyui-cpu:v0.30.2 (already exists)"
+    if podman image exists localhost/comfyui-cpu:v0.34.0 2>/dev/null; then
+        echo "  ✓ localhost/comfyui-cpu:v0.34.0 (already exists)"
     elif [ -f "${SOURCE_DIR}/containers/comfyui/Containerfile.cpu" ]; then
         echo "  ~ Building CPU ComfyUI image (this takes a while)..."
-        (cd "${SOURCE_DIR}/containers/comfyui" && podman build -t localhost/comfyui-cpu:v0.30.2 -f Containerfile.cpu .) && \
+        (cd "${SOURCE_DIR}/containers/comfyui" && podman build -t localhost/comfyui-cpu:v0.34.0 -f Containerfile.cpu .) && \
             echo "$CF_HASH" > "${CONFIG_DIR}/.comfyui-cpu-built" && \
             echo "  ✓ built CPU comfyui" || echo "  ! CPU ComfyUI build failed — see containers/comfyui/Containerfile.cpu"
     else

@@ -39,12 +39,12 @@ fi
 echo ""
 
 # ─── ComfyUI ──────────────────────────────────────────────────────────────
-echo "2) ComfyUI (localhost/comfyui:v0.30.2-cu130)..."
-if podman image exists localhost/comfyui:v0.30.2-cu130 2>/dev/null; then
+echo "2) ComfyUI (localhost/comfyui:v0.34.0-cu130)..."
+if podman image exists localhost/comfyui:v0.34.0-cu130 2>/dev/null; then
     echo "   ✓ Already exists"
 elif [ -f "${PROJECT_DIR}/containers/comfyui/Containerfile" ]; then
     echo "   Building from containers/comfyui/ ..."
-    podman build -t localhost/comfyui:v0.30.2-cu130 \
+    podman build -t localhost/comfyui:v0.34.0-cu130 \
         -f "${PROJECT_DIR}/containers/comfyui/Containerfile" \
         "${PROJECT_DIR}/containers/comfyui/" && echo "   ✓ Built"
 else
