@@ -65,6 +65,18 @@ curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/instal
 The installer is **idempotent** — safe to re-run on an already-installed system.
 It detects the actual avahi/mDNS hostname so configs work on any machine.
 
+> **`.local` resolution preflight** — the installer stops up front if your
+> `<hostname>.local` doesn't resolve through the OS (`getent`), because all
+> service URLs depend on it. On Arch this needs `nss-mdns` + an nsswitch.conf
+> edit; the installer prints the exact fix. Use `--skip-resolve-check` to
+> install anyway:
+> ```bash
+> ./install.sh --skip-resolve-check
+> ```
+> Other flags: `--force-rebuild`, `--reset-comfyui`, `--dry-run`, `--backup`,
+> `--skip-hermes` (don't start the containerized Hermes gateway when you run
+> Hermes natively on the host).
+
 ## Uninstall
 
 ```bash
@@ -119,6 +131,26 @@ sudo firewall-cmd --reload
 ```
 
 Verify: `avahi-resolve -n $(hostname -s).local` should return an IP, not timeout.
+
+### Local TLS certificates (mkcert)
+
+All service URLs (`https://<hostname>.local:3001-3005`) are served over HTTPS by
+Caddy. The installer uses **mkcert** to issue a locally-trusted certificate if
+available:
+
+- It creates a CA trusted in the system store (`mkcert -install`) and issues a
+  long-lived (~2y3m) certificate for your `.local` hostname.
+- The CA and certs live **on the host** in
+  `~/.config/containers/config/caddy/certs/`, bind-mounted read-only into the
+  caddy container. Because they live on the host (not inside the ephemeral
+  `caddy-data` volume), they survive container rebuilds, and you **don't** get
+  Caddy's default 12-hour leaf-cert churn or its Chromium "expired certificate"
+  quirk.
+
+If `mkcert` is not installed, the installer falls back to Caddy's `tls internal`
+CA and prints the commands to trust that CA root manually. To force the mkcert
+path on an existing install, ensure `mkcert` is present, re-run the installer,
+and (if the CA couldn't be auto-trusted) run `sudo mkcert -install` once.
 
 ### Missing runtime directories
 
@@ -201,6 +233,11 @@ podman --remote logs systemd-hermes-gateway
   rpm-ostree install nvidia-container-toolkit
   systemctl reboot
   ```
+- **mkcert** (recommended for locally-trusted TLS; optional — the installer
+  falls back to Caddy's internal CA if absent):
+  - Arch: `sudo pacman -S mkcert` (auto-installed by the installer)
+  - macOS: `brew install mkcert`
+  - Linux: see https://github.com/FiloSottile/mkcert#installation
 
 ### 2. Deploy
 
@@ -208,15 +245,34 @@ podman --remote logs systemd-hermes-gateway
 QUADLET_DIR="${HOME}/.config/containers/systemd"
 CONFIG_DIR="${HOME}/.config/containers/config"
 mkdir -p "$QUADLET_DIR" "$CONFIG_DIR"
-cp quadlets/*.network "$QUADLET_DIR/"
-cp quadlets/*.container "$QUADLET_DIR/"
+# Copy quadlets and the config tree as-is:
+cp quadlets/*.network quadlets/*.container "$QUADLET_DIR/"
 cp -r config/* "$CONFIG_DIR/"
+# Metadata service.env files: generate-secrets.sh fills in the env files from
+# their .example templates, and the dsh quadlet additionally needs a service.env
+# (install.sh generates one automatically):
+bash scripts/generate-secrets.sh
+mkdir -p "$CONFIG_DIR/deepseek-harness"
+printf 'DSH_PORT=3080\nDSH_INTERNAL_PORT=3081\nDSH_TRUSTED_HOSTS=%s.local:3005\nDSH_ALLOW_REMOTE_CONFIGURATION=true\n' "$(hostname -s)" \
+  > "$CONFIG_DIR/deepseek-harness/service.env"
 systemctl --user daemon-reload
-systemctl --user enable --now ai-network.service
-systemctl --user enable --now llama-cpp-main.service
-systemctl --user enable --now caddy.service
-systemctl --user enable --now open-webui.service
+# Start in dependency order (generated units are quadlet-managed — use
+# `restart`, not `enable --now`, or systemd reports "transient or generated"):
+systemctl --user restart ai-network.service
+sleep 1
+systemctl --user restart llama-cpp-main.service
+systemctl --user restart open-webui.service
+systemctl --user restart comfyui.service
+systemctl --user restart caddy.service
+systemctl --user restart sketchlab.service
+systemctl --user restart deepseek-harness.service
+systemctl --user restart hermes.service      # omit if running Hermes natively
+systemctl --user restart hyperframes.service
 ```
+
+> Prefer the installer (`./install.sh` or `just -f ai-lab.just install`) — it
+> handles the `.local` resolution preflight, mkcert TLS, the dsh/hermes
+> metadata env files, and the start ordering above automatically.
 
 ### iGPU/Vulkan acceleration (non-NVIDIA machines)
 

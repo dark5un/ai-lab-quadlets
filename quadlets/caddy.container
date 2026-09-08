@@ -13,6 +13,7 @@ PublishPort=3003:3003/tcp
 PublishPort=3004:3004/tcp
 PublishPort=3005:3005/tcp
 Volume=%h/.config/containers/config/caddy:/etc/caddy:ro,Z
+Volume=%h/.config/containers/config/caddy/certs:/etc/caddy/certs:ro,Z
 Volume=caddy-data:/data
 Volume=caddy-config:/config
 

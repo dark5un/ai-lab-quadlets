@@ -1,10 +1,12 @@
 {
+	# mkcert-issued cert, keyed pre-substitution to HOSTNAME.local by install.sh.
+	# When mkcert is unavailable, install.sh falls back to Caddy's internal
+	# CA and rewrites the site blocks back to "tls internal".
 	auto_https disable_redirects
-	skip_install_trust
 }
 
-https://frame.local:3001 {
-	tls internal
+https://HOSTNAME.local:3001 {
+	tls /etc/caddy/certs/HOSTNAME.local.pem /etc/caddy/certs/HOSTNAME.local-key.pem
 
 	header {
 		Strict-Transport-Security "max-age=300"
@@ -16,8 +18,8 @@ https://frame.local:3001 {
 	reverse_proxy systemd-open-webui:8080
 }
 
-https://frame.local:3002 {
-	tls internal
+https://HOSTNAME.local:3002 {
+	tls /etc/caddy/certs/HOSTNAME.local.pem /etc/caddy/certs/HOSTNAME.local-key.pem
 
 	header {
 		Strict-Transport-Security "max-age=300"
@@ -30,8 +32,8 @@ https://frame.local:3002 {
 	reverse_proxy systemd-comfyui:8188
 }
 
-https://frame.local:3003 {
-	tls internal
+https://HOSTNAME.local:3003 {
+	tls /etc/caddy/certs/HOSTNAME.local.pem /etc/caddy/certs/HOSTNAME.local-key.pem
 
 	header {
 		Strict-Transport-Security "max-age=300"
@@ -44,8 +46,8 @@ https://frame.local:3003 {
 	reverse_proxy systemd-hermes-gateway:9119
 }
 
-https://frame.local:3004 {
-	tls internal
+https://HOSTNAME.local:3004 {
+	tls /etc/caddy/certs/HOSTNAME.local.pem /etc/caddy/certs/HOSTNAME.local-key.pem
 
 	header {
 		Strict-Transport-Security "max-age=300"
@@ -57,8 +59,8 @@ https://frame.local:3004 {
 	reverse_proxy systemd-sketchlab:8080
 }
 
-https://frame.local:3005 {
-	tls internal
+https://HOSTNAME.local:3005 {
+	tls /etc/caddy/certs/HOSTNAME.local.pem /etc/caddy/certs/HOSTNAME.local-key.pem
 
 	header {
 		Strict-Transport-Security "max-age=300"
