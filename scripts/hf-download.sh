@@ -18,7 +18,6 @@
 set -euo pipefail
 
 MODELS_DIR="${HOME}/.local/share/llama.cpp/models"
-PRESET_FILE="${HOME}/.config/containers/config/llama.cpp/presets.ini"
 
 usage() {
     echo "Usage: hf-download <repo> [quantization-or-filter]"
@@ -87,28 +86,20 @@ for f in "${GGUF_FILES[@]}"; do
 done
 echo ""
 
-# ─── Register in presets.ini ─────────────────────────────────────────────
-mkdir -p "$(dirname "$PRESET_FILE")"
-[ -f "$PRESET_FILE" ] || touch "$PRESET_FILE"
-
-for f in "${GGUF_FILES[@]}"; do
-    BASENAME=$(basename "$f" .gguf)
-
-    if grep -q "^\[${BASENAME}\]" "$PRESET_FILE" 2>/dev/null; then
-        echo "  ✓ ${BASENAME}: already in presets.ini (skipped)"
-        continue
-    fi
-
-    cat >> "$PRESET_FILE" <<INI
-
-[${BASENAME}]
-m = /models/${REPO_SLUG}/$(basename "$f")
-ctx-size = 32768
-temp = 0.7
-top-p = 0.95
-INI
-    echo "  ✓ ${BASENAME}: added to presets.ini"
-done
+# ─── Register in presets.ini via the hardware calculator ────────────────
+# Delegate to refresh-presets.py so the value is computed from the real GGUF
+# (train-capped native ctx), not hardcoded, and sections use the directory
+# name that matches the llama.cpp router model id. Avoids the filename-vs-
+# directory convention clash and the router-stripped `m =` key.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REFRESH="${SCRIPT_DIR}/refresh-presets.py"
+if [ ! -f "$REFRESH" ]; then
+    echo "  ! refresh-presets.py not found next to hf-download (${REFRESH})"
+    echo "    Downloaded but NOT registered. Run it manually after configuring models."
+else
+    echo "  → Refreshing per-model presets with hardware-fitted ctx..."
+    python3 "$REFRESH" --write || echo "  ! refresh-presets.py failed (see above)"
+fi
 
 # ─── Restart llama.cpp ────────────────────────────────────────────────────
 if systemctl --user is-active llama-cpp-main.service &>/dev/null; then

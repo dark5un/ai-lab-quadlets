@@ -50,11 +50,11 @@ get_profile_setting() {
 
     case "$profile:$key" in
         vram_very_high:CTX_SIZE)  echo "262144" ;;
-        vram_very_high:CACHE_K)   echo "q8_0" ;;
-        vram_very_high:CACHE_V)   echo "q8_0" ;;
+        vram_very_high:CACHE_K)   echo "q4_0" ;;
+        vram_very_high:CACHE_V)   echo "q4_0" ;;
         vram_very_high:BATCH)     echo "1024" ;;
         vram_very_high:UBATCH)    echo "256" ;;
-        vram_very_high:DEFAULT_CTX) echo "131072" ;;
+        vram_very_high:DEFAULT_CTX) echo "262144" ;;
         vram_very_high:MEMORY_MAX) echo "64" ;;
 
         vram_high:CTX_SIZE)  echo "131072" ;;
@@ -210,6 +210,8 @@ cache-type-v = ${cache_v}
 fit = off
 jinja = on
 load-mode = mmap
+temp = 0.7
+top-p = 0.95
 
 ; ─── Per-model overrides ──────────────────────────────────────────────
 ; Uncomment and edit to tune specific models for this GPU:
@@ -317,7 +319,7 @@ CPUPRE
     PRIMARY_INDEX=$(echo "$PRIMARY_LINE" | cut -d, -f1 | xargs)
     PRIMARY_NAME=$(echo "$PRIMARY_LINE" | cut -d, -f2 | xargs)
     PRIMARY_UUID=$(echo "$PRIMARY_LINE" | cut -d, -f3 | xargs)
-    PRIMARY_VRAM_MIB=$(echo "$PRIMARY_LINE" | cut -d, -f4 | xargs)
+    PRIMARY_VRAM_MIB=$(echo "$PRIMARY_LINE" | cut -d, -f4 | xargs | awk '{print $1}')
     PRIMARY_VRAM_GB=$(echo "scale=0; $PRIMARY_VRAM_MIB / 1024" | bc)
     PRIMARY_PROFILE=$(profile_for_vram "$PRIMARY_VRAM_GB")
 
@@ -352,7 +354,7 @@ CPUPRE
         SECONDARY_INDEX=$(echo "$SECONDARY_LINE" | cut -d, -f1 | xargs)
         SECONDARY_NAME=$(echo "$SECONDARY_LINE" | cut -d, -f2 | xargs)
         SECONDARY_UUID=$(echo "$SECONDARY_LINE" | cut -d, -f3 | xargs)
-        SECONDARY_VRAM_MIB=$(echo "$SECONDARY_LINE" | cut -d, -f4 | xargs)
+        SECONDARY_VRAM_MIB=$(echo "$SECONDARY_LINE" | cut -d, -f4 | xargs | awk '{print $1}')
         SECONDARY_VRAM_GB=$(echo "scale=0; $SECONDARY_VRAM_MIB / 1024" | bc)
         SECONDARY_PROFILE=$(profile_for_vram "$SECONDARY_VRAM_GB")
 
