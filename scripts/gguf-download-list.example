@@ -1,0 +1,12 @@
+# gguf-download-list — models for download-gguf-series.sh
+#
+# One entry per line:   repo|filename-or-filter
+# Blank lines and '#' comments are ignored.
+#
+# Prefer the EXACT .gguf filename: hf's --include is case-sensitive, so a
+# glob like "Q4_K_M" silently matches nothing on repos that ship "q4_k_m".
+# (This is the bug that shipped in the old model-specific script.)
+#
+# Verified 262,144-context llama.cpp GGUF coder models (example entries):
+Terathox-Coder/Qwen3.8-27B-MTP-GGUF|Qwen3.8-27B-Q4_K_M-MTP.gguf
+Jab1718/qwen3.8-flash-coder-26gb-gguf|qwen3.8-flash-coder-26gb-q4_k_m.gguf

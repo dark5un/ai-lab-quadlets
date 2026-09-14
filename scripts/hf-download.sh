@@ -91,6 +91,16 @@ echo ""
 # (train-capped native ctx), not hardcoded, and sections use the directory
 # name that matches the llama.cpp router model id. Avoids the filename-vs-
 # directory convention clash and the router-stripped `m =` key.
+#
+# Set HF_DOWNLOAD_NO_REFRESH=1 to skip refresh AND restart — used by
+# download-gguf-series.sh which defers both until every model has landed.
+if [ "${HF_DOWNLOAD_NO_REFRESH:-0}" = "1" ]; then
+    echo "  (HF_DOWNLOAD_NO_REFRESH=1 — deferring preset refresh + restart)"
+    echo ""
+    echo "Done. Verify with: curl http://127.0.0.1:11435/v1/models"
+    exit 0
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REFRESH="${SCRIPT_DIR}/refresh-presets.py"
 if [ ! -f "$REFRESH" ]; then
