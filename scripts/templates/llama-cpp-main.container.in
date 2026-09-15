@@ -12,7 +12,16 @@ ContainerName=systemd-llama-cpp-main
 Image=ghcr.io/ggml-org/llama.cpp:server-cuda
 
 # GPU assignment: {GPU_NAME} ({GPU_VRAM} GB)
-AddDevice=nvidia.com/gpu={GPU_UUID}
+#
+# Pass every GPU node and pin this service's card by UUID at the CUDA layer.
+# Do NOT pin with `AddDevice=nvidia.com/gpu={GPU_UUID}`: the /dev/nvidiaN *minor
+# number* is (re)assigned when the driver loads and can flip across a reboot, while
+# CDI is read at container start. A stale /etc/cdi/nvidia.yaml then hands the
+# container the wrong physical GPU (llama.cpp dies with a cudaMalloc failure for a
+# size that fits the card it thinks it has). CUDA_VISIBLE_DEVICES accepts a GPU UUID
+# and is resolved by the CUDA runtime, so it survives any minor reshuffle.
+AddDevice=nvidia.com/gpu=all
+Environment=CUDA_VISIBLE_DEVICES={GPU_UUID}
 SecurityLabelDisable=true
 
 # Keep container user mapped to host user for volume access.

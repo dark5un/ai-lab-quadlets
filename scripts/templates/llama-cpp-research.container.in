@@ -11,7 +11,11 @@ ContainerName=systemd-llama-cpp-research
 Image=ghcr.io/ggml-org/llama.cpp:server-cuda
 
 # GPU assignment: {GPU_NAME} ({GPU_VRAM} GB)
-AddDevice=nvidia.com/gpu={GPU_UUID}
+# Pin by UUID at the CUDA layer, never with AddDevice=nvidia.com/gpu={GPU_UUID}:
+# /dev/nvidiaN minor numbers are reassigned at driver load and can flip across a
+# reboot, so a CDI-pinned container can silently receive the wrong physical GPU.
+AddDevice=nvidia.com/gpu=all
+Environment=CUDA_VISIBLE_DEVICES={GPU_UUID}
 SecurityLabelDisable=true
 
 # Keep container user mapped to host user for volume access.
