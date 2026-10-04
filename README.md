@@ -358,7 +358,7 @@ The `detect-gpus.sh` script:
 2. Sorts GPUs by VRAM descending
 3. Assigns the **largest** GPU → primary llama-cpp service (port **11435**)
 4. Assigns the **second** GPU → research llama-cpp service (port **11436**)
-5. Creates N+ llama-cpp services for additional GPUs (port **1N43N**)
+5. Creates N+ llama-cpp services for additional GPUs (port **11438+N**)
 
 ### VRAM profiles
 

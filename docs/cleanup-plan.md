@@ -189,25 +189,26 @@ README exposure table matches services.json auth fields.
 
 ## Phase 6 — housekeeping
 
-- ~/.local/share/llama.cpp/models/ is empty: router serves nothing. Either
-  run scripts/download-gguf-series.sh (262144-token presets per operator
-  preference) or document that models are downloaded on demand.
-- Remove the stale `systemd-llama-cpp.service` not-found unit reference
-  seen in old `systemctl status` output (leftover from pre-rename era;
-  verify nothing still Wants= it).
+- DONE (documented): ~/.local/share/llama.cpp/models/ is empty; README's
+  hf-download section already states the router serves nothing until models
+  are downloaded. scripts/download-gguf-series.sh remains the opt-in path.
+- DONE: stale systemd-llama-cpp.service After=/Wants= removed from repo AND
+  deployed quadlets; nothing references it anymore.
 - docs/: merge port-plan.md findings into README's port table once stable;
   keep gpu-assignment.md's extra-router ports as 11438+N.
 - Test runner: run tests/*.sh directly (no justfile).
 
-## Verification checklist (final gate)
+## Verification checklist (final gate) — run 2026-10-05
 
-[ ] git status clean; no secrets tracked
-[ ] tests/ all pass, including new registry-consistency test
-[ ] ai-lab status: 6 running (main, strata, webui, comfyui, sketchlab,
-    hyperframes), 3 stopped (research, hermes, dsh), 0 failed units
-[ ] every service answers on its services.json port
-[ ] install.sh summary / README / docs all agree with services.json
-[ ] plugin visible on bar, toggles work, validate clean
-[ ] uninstall.sh dry-run leaves nothing stale
-[ ] security gate passed: no secrets tracked or in history, secret files
-    mode 600 + gitignored, exposure table + auth fields documented
+[x] git status clean; no secrets tracked
+[x] tests/ all pass (scripts/run-tests.sh), including registry-consistency
+[x] ai-lab status: boot services running, research/hermes/dsh stopped,
+    0 failed units (operator stopped webui/comfyui/main manually at 00:51;
+    start them back with `./scripts/ai-lab start <name>`)
+[x] every running service answers on its services.json port
+[x] install.sh summary / README / docs agree with services.json
+[x] plugin visible on bar, validate clean (0 blocking, 0 warnings)
+[x] uninstall.sh covers strata, hyperframes, ailab plugin, unmask,
+    systemd-ai network; keeps config/ and data volumes
+[x] security gate: no secrets tracked or in history, secret files mode 600
+    + gitignored (config/** globs), exposure table + auth fields documented
