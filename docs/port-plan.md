@@ -48,7 +48,7 @@ only, never deployed.
 2. Quadlets + templates: new PublishPorts; extra-router formula fixed to
    11438+INDEX; open-webui WEBUI_URL/CORS follow 3100; dsh DSH_PORT +
    TRUSTED_HOSTS follow 3105.
-3. install.sh / ai-lab.just / detect-gpus.sh / README / docs: ports updated
+3. install.sh / detect-gpus.sh / README / docs: ports updated
    to the scheme (install.sh keeps its structure; registry-driven rewrite
    is a follow-up).
 4. `scripts/ai-lab` CLI: status/start/stop/toggle/info, reads

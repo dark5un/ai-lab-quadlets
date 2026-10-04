@@ -1,6 +1,9 @@
 # Cleanup plan — ai-lab-quadlets
 
-Status: PLAN ONLY — nothing here is executed. Written 2026-10-05 after the
+Status: IN PROGRESS — phases 0-2 executed 2026-10-05 (commits on main).
+The ai-lab.just recipes and docs/ujust-integration.md were removed by operator
+request; install.sh, uninstall.sh and scripts/ai-lab are the only entry points.
+Written 2026-10-05 after the
 port renumbering (31xx web / 1143x model APIs), the services.json registry,
 the scripts/ai-lab CLI, and the Ryoku `ailab` bar plugin landed. A fresh
 agent can pick this up top to bottom; each phase is independently verifiable.
@@ -56,8 +59,8 @@ Grep for and fix every remaining reference to retired names/ports:
 - `DSH_INTERNAL_PORT`, `DSH_TRUSTED_HOSTS`, `DSH_ALLOW_REMOTE_CONFIGURATION`
   anywhere (all removed with the de-patch).
 - `patch-client-loopback` mentions (README already cleaned; check docs/).
-- verify `just status` / `just` stop-loop service lists match services.json
-  (they still enumerate services by hand).
+- N/A: the justfile was removed; scripts/ai-lab + uninstall.sh are the
+  registry-driven entry points.
 
 ## Phase 2 — registry-driven install (kill duplicated truth)
 
@@ -67,7 +70,9 @@ that services.json already declares. Make services.json the only writer:
   (python3 one-liner, same pattern as scripts/ai-lab) for the summary
   block, firewall-cmd line, and the deploy loop's skip-list.
 - ai-lab.just: `status`, `stop`, `start` targets iterate services.json.
-- Add tests/test-registry-consistency.sh: for every non-opt-in service in
+- DONE: install.sh summary and ai-lab.just loops read services.json
+  (ai-lab.just itself was later deleted; see status note above).
+- DONE: tests/test-registry-consistency.sh — for every service in
   services.json, assert the deployed/repo quadlet's PublishPort matches
   host_port+bind+container_port, and the image matches. This test is the
   drift alarm that would have caught the open-webui DNS bug.
@@ -192,7 +197,7 @@ README exposure table matches services.json auth fields.
   verify nothing still Wants= it).
 - docs/: merge port-plan.md findings into README's port table once stable;
   keep gpu-assignment.md's extra-router ports as 11438+N.
-- Consider a `just test` target running tests/*.sh.
+- Test runner: run tests/*.sh directly (no justfile).
 
 ## Verification checklist (final gate)
 
@@ -201,8 +206,7 @@ README exposure table matches services.json auth fields.
 [ ] ai-lab status: 6 running (main, strata, webui, comfyui, sketchlab,
     hyperframes), 3 stopped (research, hermes, dsh), 0 failed units
 [ ] every service answers on its services.json port
-[ ] just status / install.sh summary / README / docs all agree with
-    services.json
+[ ] install.sh summary / README / docs all agree with services.json
 [ ] plugin visible on bar, toggles work, validate clean
 [ ] uninstall.sh dry-run leaves nothing stale
 [ ] security gate passed: no secrets tracked or in history, secret files

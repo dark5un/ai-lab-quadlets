@@ -77,19 +77,19 @@ curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/uninst
 
 Stops all services, removes quadlet files, preserves data and configs.
 
-## Using `just` (recommended workflow)
+## Workflow
 
 ```bash
 git clone https://github.com/dark5un/ai-lab-quadlets.git
 cd ai-lab-quadlets
 
-just -f ai-lab.just install    # Install the default services (Hermes/DSH are opt-in)
-just -f ai-lab.just status     # Check what's running
-just -f ai-lab.just uninstall  # Tear it all down
+./install.sh            # Install the default services (Hermes/DSH are opt-in)
+./scripts/ai-lab status # Check what's running
+./uninstall.sh          # Tear it all down
 ```
 
-> **On Universal Blue?** See [docs/ujust-integration.md](docs/ujust-integration.md)
-> for three ways to make these commands available as native `ujust install-ai-lab`.
+`scripts/ai-lab` is the control-plane CLI: `status`, `info`, `start`, `stop`,
+`restart`, `toggle`, `ports` — all driven by `services.json`.
 
 ### Optional services
 
@@ -113,12 +113,10 @@ Quadlet pinned to the RTX 5090, generates a protected API key, and joins the
 existing `ai.network` network. It does not start Strata or download its model:
 
 ```bash
-just -f ai-lab.just strata-install
-just -f ai-lab.just strata-status
+./scripts/install-strata.sh
+./scripts/ai-lab status strata
 # When ready for the first ~84 GB IQ3_S model download:
 systemctl --user start strata.service
-# Or use the just recipe:
-just -f ai-lab.just strata-start
 ```
 
 The service is a systemd-generated Quadlet unit, so start it with
@@ -308,7 +306,7 @@ systemctl --user restart hermes.service      # omit if running Hermes natively
 systemctl --user restart hyperframes.service
 ```
 
-> Prefer the installer (`./install.sh` or `just -f ai-lab.just install`) — it
+> Prefer the installer (`./install.sh`) — it
 > handles direct port publication, the dsh/hermes metadata env files, and the
 > start ordering above automatically while retaining Caddy files without deploying them.
 
