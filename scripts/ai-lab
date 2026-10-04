@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# ai-lab — control plane for the ai-lab-quadlets stack.
+# Single source of truth: services.json at the repo root.
+#
+# Usage:
+#   ai-lab status [--json]        live state of every registered service
+#   ai-lab info [name]            registry metadata (one service or all)
+#   ai-lab start <name>           systemctl --user start
+#   ai-lab stop <name>            systemctl --user stop
+#   ai-lab restart <name>         systemctl --user restart
+#   ai-lab toggle <name>          start if stopped, stop if running
+#   ai-lab ports                  name -> host port table
+set -euo pipefail
+
+REGISTRY="${AI_LAB_REGISTRY:-$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)/services.json}"
+[ -f "$REGISTRY" ] || { echo "ai-lab: registry not found at $REGISTRY" >&2; exit 1; }
+
+registry_get() {  # registry_get <name> <field>
+    python3 - "$REGISTRY" "$1" "$2" <<'EOF'
+import json, sys
+reg = json.load(open(sys.argv[1]))
+for s in reg["services"]:
+    if s["name"] == sys.argv[2]:
+        print(s[sys.argv[3]]); sys.exit(0)
+sys.exit(1)
+EOF
+}
+
+registry_names() {
+    python3 -c "import json,sys; print('\n'.join(s['name'] for s in json.load(open(sys.argv[1]))['services']))" "$REGISTRY"
+}
+
+check_name() {
+    registry_get "$1" name >/dev/null 2>&1 || { echo "ai-lab: unknown service '$1' (known: $(registry_names | tr '\n' ' '))" >&2; exit 1; }
+}
+
+svc_state() {  # running | stopped | unknown
+    local st
+    st=$(systemctl --user is-active "$1" 2>/dev/null || true)
+    case "$st" in active) echo running;; inactive|failed) echo stopped;; *) echo unknown;; esac
+}
+
+svc_health() {  # any HTTP response counts as up (some APIs 404 on /)
+    local port=$1 path=$2 code
+    code=$(curl -s -m 3 -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}${path}" 2>/dev/null)
+    case "$code" in 000|"") echo down ;; *) echo "up ($code)" ;; esac
+}
+
+cmd_status() {
+    local json=0
+    [ "${1:-}" = "--json" ] && json=1
+    if [ "$json" = 1 ]; then
+        python3 - "$REGISTRY" <<'EOF'
+import json, subprocess, sys
+reg = json.load(open(sys.argv[1]))
+out = []
+for s in reg["services"]:
+    state = subprocess.run(["systemctl","--user","is-active",s["unit"]],
+                           capture_output=True, text=True).stdout.strip() or "unknown"
+    try:
+        code = subprocess.run(["curl","-s","-m","3","-o","/dev/null","-w","%{http_code}",
+                               f"http://127.0.0.1:{s['host_port']}{s['health']}"],
+                              capture_output=True, text=True).stdout.strip()
+    except Exception:
+        code = "000"
+    out.append({**{k: s[k] for k in ("name","unit","host_port","bind","tier","boot")},
+                "state": "running" if state == "active" else "stopped",
+                "health": "down" if code in ("000", "") else f"up ({code})"})
+print(json.dumps(out, indent=1))
+EOF
+    else
+        printf '%-18s %-9s %-6s %-10s %s\n' SERVICE STATE TIER PORT HEALTH
+        while IFS=$'\t' read -r name unit port bind tier boot; do
+            state=$(svc_state "$unit")
+            health=$(svc_health "$port" "$(registry_get "$name" health)")
+            printf '%-18s %-9s %-6s %-10s %s\n' "$name" "$state" "$tier" "$port" "$health"
+        done < <(python3 -c "
+import json
+for s in json.load(open('$REGISTRY'))['services']:
+    print('\t'.join(str(s[k]) for k in ('name','unit','host_port','bind','tier','boot')))")
+    fi
+}
+
+cmd_ports() {
+    python3 -c "
+import json
+for s in json.load(open('$REGISTRY'))['services']:
+    print(f\"{s['name']:<18} {s['bind']}:{s['host_port']} -> :{s['container_port']}\")"
+}
+
+cmd_info() {
+    if [ $# -eq 0 ]; then
+        python3 -m json.tool "$REGISTRY"
+    else
+        check_name "$1"
+        python3 - "$REGISTRY" "$1" <<'EOF'
+import json, sys
+for s in json.load(open(sys.argv[1]))["services"]:
+    if s["name"] == sys.argv[2]:
+        print(json.dumps(s, indent=1)); break
+EOF
+    fi
+}
+
+action() {  # start|stop|restart <name>
+    check_name "$2"
+    systemctl --user "$1" "$(registry_get "$2" unit)"
+    echo "  $1: $2"
+}
+
+case "${1:-status}" in
+    status)  shift; cmd_status "$@" ;;
+    ports)   cmd_ports ;;
+    info)    shift; cmd_info "$@" ;;
+    start)   action start "$2" ;;
+    stop)    action stop "$2" ;;
+    restart) action restart "$2" ;;
+    toggle)
+        check_name "$2"
+        if [ "$(svc_state "$(registry_get "$2" unit)")" = running ]; then
+            action stop "$2"
+        else
+            action start "$2"
+        fi ;;
+    *) echo "usage: ai-lab status [--json] | ports | info [name] | start|stop|restart|toggle <name>" >&2; exit 1 ;;
+esac
