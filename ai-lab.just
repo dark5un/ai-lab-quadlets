@@ -146,19 +146,20 @@ install:
              "$HOME/.local/share/llama.cpp/models"
 
     # Podman network
-    podman network exists ai.network 2>/dev/null || podman network create ai.network
+    podman network exists systemd-ai 2>/dev/null || podman network create systemd-ai
 
     # 5. Restart services
     echo "[5/5] Starting services..."
     systemctl --user daemon-reload 2>/dev/null || true
 
-    for svc in ai-network llama-cpp-main open-webui sketchlab comfyui hyperframes; do
+    systemctl --user restart ai-network.service 2>/dev/null || true
+    while read -r svc; do
         if [ -f "$QUADLET_DIR/${svc}.container" ]; then
             echo "  → ${svc}..."
             systemctl --user enable "${svc}.service" 2>/dev/null || true
             systemctl --user restart "${svc}.service" 2>/dev/null || echo "  ! ${svc}"
         fi
-    done
+    done < <(python3 -c "import json,sys; [print(s['unit'][:-8]) for s in json.load(open('$ROOT/services.json'))['services'] if s['boot']]")
 
 
 # Build the Strata RTX 5090 image and deploy its opt-in Quadlet (does not start/download model).
@@ -196,7 +197,7 @@ uninstall:
 
     # 1. Stop and disable services (built-in order respects dependencies)
     echo "[1/3] Stopping services..."
-    for svc in strata deepseek-harness hermes comfyui sketchlab caddy open-webui llama-cpp-research llama-cpp-main llama-cpp-cpu ai-network; do
+    for svc in ai-network $(python3 -c "import json,sys; print(' '.join(s['unit'][:-8] for s in json.load(open('$ROOT/services.json'))['services']))") caddy llama-cpp-cpu; do
         if systemctl --user is-active "${svc}.service" &>/dev/null; then
             systemctl --user stop "${svc}.service" 2>/dev/null || true
             echo "  ✓ stopped $svc"
@@ -247,8 +248,7 @@ status:
     #!/usr/bin/env bash
     echo "=== AI Lab Quadlets — Status ==="
     echo ""
-    for unit in ai-network open-webui llama-cpp-main llama-cpp-research \
-                comfyui sketchlab hermes deepseek-harness strata hyperframes; do
+    for unit in ai-network $(python3 -c "import json,sys; print(' '.join(s['unit'][:-8] for s in json.load(open('{{root}}/services.json'))['services']))"); do
         if systemctl --user is-active "${unit}.service" &>/dev/null; then
             echo "  ✓ $unit    (active)"
         elif systemctl --user is-enabled "${unit}.service" &>/dev/null; then

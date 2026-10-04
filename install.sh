@@ -481,8 +481,8 @@ EOF
 fi
 
 # Podman network (idempotent — safe to re-run)
-echo "  → Ensuring podman network 'ai.network' exists..."
-podman network exists ai.network 2>/dev/null || podman network create ai.network
+echo "  → Ensuring podman network 'systemd-ai' exists..."
+podman network exists systemd-ai 2>/dev/null || podman network create systemd-ai
 echo ""
 
 # ─── Container images ────────────────────────────────────────────────────
@@ -689,7 +689,7 @@ if [ "$SYSTEMD_AVAILABLE" = true ]; then
 else
     echo "  ~ Systemd user services not available."
     echo "  ~ Quadlets are installed; start manually with:"
-    echo "    podman network create ai.network"
+    echo "    podman network create systemd-ai"
     for q in "$QUADLET_DIR"/*.container; do
         name=$(basename "$q" .container)
         echo "    podman start $name"
@@ -701,19 +701,22 @@ echo "Next steps:"
 HOST_LAN_IP=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i == "src") {print $(i+1); exit}}')
 HOST_LAN_IP=${HOST_LAN_IP:-LAN-IP-unavailable}
 echo "  1. Download llama.cpp models with hf-download, then edit presets in ~/.config/containers/config/llama.cpp/presets.ini."
-echo "  2. Direct HTTP endpoints (host ports bind to 0.0.0.0):"
-echo "     Open WebUI: http://${HOST_LAN_IP}:3100"
-echo "     ComfyUI: http://${HOST_LAN_IP}:3101"
-echo "     Sketch Lab: http://${HOST_LAN_IP}:3102"
-echo "     HyperFrames API: http://${HOST_LAN_IP}:3103"
-echo "     llama.cpp API: http://${HOST_LAN_IP}:11435/v1"
-echo "     Strata API: http://${HOST_LAN_IP}:11437/v1"
-if [ "$WITH_HERMES" = 1 ]; then
-    echo "     Containerized Hermes gateway: http://${HOST_LAN_IP}:3104"
-fi
-if [ "$WITH_DEEPSEEK_HARNESS" = 1 ]; then
-    echo "     DeepSeek Harness (loopback only): http://127.0.0.1:3105"
-fi
+echo "  2. Direct HTTP endpoints (from services.json; loopback-only services show 127.0.0.1):"
+python3 - "$SOURCE_DIR/services.json" "$HOST_LAN_IP" "$WITH_HERMES" "$WITH_DEEPSEEK_HARNESS" <<'PYEOF'
+import json, sys
+reg_path, lan_ip, with_hermes, with_dsh = sys.argv[1:5]
+reg = json.load(open(reg_path))
+for s in reg["services"]:
+    if not s["boot"] and not (
+        (s["name"] == "hermes" and with_hermes == "1")
+        or (s["name"] == "deepseek-harness" and with_dsh == "1")
+    ):
+        continue
+    host = "127.0.0.1" if s["bind"] == "127.0.0.1" else lan_ip
+    suffix = "/v1" if s["tier"] in ("core", "optional") else ""
+    note = " (loopback only)" if s["bind"] == "127.0.0.1" else ""
+    print(f"     {s['name']}: http://{host}:{s['host_port']}{suffix}{note}")
+PYEOF
 echo "  3. Optional container services: --with-hermes and --with-deepseek-harness (not installed by default)."
 echo "  4. Caddy files remain under config/caddy and quadlets/caddy.container; the service is not installed or started."
 echo "  5. Services are unauthenticated/plain HTTP unless their own application provides authentication; do not expose these ports to the public Internet."
