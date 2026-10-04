@@ -1,12 +1,13 @@
 [Unit]
 Description=Hermes Agent web and Telegram service
-After=network-online.target systemd-llama-cpp.service
-Wants=network-online.target systemd-llama-cpp.service
+After=llama-cpp-main.service
+Wants=llama-cpp-main.service
 
 [Container]
 ContainerName=systemd-hermes-gateway
 Image=docker.io/nousresearch/hermes-agent:latest
 Network=ai.network
+PublishPort=0.0.0.0:3104:9119/tcp
 UserNS=keep-id
 User=0
 EnvironmentFile=%h/.config/containers/config/hermes-service/service.env
