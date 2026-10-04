@@ -16,25 +16,30 @@ FORCE_REBUILD=0
 RESET_COMFYUI=0
 DRY_RUN=0
 BACKUP=0
-SKIP_RESOLVE_CHECK=0
+
 SKIP_HERMES=0
+WITH_HERMES=0
+WITH_DEEPSEEK_HARNESS=0
 # Parse CLI args: ./install.sh [--force-rebuild] [--reset-comfyui] [--dry-run] [--backup]
 #   --force-rebuild   rebuild container images
 #   --reset-comfyui   wipe ComfyUI configuration/runtime (settings, DB, manager state, logs, temp, caches); keeps models/input/output/custom_nodes
 #   --dry-run         with --reset-comfyui, only report what would be removed
 #   --backup          with --reset-comfyui, tar ~/.local/share/comfyui/user before deleting
-#   --skip-resolve-check  skip the up-front .local resolution gate
-#   --skip-hermes     do not start the containerized Hermes gateway (e.g. when
-#                     you already run Hermes natively on the host)
+
+#   --with-hermes     opt in to the containerized Hermes gateway
+#   --with-deepseek-harness  opt in to DeepSeek Harness (builds and starts it)
+#   --skip-hermes     with --with-hermes, deploy but do not start the gateway.
 for arg in "$@"; do
     case "$arg" in
         --force-rebuild) FORCE_REBUILD=1 ;;
         --reset-comfyui) RESET_COMFYUI=1 ;;
         --dry-run) DRY_RUN=1 ;;
         --backup) BACKUP=1 ;;
-        --skip-resolve-check) SKIP_RESOLVE_CHECK=1 ;;
+
         --skip-hermes) SKIP_HERMES=1 ;;
-        *) echo "Unknown option: $arg (supported: --force-rebuild --reset-comfyui --dry-run --backup --skip-resolve-check --skip-hermes)"; exit 1 ;;
+        --with-hermes) WITH_HERMES=1 ;;
+        --with-deepseek-harness) WITH_DEEPSEEK_HARNESS=1 ;;
+        *) echo "Unknown option: $arg (supported: --force-rebuild --reset-comfyui --dry-run --backup --with-hermes --with-deepseek-harness --skip-hermes)"; exit 1 ;;
     esac
 done
 
@@ -87,13 +92,16 @@ fi
 
 # Container images — check which we already have
 echo "  ~ Checking required container images..."
-for img in docker.io/library/caddy:2-alpine ghcr.io/open-webui/open-webui:v0.11.3 docker.io/nousresearch/hermes-agent:latest; do
+for img in ghcr.io/open-webui/open-webui:v0.11.3; do
     if podman image exists "$img" 2>/dev/null; then
         echo "  ✓ $img"
     else
         echo "  ~ Will pull: $img"
     fi
 done
+if [ "$WITH_HERMES" = 1 ] && podman image exists docker.io/nousresearch/hermes-agent:latest 2>/dev/null; then
+    echo "  ✓ docker.io/nousresearch/hermes-agent:latest"
+fi
 
 echo ""
 
@@ -194,6 +202,10 @@ else
     fi
 fi
 echo ""
+
+# Shared helper is exercised independently by tests/test-optional-image-service.sh.
+# shellcheck source=scripts/optional-image-service.sh
+source "${SOURCE_DIR}/scripts/optional-image-service.sh"
 
 # ─── GPU Detection ────────────────────────────────────────────────────────
 echo "[3/6] Detecting GPUs and generating llama.cpp configs..."
@@ -312,14 +324,15 @@ echo ""
 
 # ─── Generate secrets ─────────────────────────────────────────────────────
 echo "[4/6] Generating secrets..."
-bash "${SOURCE_DIR}/scripts/generate-secrets.sh" || true
+if [ "$WITH_HERMES" = 1 ]; then
+    bash "${SOURCE_DIR}/scripts/generate-secrets.sh" --with-hermes || true
+else
+    bash "${SOURCE_DIR}/scripts/generate-secrets.sh" || true
+fi
 echo ""
 
-# ─── Determine current .local hostname ────────────────────────────────────
-# Used to substitute HOSTNAME.local in config files (Caddyfile, open-webui).
-# The avahi-published name can change between reboots (e.g. framework-13.local
-# vs framework.local), so any file containing HOSTNAME.local is always
-# regenerated on every install run.
+# ─── Determine hostname for retained Caddy config templates ───────────────
+# Caddy files are kept for reference/manual use but are not deployed or started.
 HOSTNAME_SHORT=$(hostname -s 2>/dev/null || echo "localhost")
 AVAHI_NAME=""
 if command -v avahi-resolve &>/dev/null; then
@@ -331,33 +344,6 @@ fi
 LOCAL_HOSTNAME="$AVAHI_NAME"
 echo "  → Using published hostname: ${LOCAL_HOSTNAME}"
 
-# ─── Resolve preflight ──────────────────────────────────────────────────
-# The Caddy endpoints are keyed to ${LOCAL_HOSTNAME}. If that name doesn't
-# resolve through the OS (getent — the path ping/curl/browsers use), the
-# deployed stack is unreachable by name and any CA trust we install is moot.
-# This cannot be fixed generically (it needs nss-mdns + an nsswitch edit, or
-# systemd-resolved), so detect it and stop up front unless the user opts out.
-if [ "$SKIP_RESOLVE_CHECK" = 1 ]; then
-    echo "  ~ (--skip-resolve-check) skipping .local resolution verification"
-elif getent hosts "$LOCAL_HOSTNAME" >/dev/null 2>&1; then
-    echo "  ✓ ${LOCAL_HOSTNAME} resolves through the OS (getent)"
-else
-    echo ""
-    echo "  !!! ${LOCAL_HOSTNAME} does NOT resolve through the OS (getent)."
-    echo "  !!! avahi may be advertising it, but glibc/ping/curl/browsers won't see it."
-    echo "  !!! All service URLs (https://${LOCAL_HOSTNAME}:3001-3005) will be unreachable."
-    echo ""
-    echo "  On Arch, fix by installing nss-mdns and adding it to nsswitch.conf:"
-    echo "      sudo pacman -S extra/nss-mdns"
-    echo "      sudo sed -i 's/^hosts:.*/hosts: mymachines resolve [!UNAVAIL=return] files myhostname mdns4_minimal dns/' /etc/nsswitch.conf"
-    echo "      getent hosts ${LOCAL_HOSTNAME}   # verify"
-    echo ""
-    echo "  (or enable systemd-resolved's mDNS instead — but that conflicts with avahi)"
-    echo ""
-    echo "  Aborting. Re-run with --skip-resolve-check to install anyway."
-    exit 1
-fi
-echo ""
 
 # ─── Copy files to runtime locations ──────────────────────────────────────
 echo "[5/6] Deploying to system directories..."
@@ -368,6 +354,17 @@ echo "  → Copying quadlets to $QUADLET_DIR/"
 cp "${SOURCE_DIR}/quadlets/ai.network" "$QUADLET_DIR/"
 for quadlet in "${SOURCE_DIR}/quadlets/"*.container; do
     fname=$(basename "$quadlet")
+    # Caddy config and its Quadlet stay in the repository, but are not deployed.
+    if [[ "$fname" == caddy.container ]]; then
+        continue
+    fi
+    # Hermes and DeepSeek Harness are opt-in; don't deploy their units by default.
+    if [[ "$fname" == hermes.container ]] && [ "$WITH_HERMES" != 1 ]; then
+        continue
+    fi
+    if [[ "$fname" == deepseek-harness.container ]] && [ "$WITH_DEEPSEEK_HARNESS" != 1 ]; then
+        continue
+    fi
     # Skip CPU fallback if main was generated
     if [[ "$fname" == llama-cpp-cpu.container ]]; then
         if [ -f "${SOURCE_DIR}/quadlets/llama-cpp-main.container" ]; then
@@ -381,6 +378,31 @@ for quadlet in "${SOURCE_DIR}/quadlets/"*.container; do
     cp "$quadlet" "$QUADLET_DIR/"
     echo "  ✓ $fname"
 done
+
+# Remove any previously deployed Caddy service, preserving its config, certs,
+# and Podman volumes for manual recovery if desired.
+systemctl --user stop caddy.service 2>/dev/null || true
+podman rm -f systemd-caddy 2>/dev/null || true
+rm -f "$QUADLET_DIR/caddy.container"
+echo "  ~ Caddy service stopped/removed; its configuration and data were kept"
+
+# Default installs remove previous containerized optional services without
+# deleting their persistent config/data. Users can opt back in with flags.
+if [ "$WITH_HERMES" != 1 ]; then
+    systemctl --user disable --now hermes.service 2>/dev/null || true
+    rm -f "$QUADLET_DIR/hermes.container"
+fi
+if [ "$WITH_DEEPSEEK_HARNESS" != 1 ]; then
+    systemctl --user disable --now deepseek-harness.service 2>/dev/null || true
+    rm -f "$QUADLET_DIR/deepseek-harness.container"
+fi
+
+# The CPU-only llama unit is a stale fallback on this host: the active main
+# service already selects CUDA or CPU under the canonical llama-cpp-main name.
+if [ -f "$QUADLET_DIR/llama-cpp-main.container" ]; then
+    systemctl --user disable --now llama-cpp-cpu.service 2>/dev/null || true
+    rm -f "$QUADLET_DIR/llama-cpp-cpu.container"
+fi
 
 # ComfyUI: deploy the right variant based on hardware
 if [ "$NVIDIA_AVAILABLE" = true ]; then
@@ -396,21 +418,31 @@ mkdir -p "$CONFIG_DIR"
 echo "  → Deploying configs to $CONFIG_DIR/ ..."
 for config_item in "${SOURCE_DIR}/config/"*; do
     item_name=$(basename "$config_item")
+    # Keep Caddy config files and runtime data unchanged; Caddy is not deployed.
+    if [[ "$item_name" == caddy ]]; then
+        continue
+    fi
+    if [[ "$item_name" == hermes-service ]] && [ "$WITH_HERMES" != 1 ]; then
+        continue
+    fi
+    if [[ "$item_name" == deepseek-harness ]] && [ "$WITH_DEEPSEEK_HARNESS" != 1 ]; then
+        continue
+    fi
     target="${CONFIG_DIR}/${item_name}"
     if [ -d "$config_item" ]; then
         mkdir -p "$target"
         for file in "$config_item"/*; do
             fname=$(basename "$file")
 
-            # If the source contains HOSTNAME.local, always regenerate the
-            # destination with the current hostname (avahi name can change).
-            if grep -q 'HOSTNAME\.local' "$file" 2>/dev/null; then
-                target_file="${target}/${fname%.example}"
+            # Keep templates as templates; never deploy placeholder credentials.
+            if [[ "$fname" == *.example ]]; then
+                cp "$file" "$target/" 2>/dev/null || true
+            # If a real source config contains HOSTNAME.local, refresh only its
+            # hostname while preserving the actual (non-example) settings.
+            elif grep -q 'HOSTNAME\.local' "$file" 2>/dev/null; then
+                target_file="${target}/${fname}"
                 sed "s/HOSTNAME\.local/${LOCAL_HOSTNAME}/g" "$file" > "$target_file" 2>/dev/null
                 echo "  ✓ ${item_name}/${target_file##*/} (hostname substituted)"
-            # Example files: always copy as-is (templates for new installs).
-            elif [[ "$fname" == *.example ]]; then
-                cp "$file" "$target/" 2>/dev/null || true
             # Other files: only copy if they don't exist yet (preserve manual edits).
             elif [ ! -f "${target}/${fname}" ]; then
                 cp "$file" "${target}/${fname}" 2>/dev/null || true
@@ -423,27 +455,29 @@ done
 # Runtime data directories
 mkdir -p \
     "${HOME}/.local/share/sketchlab" \
-    "${HOME}/.local/share/comfyui" \
-    "${HOME}/.local/share/hermes-service" \
-    "${HOME}/.local/share/deepseek-harness" \
+    "${HOME}/.local/share/comfyui/models/checkpoints" \
     "${HOME}/.local/share/llama.cpp/models"
+if [ "$WITH_HERMES" = 1 ]; then
+    mkdir -p "${HOME}/.local/share/hermes-service"
+fi
+if [ "$WITH_DEEPSEEK_HARNESS" = 1 ]; then
+    mkdir -p "${HOME}/.local/share/deepseek-harness"
+fi
 echo "  → Runtime data directories created (including models/)"
 
 # DeepSeek Harness env — upstream ships no service.env, but the quadlet's
 # EnvironmentFile requires one or the container fails with exit 125
 # ("no such file or directory"). Create a working default if missing.
 DSH_ENV="${CONFIG_DIR}/deepseek-harness/service.env"
-if [ ! -f "$DSH_ENV" ]; then
+if [ "$WITH_DEEPSEEK_HARNESS" = 1 ] && [ ! -f "$DSH_ENV" ]; then
     mkdir -p "$(dirname "$DSH_ENV")"
     cat > "$DSH_ENV" <<EOF
 # DeepSeek Harness (dsh) service.env — generated by install.sh.
-# Upstream supplies no default; without this file the dsh quadlet exits 125.
-DSH_PORT=3080
-DSH_INTERNAL_PORT=3081
-DSH_TRUSTED_HOSTS=${LOCAL_HOSTNAME}:3005
-DSH_ALLOW_REMOTE_CONFIGURATION=true
+# Provider configuration (API keys etc). DSH_PORT defaults to 3105.
+DSH_PORT=3105
 EOF
-    echo "  ✓ created ${DSH_ENV} (DSH_TRUSTED_HOSTS=${LOCAL_HOSTNAME}:3005)"
+    chmod 600 "$DSH_ENV"
+    echo "  ✓ created ${DSH_ENV} (dsh binds 127.0.0.1:3105 via Network=host)"
 fi
 
 # Podman network (idempotent — safe to re-run)
@@ -454,20 +488,20 @@ echo ""
 # ─── Container images ────────────────────────────────────────────────────
 echo "  ~ Ensuring container images..."
 
-# Caddy
-podman pull docker.io/library/caddy:2-alpine 2>/dev/null && echo "  ✓ caddy"
 
-# Open WebUI
-podman pull ghcr.io/open-webui/open-webui:v0.11.3 2>/dev/null && echo "  ✓ open-webui"
+# Open WebUI (large image; keep Podman's progress visible)
+podman pull ghcr.io/open-webui/open-webui:v0.11.3 && echo "  ✓ open-webui"
 
-# Hermes
-podman pull docker.io/nousresearch/hermes-agent:latest 2>/dev/null && echo "  ✓ hermes"
+# Containerized Hermes is opt-in; this is separate from the host Hermes agent.
+if [ "$WITH_HERMES" = 1 ]; then
+    podman pull docker.io/nousresearch/hermes-agent:latest && echo "  ✓ hermes"
+fi
 
 # Sketch Lab — try GHCR first, fall back to local build
 echo "  ~ Sketch Lab image..."
 if podman image exists localhost/sketchlab:v0.5.0 2>/dev/null; then
     echo "  ✓ localhost/sketchlab:v0.5.0 (already exists)"
-elif podman pull ghcr.io/dark5un/sketchlab:v0.5.0 2>/dev/null; then
+elif podman pull ghcr.io/dark5un/sketchlab:v0.5.0; then
     # Tag as localhost too so the quadlet can find it
     podman tag ghcr.io/dark5un/sketchlab:v0.5.0 localhost/sketchlab:v0.5.0 2>/dev/null || true
     echo "  ✓ ghcr.io/dark5un/sketchlab:v0.5.0"
@@ -527,38 +561,40 @@ else
 fi
 echo ""
 
-# ─── DeepSeek Harness image ────────────────────────────────────────────
-# Rebuilds when --force-rebuild, or when the Containerfile hash changed.
-echo "  ~ DeepSeek Harness image..."
-DSH_HASH=$(sha256sum "${SOURCE_DIR}/containers/deepseek-harness/Containerfile" 2>/dev/null | cut -d' ' -f1)
-if [ "$FORCE_REBUILD" = "1" ] || [ "$(cat "${CONFIG_DIR}/.deepseek-harness-built" 2>/dev/null)" != "$DSH_HASH" ]; then
-    podman rm -f deepseek-harness 2>/dev/null || true
-    podman rmi -f localhost/deepseek-harness:0.1.2-rc.1 2>/dev/null || true
+# ─── DeepSeek Harness image (opt-in) ───────────────────────────────────
+if [ "$WITH_DEEPSEEK_HARNESS" = 1 ]; then
+    # Rebuilds when --force-rebuild, or when the Containerfile hash changed.
+    echo "  ~ DeepSeek Harness image..."
+    DSH_HASH=$(sha256sum "${SOURCE_DIR}/containers/deepseek-harness/Containerfile" 2>/dev/null | cut -d' ' -f1)
+    if [ "$FORCE_REBUILD" = "1" ] || [ "$(cat "${CONFIG_DIR}/.deepseek-harness-built" 2>/dev/null)" != "$DSH_HASH" ]; then
+        podman rm -f deepseek-harness 2>/dev/null || true
+        podman rmi -f localhost/deepseek-harness:0.1.2-rc.1 2>/dev/null || true
+    fi
+    if podman image exists localhost/deepseek-harness:0.1.2-rc.1 2>/dev/null; then
+        echo "  ✓ localhost/deepseek-harness:0.1.2-rc.1 (already exists)"
+    elif [ -f "${SOURCE_DIR}/containers/deepseek-harness/Containerfile" ]; then
+        echo "  ~ Building DeepSeek Harness image (this takes a while)..."
+        (cd "${SOURCE_DIR}/containers/deepseek-harness" && podman build -t localhost/deepseek-harness:0.1.2-rc.1 -f Containerfile .) && \
+            echo "$DSH_HASH" > "${CONFIG_DIR}/.deepseek-harness-built" && \
+            echo "  ✓ built deepseek-harness" || echo "  ! DeepSeek Harness build failed — see containers/deepseek-harness/Containerfile"
+    else
+        echo "  ! No deepseek-harness Containerfile found"
+    fi
+    echo ""
 fi
-if podman image exists localhost/deepseek-harness:0.1.2-rc.1 2>/dev/null; then
-    echo "  ✓ localhost/deepseek-harness:0.1.2-rc.1 (already exists)"
-elif [ -f "${SOURCE_DIR}/containers/deepseek-harness/Containerfile" ]; then
-    echo "  ~ Building DeepSeek Harness image (this takes a while)..."
-    (cd "${SOURCE_DIR}/containers/deepseek-harness" && podman build -t localhost/deepseek-harness:0.1.2-rc.1 -f Containerfile .) && \
-        echo "$DSH_HASH" > "${CONFIG_DIR}/.deepseek-harness-built" && \
-        echo "  ✓ built deepseek-harness" || echo "  ! DeepSeek Harness build failed — see containers/deepseek-harness/Containerfile"
-else
-    echo "  ! No deepseek-harness Containerfile found"
-fi
-echo ""
 
 # ─── HyperFrames image (built from the local repo checkout) ───────────────
 # The server role (gcp-cloud-run) reads PORT (default 8080) and is bun-native.
 # Build context must be the monorepo ROOT so the @hyperframes/* workspaces are
 # available. Falls back to GHCR if the local checkout is missing.
 echo "  ~ HyperFrames image..."
-HYPERFRAMES_REPO="${HYPERFRAMES_REPO:-/var/home/px/.distrobox/homes/hermes/repos/github.com/hyperframes}"
+HYPERFRAMES_REPO="${HYPERFRAMES_REPO:-$HOME/workspace/github.com/heygen-com/hyperframes}"
 if podman image exists localhost/hyperframes:latest 2>/dev/null; then
     echo "  ✓ localhost/hyperframes:latest (already exists)"
-elif podman pull ghcr.io/dark5un/hyperframes:latest 2>/dev/null; then
+elif podman pull ghcr.io/dark5un/hyperframes:latest; then
     podman tag ghcr.io/dark5un/hyperframes:latest localhost/hyperframes:latest 2>/dev/null || true
     echo "  ✓ pulled hyperframes from GHCR"
-elif [ -d "${HYPERFRAMES_REPO}/packages/gcp-cloud-run/Dockerfile" ]; then
+elif [ -f "${HYPERFRAMES_REPO}/packages/gcp-cloud-run/Dockerfile" ]; then
     echo "  ~ Building HyperFrames image (repo checkout: ${HYPERFRAMES_REPO})..."
     (cd "${HYPERFRAMES_REPO}" && podman build -t localhost/hyperframes:latest -f packages/gcp-cloud-run/Dockerfile .) && \
         echo "  ✓ built hyperframes" || echo "  ! HyperFrames build failed — see packages/gcp-cloud-run/Dockerfile"
@@ -566,8 +602,9 @@ else
     echo "  ! HyperFrames repo checkout not found — build manually: see quadlets/hyperframes.container"
 fi
 echo ""
-echo "  ~ Pulling llama.cpp ${LLAMA_CPP_IMAGE_TAG} image (background)..."
-podman pull "ghcr.io/ggml-org/llama.cpp:${LLAMA_CPP_IMAGE_TAG}" 2>/dev/null &
+echo "  ~ Ensuring llama.cpp ${LLAMA_CPP_IMAGE_TAG} image (progress shown; no detached pull)..."
+podman pull "ghcr.io/ggml-org/llama.cpp:${LLAMA_CPP_IMAGE_TAG}" && echo "  ✓ llama.cpp image ready" || \
+    echo "  ! llama.cpp image pull failed; systemd may retry when the service starts"
 echo ""
 
 # ─── hf-download tool ────────────────────────────────────────────────────
@@ -582,15 +619,15 @@ if command -v hf &>/dev/null; then
     echo "  ✓ hf CLI (Hugging Face): $(hf --version 2>/dev/null | head -1)"
 elif command -v brew &>/dev/null; then
     echo "  ~ Installing hf CLI..."
-    curl -LsSf https://hf.co/cli/install.sh | bash 2>/dev/null && echo "  ✓ installed" || \
+    curl -LsSf https://hf.co/cli/install.sh | bash && echo "  ✓ installed" || \
         echo "  ! brew install failed — try: brew install huggingface/tap/huggingface-cli"
 elif command -v pip3 &>/dev/null; then
     echo "  ~ Installing hf CLI via pip..."
-    pip3 install --user --upgrade "huggingface_hub" 2>/dev/null && echo "  ✓ installed via pip" || \
+    pip3 install --user --upgrade "huggingface_hub" && echo "  ✓ installed via pip" || \
         echo "  ! pip install failed"
 elif command -v curl &>/dev/null; then
     echo "  ~ Installing hf CLI via standalone installer..."
-    curl -LsSf https://hf.co/cli/install.sh | bash 2>/dev/null && echo "  ✓ installed" || \
+    curl -LsSf https://hf.co/cli/install.sh | bash && echo "  ✓ installed" || \
         echo "  ! standalone install failed"
 fi
 
@@ -604,65 +641,8 @@ if ! command -v hf &>/dev/null; then
 fi
 echo ""
 
-# ─── TLS certificates (mkcert preferred, Caddy internal CA fallback) ────
-TLS_METHOD="caddy-ca"
-CERTS_DIR="${CONFIG_DIR}/caddy/certs"
-mkdir -p "$CERTS_DIR"   # bind-mounted into caddy even in CA fallback mode
-MKCERT_PRESENT=false
-if command -v mkcert >/dev/null 2>&1; then
-    MKCERT_PRESENT=true
-fi
-if [ "$MKCERT_PRESENT" = false ]; then
-    if [ -r /etc/os-release ]; then
-        # shellcheck disable=SC1091
-        . /etc/os-release
-        if [ "${ID:-}" = "arch" ] || [ "${ID_LIKE:-}" = "arch" ]; then
-            echo "  ~ mkcert not found — installing via pacman..."
-            if sudo -n true 2>/dev/null; then
-                sudo pacman -S --noconfirm --needed mkcert && MKCERT_PRESENT=true \
-                    || echo "  ! pacman install of mkcert failed"
-            else
-                echo "  ~ sudo needs a password — cannot auto-install mkcert"
-            fi
-        fi
-    fi
-fi
-
-if [ "$MKCERT_PRESENT" = true ]; then
-    echo "  ~ Using mkcert for locally-trusted TLS"
-    CERT_FILE="${CERTS_DIR}/${LOCAL_HOSTNAME}.pem"
-    KEY_FILE="${CERTS_DIR}/${LOCAL_HOSTNAME}-key.pem"
-
-    if command -v update-ca-trust >/dev/null 2>&1 || command -v trust >/dev/null 2>&1; then
-        if ! mkcert -install >/dev/null 2>&1; then
-            echo "  ~ CA not added to system store (needs root?) — certs still generated."
-            echo "    Run 'sudo mkcert -install' once to trust them system-wide."
-        fi
-    fi
-
-    mkcert -cert-file "$CERT_FILE" -key-file "$KEY_FILE" \
-        "${LOCAL_HOSTNAME}" localhost 127.0.0.1 ::1 >/dev/null 2>&1
-
-    if [ -s "$CERT_FILE" ] && [ -s "$KEY_FILE" ]; then
-        CAFILE="${CONFIG_DIR}/caddy/Caddyfile"
-        if [ -f "$CAFILE" ]; then
-            sed -i '/skip_install_trust/d' "$CAFILE"
-            sed -i "s|\ttls internal$|\ttls /etc/caddy/certs/${LOCAL_HOSTNAME}.pem /etc/caddy/certs/${LOCAL_HOSTNAME}-key.pem|" "$CAFILE"
-            echo "  ✓ Caddyfile configured for mkcert (${CERT_FILE})"
-        fi
-        TLS_METHOD="mkcert"
-    else
-        echo "  ! mkcert cert generation failed — falling back to Caddy internal CA"
-    fi
-else
-    echo "  ~ mkcert not available — falling back to Caddy's internal CA"
-    CAFILE="${CONFIG_DIR}/caddy/Caddyfile"
-    if [ -f "$CAFILE" ] && grep -q '/etc/caddy/certs/' "$CAFILE"; then
-        sed -i 's|tls /etc/caddy/certs/.*-key\.pem|tls internal|' "$CAFILE"
-        echo "  ✓ Caddyfile reset to tls internal (no mkcert)"
-    fi
-fi
-echo ""
+# Caddy assets are retained for manual/legacy recovery; the default install
+# does not issue certificates, trust a local CA, or launch a reverse proxy.
 
 # ─── Enable and start services ────────────────────────────────────────────
 echo "[6/6] Starting services..."
@@ -687,15 +667,17 @@ if [ "$SYSTEMD_AVAILABLE" = true ]; then
     restart_service llama-cpp-main
     restart_service open-webui
     restart_service comfyui
-    restart_service caddy
+
     restart_service sketchlab
-    restart_service deepseek-harness
-    if [ "$SKIP_HERMES" = 1 ]; then
-        echo "  ~ (--skip-hermes) not starting containerized hermes.service"
-    else
-        restart_service hermes
+    if [ "$WITH_DEEPSEEK_HARNESS" = 1 ]; then
+        restart_service deepseek-harness
     fi
-    restart_service hyperframes
+    if [ "$WITH_HERMES" = 1 ] && [ "$SKIP_HERMES" != 1 ]; then
+        restart_service hermes
+    elif [ "$WITH_HERMES" = 1 ]; then
+        echo "  ~ (--skip-hermes) not starting containerized hermes.service"
+    fi
+    start_optional_image_service hyperframes localhost/hyperframes:latest
 
     echo ""
     echo "============================================="
@@ -703,7 +685,7 @@ if [ "$SYSTEMD_AVAILABLE" = true ]; then
     echo "============================================="
     echo ""
     echo "Running AI Lab services:"
-    systemctl --user list-units --type=service --state=running --no-pager 2>/dev/null | grep -E '\b(ai-network|llama|caddy|open-webui|sketchlab|comfyui|hermes|hyperframes)' || echo "  (none running yet — some may still be pulling images)"
+    systemctl --user list-units --type=service --state=running --no-pager 2>/dev/null | grep -E '\b(ai-network|llama|open-webui|sketchlab|comfyui|hermes|hyperframes)' || echo "  (none running yet — some may still be pulling images)"
 else
     echo "  ~ Systemd user services not available."
     echo "  ~ Quadlets are installed; start manually with:"
@@ -715,49 +697,24 @@ else
 fi
 
 echo ""
-# ─── Trust Caddy's local CA (fallback when mkcert unavailable) ─────────
-# Only reached when TLS_METHOD != mkcert. Every endpoint is then served by
-# Caddy with `tls internal` (self-signed local CA); unless that CA root is
-# added to the OS trust store, browsers flag every URL as untrusted.
-if [ "${TLS_METHOD:-}" != "mkcert" ]; then
-    if [ "$SYSTEMD_AVAILABLE" = true ]; then
-        echo "  ~ Trusting Caddy local CA for ${LOCAL_HOSTNAME}..."
-        TMP_CA="$(mktemp /tmp/caddy-local-root-XXXXXX.crt)"
-        if podman cp systemd-caddy:/data/caddy/pki/authorities/local/root.crt "$TMP_CA" 2>/dev/null && [ -s "$TMP_CA" ]; then
-            if command -v update-ca-trust >/dev/null 2>&1; then
-                if sudo -n true 2>/dev/null; then
-                    sudo cp "$TMP_CA" /etc/ca-certificates/trust-source/anchors/caddy-local-root.crt
-                    sudo update-ca-trust
-                    echo "  ✓ Caddy CA trusted system-wide. Restart browsers to pick it up."
-                else
-                    echo "  ! Caddy CA not installed automatically (sudo needs a password)."
-                    echo "    Run manually:"
-                    echo "      sudo cp \"$TMP_CA\" /etc/ca-certificates/trust-source/anchors/caddy-local-root.crt"
-                    echo "      sudo update-ca-trust"
-                fi
-            else
-                echo "  ! update-ca-trust not found — trust Caddy CA in each client instead."
-            fi
-        else
-            echo "  ~ Caddy CA not generated yet (created on first request)."
-            echo "    After the first page load, trust it with:"
-            echo "      podman cp systemd-caddy:/data/caddy/pki/authorities/local/root.crt /tmp/caddy-ca.crt"
-            echo "      sudo cp /tmp/caddy-ca.crt /etc/ca-certificates/trust-source/anchors/caddy-local-root.crt"
-            echo "      sudo update-ca-trust"
-        fi
-        rm -f "$TMP_CA"
-    fi
-fi
-echo ""
 echo "Next steps:"
-echo "  1. Download models with hf-download:"
-echo "     hf-download unsloth/Qwen3.8-27B-GGUF Q4_K_M"
-echo "  2. Edit presets in ~/.config/containers/config/llama.cpp/presets.ini"
-echo "  3. Access services via Caddy (${TLS_METHOD:-caddy-ca} TLS — avahi .local name):"
-echo "     • Open WebUI:  https://${LOCAL_HOSTNAME}:3001"
-echo "     • ComfyUI:     https://${LOCAL_HOSTNAME}:3002"
-echo "     • Hermes:      https://${LOCAL_HOSTNAME}:3003"
-echo "     • Sketch Lab:  https://${LOCAL_HOSTNAME}:3004"
-echo "     • DSH:         https://${LOCAL_HOSTNAME}:3005"
-echo "  4. See https://github.com/dark5un/sketchlab.app for the sketchlab skill"
-echo "     that lets AI agents generate diagrams into Sketch Lab."
+HOST_LAN_IP=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i == "src") {print $(i+1); exit}}')
+HOST_LAN_IP=${HOST_LAN_IP:-LAN-IP-unavailable}
+echo "  1. Download llama.cpp models with hf-download, then edit presets in ~/.config/containers/config/llama.cpp/presets.ini."
+echo "  2. Direct HTTP endpoints (host ports bind to 0.0.0.0):"
+echo "     Open WebUI: http://${HOST_LAN_IP}:3100"
+echo "     ComfyUI: http://${HOST_LAN_IP}:3101"
+echo "     Sketch Lab: http://${HOST_LAN_IP}:3102"
+echo "     HyperFrames API: http://${HOST_LAN_IP}:3103"
+echo "     llama.cpp API: http://${HOST_LAN_IP}:11435/v1"
+echo "     Strata API: http://${HOST_LAN_IP}:11437/v1"
+if [ "$WITH_HERMES" = 1 ]; then
+    echo "     Containerized Hermes gateway: http://${HOST_LAN_IP}:3104"
+fi
+if [ "$WITH_DEEPSEEK_HARNESS" = 1 ]; then
+    echo "     DeepSeek Harness (loopback only): http://127.0.0.1:3105"
+fi
+echo "  3. Optional container services: --with-hermes and --with-deepseek-harness (not installed by default)."
+echo "  4. Caddy files remain under config/caddy and quadlets/caddy.container; the service is not installed or started."
+echo "  5. Services are unauthenticated/plain HTTP unless their own application provides authentication; do not expose these ports to the public Internet."
+echo "  6. See https://github.com/dark5un/sketchlab.app for the Sketch Lab skill."

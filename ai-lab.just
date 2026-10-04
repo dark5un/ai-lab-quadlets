@@ -14,7 +14,7 @@ config_dir := home + "/.config/containers/config"
 
 # ─── Recipes ──────────────────────────────────────────────────────────────
 
-# Install all AI Lab Quadlet services
+# Install the default AI Lab Quadlet services (Hermes and DSH are opt-in).
 # Idempotent — safe to re-run. Detects GPUs, generates configs, ensures images, starts services.
 install:
     #!/usr/bin/env bash
@@ -38,13 +38,12 @@ install:
 
     # 3. Ensure container images
     echo "[3/5] Ensuring container images..."
-    podman pull docker.io/library/caddy:2-alpine 2>/dev/null && echo "  ✓ caddy"
-    podman pull ghcr.io/open-webui/open-webui:v0.11.3 2>/dev/null && echo "  ✓ open-webui"
+    podman pull ghcr.io/open-webui/open-webui:v0.11.3 && echo "  ✓ open-webui"
 
     # Sketch Lab — try GHCR then local build
     if podman image exists localhost/sketchlab:v0.5.0 2>/dev/null; then
         echo "  ✓ sketchlab (already exists)"
-    elif podman pull ghcr.io/dark5un/sketchlab:v0.5.0 2>/dev/null; then
+    elif podman pull ghcr.io/dark5un/sketchlab:v0.5.0; then
         podman tag ghcr.io/dark5un/sketchlab:v0.5.0 localhost/sketchlab:v0.5.0 2>/dev/null || true
         echo "  ✓ sketchlab (from GHCR)"
     elif [ -d "$HOME/sketchlab.app" ]; then
@@ -60,7 +59,7 @@ install:
 
     # HyperFrames — build from local repo checkout (server role: gcp-cloud-run).
     # Context must be the monorepo root so @hyperframes/* workspaces resolve.
-    HYPERFRAMES_REPO="${HYPERFRAMES_REPO:-/var/home/px/.distrobox/homes/hermes/repos/github.com/hyperframes}"
+    HYPERFRAMES_REPO="${HYPERFRAMES_REPO:-$HOME/workspace/github.com/heygen-com/hyperframes}"
     if podman image exists localhost/hyperframes:latest 2>/dev/null; then
         echo "  ✓ hyperframes (already exists)"
     elif [ -d "${HYPERFRAMES_REPO}/packages/gcp-cloud-run/Dockerfile" ]; then
@@ -79,12 +78,33 @@ install:
     cp "$ROOT/quadlets/ai.network" "$QUADLET_DIR/"
     for q in "$ROOT/quadlets/"*.container; do
         fname=$(basename "$q")
+        # Retain Caddy assets in the repo/config tree, but don't deploy Caddy.
+        if [[ "$fname" == caddy.container ]]; then
+            continue
+        fi
+        if [[ "$fname" == hermes.container || "$fname" == deepseek-harness.container ]]; then
+            continue
+        fi
         if [[ "$fname" == llama-cpp-cpu.container ]] && [ -f "$ROOT/quadlets/llama-cpp-main.container" ]; then
             continue
         fi
         cp "$q" "$QUADLET_DIR/"
         echo "  ✓ $fname"
     done
+
+    # Stop/remove legacy Caddy while preserving config and Podman data.
+    systemctl --user stop caddy.service 2>/dev/null || true
+    podman rm -f systemd-caddy 2>/dev/null || true
+    rm -f "$QUADLET_DIR/caddy.container"
+
+    # These optional services are not deployed by the default just install.
+    systemctl --user disable --now hermes.service deepseek-harness.service 2>/dev/null || true
+    rm -f "$QUADLET_DIR/hermes.container" "$QUADLET_DIR/deepseek-harness.container"
+    # Drop a leftover standalone CPU unit; main is the canonical CPU/GPU service.
+    if [ -f "$QUADLET_DIR/llama-cpp-main.container" ]; then
+        systemctl --user disable --now llama-cpp-cpu.service 2>/dev/null || true
+        rm -f "$QUADLET_DIR/llama-cpp-cpu.container"
+    fi
 
     # Configs (preserve existing) — detect real avahi-published .local name
     HOSTNAME_SHORT=$(hostname -s 2>/dev/null || echo "localhost")
@@ -97,17 +117,22 @@ install:
     echo "  → Deploying configs (existing .env and presets preserved, hostname: ${LOCAL_HOSTNAME})..."
     for config_item in "$ROOT/config/"*; do
         item_name=$(basename "$config_item")
+        # Preserve existing Caddy files, but don't deploy or rewrite them.
+        if [[ "$item_name" == caddy ]]; then
+            continue
+        fi
+        if [[ "$item_name" == hermes-service || "$item_name" == deepseek-harness ]]; then
+            continue
+        fi
         target="$CONFIG_DIR/$item_name"
         if [ -d "$config_item" ]; then
             mkdir -p "$target"
             for file in "$config_item"/*; do
                 fname=$(basename "$file")
-                if [[ "$fname" == "Caddyfile.example" ]]; then
-                    if [ ! -f "$target/Caddyfile" ]; then
-                        sed "s/HOSTNAME\.local/${LOCAL_HOSTNAME}/g" "$file" > "$target/Caddyfile" 2>/dev/null || cp "$file" "$target/Caddyfile"
-                    fi
-                elif [[ "$fname" == *.example ]]; then
+                if [[ "$fname" == *.example ]]; then
                     cp "$file" "$target/" 2>/dev/null || true
+                elif grep -q 'HOSTNAME\.local' "$file" 2>/dev/null; then
+                    sed "s/HOSTNAME\.local/${LOCAL_HOSTNAME}/g" "$file" > "$target/$fname" 2>/dev/null
                 elif [ ! -f "$target/$fname" ]; then
                     sed "s/HOSTNAME\.local/${LOCAL_HOSTNAME}/g" "$file" > "$target/$fname" 2>/dev/null || cp "$file" "$target/$fname"
                 fi
@@ -115,9 +140,10 @@ install:
         fi
     done
 
-    # Runtime data + models dir
-    mkdir -p "$HOME/.local/share/sketchlab" "$HOME/.local/share/comfyui" \
-             "$HOME/.local/share/hermes-service" "$HOME/.local/share/llama.cpp/models"
+    # Runtime data + models dir. Optional-service data is untouched unless opted in.
+    mkdir -p "$HOME/.local/share/sketchlab" \
+             "$HOME/.local/share/comfyui/models/checkpoints" \
+             "$HOME/.local/share/llama.cpp/models"
 
     # Podman network
     podman network exists ai.network 2>/dev/null || podman network create ai.network
@@ -126,7 +152,7 @@ install:
     echo "[5/5] Starting services..."
     systemctl --user daemon-reload 2>/dev/null || true
 
-    for svc in ai-network llama-cpp-main open-webui caddy sketchlab comfyui hermes hyperframes; do
+    for svc in ai-network llama-cpp-main open-webui sketchlab comfyui hyperframes; do
         if [ -f "$QUADLET_DIR/${svc}.container" ]; then
             echo "  → ${svc}..."
             systemctl --user enable "${svc}.service" 2>/dev/null || true
@@ -134,6 +160,23 @@ install:
         fi
     done
 
+
+# Build the Strata RTX 5090 image and deploy its opt-in Quadlet (does not start/download model).
+strata-install:
+    bash "{{root}}/scripts/install-strata.sh"
+
+# Explicit first start downloads roughly 84 GB of IQ3_S model data.
+strata-start:
+    systemctl --user start strata.service
+
+strata-stop:
+    systemctl --user stop strata.service
+
+strata-status:
+    systemctl --user status strata.service --no-pager
+
+strata-logs:
+    journalctl --user -u strata.service -f
 
 # Uninstall all AI Lab Quadlet services
 # Stops services, removes quadlets, preserves data volumes
@@ -153,16 +196,24 @@ uninstall:
 
     # 1. Stop and disable services (built-in order respects dependencies)
     echo "[1/3] Stopping services..."
-    for svc in hermes comfyui sketchlab caddy open-webui llama-cpp-research llama-cpp-main ai-network; do
-        if systemctl --user is-enabled "${svc}.service" &>/dev/null; then
-            systemctl --user disable --now "${svc}.service" 2>/dev/null || true
-            echo "  ✓ disabled $svc"
+    for svc in strata deepseek-harness hermes comfyui sketchlab caddy open-webui llama-cpp-research llama-cpp-main llama-cpp-cpu ai-network; do
+        if systemctl --user is-active "${svc}.service" &>/dev/null; then
+            systemctl --user stop "${svc}.service" 2>/dev/null || true
+            echo "  ✓ stopped $svc"
         fi
+        state="$(systemctl --user is-enabled "${svc}.service" 2>/dev/null || true)"
+        case "$state" in
+            enabled|enabled-runtime)
+                systemctl --user disable "${svc}.service" 2>/dev/null || true
+                echo "  ✓ disabled $svc"
+                ;;
+        esac
     done
 
     # 2. Remove quadlet files
     echo "[2/3] Removing quadlet files..."
     for f in ai.network caddy.container comfyui.container hermes.container \
+             deepseek-harness.container strata.container llama-cpp-cpu.container \
              llama-cpp-main.container llama-cpp-research.container \
              llama-cpp-extra-*.container open-webui.container sketchlab.container; do
         if [ -f "$QUADLET_DIR/$f" ]; then
@@ -180,6 +231,7 @@ uninstall:
     echo "  ~/.config/containers/config/  (edit configs)"
     echo "  ~/.local/share/llama.cpp/     (models — keep for reinstall)"
     echo "  ~/.local/share/comfyui/       (workflows, models)"
+    echo "  ~/.local/share/strata/        (model files, if installed)"
     echo "  ~/.local/share/sketchlab/     (diagrams)"
     echo "  ~/.local/share/hermes-service/"
     echo ""
@@ -195,8 +247,8 @@ status:
     #!/usr/bin/env bash
     echo "=== AI Lab Quadlets — Status ==="
     echo ""
-    for unit in ai-network caddy open-webui llama-cpp-main llama-cpp-research \
-                comfyui sketchlab hermes hyperframes; do
+    for unit in ai-network open-webui llama-cpp-main llama-cpp-research \
+                comfyui sketchlab hermes deepseek-harness strata hyperframes; do
         if systemctl --user is-active "${unit}.service" &>/dev/null; then
             echo "  ✓ $unit    (active)"
         elif systemctl --user is-enabled "${unit}.service" &>/dev/null; then

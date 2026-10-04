@@ -26,20 +26,24 @@ fi
 
 # ─── Stop and disable services ────────────────────────────────────────────
 echo "[1/3] Stopping and disabling services..."
-SERVICES="hermes comfyui sketchlab caddy open-webui deepseek-harness llama-cpp-research llama-cpp-main ai-network"
+SERVICES="strata hermes comfyui sketchlab caddy open-webui deepseek-harness llama-cpp-research llama-cpp-main llama-cpp-cpu ai-network"
 for svc in $SERVICES; do
-    if systemctl --user is-enabled "${svc}.service" &>/dev/null 2>/dev/null; then
-        systemctl --user disable --now "${svc}.service" 2>/dev/null && echo "  ✓ disabled $svc" || echo "  ~ $svc (stopped with warnings)"
-    elif systemctl --user is-active "${svc}.service" &>/dev/null 2>/dev/null; then
-        systemctl --user stop "${svc}.service" 2>/dev/null && echo "  ✓ stopped $svc"
+    if systemctl --user is-active "${svc}.service" &>/dev/null; then
+        systemctl --user stop "${svc}.service" 2>/dev/null && echo "  ✓ stopped $svc" || echo "  ~ $svc (stop reported warnings)"
     fi
+    state="$(systemctl --user is-enabled "${svc}.service" 2>/dev/null || true)"
+    case "$state" in
+        enabled|enabled-runtime)
+            systemctl --user disable "${svc}.service" 2>/dev/null && echo "  ✓ disabled $svc" || echo "  ~ $svc (disable reported warnings)"
+            ;;
+    esac
 done
 echo ""
 
 # ─── Remove quadlet files ─────────────────────────────────────────────────
 echo "[2/3] Removing quadlet files..."
 for f in ai.network caddy.container comfyui.container hermes.container \
-         deepseek-harness.container \
+         deepseek-harness.container strata.container llama-cpp-cpu.container \
          llama-cpp-main.container llama-cpp-research.container \
          llama-cpp-extra-*.container open-webui.container sketchlab.container; do
     # shellcheck disable=SC2086
@@ -64,7 +68,8 @@ echo "Preserved (no data deleted):"
 echo "  • ~/.config/containers/config/           (settings, presets, secrets)"
 echo "  • ~/.local/share/llama.cpp/models/       (GGUF model files)"
 echo "  • ~/.local/share/llama.cpp/              (logs, config)"
-echo "  • ~/.local/share/comfyui/                (workflows, custom nodes)"
+echo "  • ~/.local/share/comfyui/                (workflows, models, custom nodes)"
+echo "  • ~/.local/share/strata/                 (model files; if installed)"
 echo "  • ~/.local/share/sketchlab/              (diagrams)"
 echo "  • ~/.local/share/hermes-service/         (agent data)"
 echo "  • ~/.local/share/deepseek-harness/      (dsh config, sessions)"
