@@ -1,7 +1,8 @@
-# Generated service env (from .example templates)
-config/*/service.env
-config/*/presets.ini
-config/llama.cpp/keys.txt
+# Generated service env (from .example templates) — ** matches any depth
+config/**/service.env
+config/**/presets.ini
+config/**/keys.txt
+config/**/.deepseek-harness-built
 
 # Generated quadlets (from detect-gpus.sh)
 quadlets/llama-cpp-main.container

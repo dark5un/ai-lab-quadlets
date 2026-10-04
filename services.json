@@ -11,7 +11,10 @@
       "health": "/health",
       "tier": "core",
       "image": "ghcr.io/ggml-org/llama.cpp:server-cuda",
-      "boot": true
+      "boot": true,
+      "auth": "none",
+      "image_digest": "ghcr.io/ggml-org/llama.cpp@sha256:e8318a7b3988f9ca57b28c03486569e60def08f2b7b060550ebfa046e175e6cb",
+      "note": "open mode: no --api-key enforced (keys.txt is mounted but unused)"
     },
     {
       "name": "llama-cpp-research",
@@ -23,7 +26,10 @@
       "health": "/health",
       "tier": "optional",
       "image": "ghcr.io/ggml-org/llama.cpp:server-cuda",
-      "boot": false
+      "boot": false,
+      "auth": "none",
+      "image_digest": "ghcr.io/ggml-org/llama.cpp@sha256:e8318a7b3988f9ca57b28c03486569e60def08f2b7b060550ebfa046e175e6cb",
+      "note": "open mode: no --api-key enforced (keys.txt is mounted but unused)"
     },
     {
       "name": "strata",
@@ -35,7 +41,9 @@
       "health": "/health",
       "tier": "optional",
       "image": "localhost/strata:rtx5090",
-      "boot": true
+      "boot": true,
+      "auth": "api-key",
+      "note": "frozen: port 11437, loopback bind; built from ~/workspace/github.com/Niko1221/Strata"
     },
     {
       "name": "open-webui",
@@ -47,7 +55,9 @@
       "health": "/health",
       "tier": "web",
       "image": "ghcr.io/open-webui/open-webui:v0.11.3",
-      "boot": true
+      "boot": true,
+      "auth": "account",
+      "image_digest": "ghcr.io/open-webui/open-webui@sha256:41daa0cf2561a5d4c8d1ff31ee2a98d93ab4d3ac2605cac69366ff6a3374a933"
     },
     {
       "name": "comfyui",
@@ -59,7 +69,8 @@
       "health": "/",
       "tier": "image",
       "image": "localhost/comfyui:v0.34.0-cu130",
-      "boot": true
+      "boot": true,
+      "auth": "none"
     },
     {
       "name": "sketchlab",
@@ -71,7 +82,8 @@
       "health": "/",
       "tier": "web",
       "image": "localhost/sketchlab:v0.5.0",
-      "boot": true
+      "boot": true,
+      "auth": "none"
     },
     {
       "name": "hyperframes",
@@ -83,7 +95,9 @@
       "health": "/",
       "tier": "video",
       "image": "localhost/hyperframes:latest",
-      "boot": true
+      "boot": true,
+      "auth": "none",
+      "note": "built locally from ~/workspace/github.com/heygen-com/hyperframes at upstream commit f70dce7"
     },
     {
       "name": "hermes",
@@ -95,7 +109,9 @@
       "health": "/",
       "tier": "opt-in",
       "image": "docker.io/nousresearch/hermes-agent:latest",
-      "boot": false
+      "boot": false,
+      "auth": "account",
+      "image_digest": "docker.io/nousresearch/hermes-agent@sha256:d4da4a40cd7a28aba983775d9fd31d94cbf153eeb0cb9e844d6d0f612b7c24db"
     },
     {
       "name": "deepseek-harness",
@@ -107,7 +123,8 @@
       "health": "/",
       "tier": "opt-in",
       "image": "localhost/deepseek-harness:0.1.2-rc.1",
-      "boot": false
+      "boot": false,
+      "auth": "token"
     }
   ]
 }
