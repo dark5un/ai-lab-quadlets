@@ -1,0 +1,64 @@
+{
+  "id": "ailab",
+  "name": "AI Lab",
+  "version": "0.1.0",
+  "author": "dark5un <dark5un@users.noreply.github.com>",
+  "description": "Start/stop the ai-lab-quadlets stack (llama.cpp, Open WebUI, ComfyUI, Sketchlab, HyperFrames, Strata) from the bar.",
+  "license": "MIT",
+  "official": false,
+  "hosts": [
+    "topbarGlyph"
+  ],
+  "entryPoints": {
+    "main": "service/Main.qml",
+    "content": "content/Widget.qml",
+    "panel": "content/Panel.qml"
+  },
+  "panel": {
+    "width": 360
+  },
+  "files": [
+    "bin/ai-lab",
+    "assets/preview-widget.png"
+  ],
+  "capabilities": {
+    "densities": [
+      "glyph",
+      "compact"
+    ],
+    "network": [
+      "127.0.0.1"
+    ]
+  },
+  "defaults": {
+    "host": "topbarGlyph",
+    "label": "AI Lab"
+  },
+  "dependencies": {
+    "commands": [
+      "systemctl",
+      "curl",
+      "python3"
+    ]
+  },
+  "metadata": {
+    "settings": [
+      {
+        "key": "showCount",
+        "type": "toggle",
+        "label": "Show the running/total count",
+        "group": "AI Lab",
+        "default": true
+      },
+      {
+        "key": "pollSec",
+        "type": "int",
+        "label": "Poll interval (seconds)",
+        "group": "AI Lab",
+        "default": 10,
+        "min": 3,
+        "max": 300
+      }
+    ]
+  }
+}

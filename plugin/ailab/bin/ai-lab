@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# Thin wrapper: runs the ai-lab control-plane CLI from the ai-lab-quadlets repo.
+# Resolution order: $AI_LAB_REPO, then the repo containing this script (when
+# run from the repo checkout), then the default checkout location.
+if [ -n "${AI_LAB_REPO:-}" ]; then
+    REPO="$AI_LAB_REPO"
+else
+    here="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+    candidate="$(cd "$here/../../.." 2>/dev/null && pwd)"
+    if [ -f "$candidate/services.json" ] && [ -x "$candidate/scripts/ai-lab" ]; then
+        REPO="$candidate"
+    else
+        REPO="$HOME/workspace/github.com/dark5un/ai-lab-quadlets"
+    fi
+fi
+exec "$REPO/scripts/ai-lab" "$@"

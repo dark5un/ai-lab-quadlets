@@ -408,6 +408,22 @@ podman build -f packages/gcp-cloud-run/Dockerfile -t localhost/hyperframes:lates
 
 The `scripts/hyperframes-render.sh` script provides a one-shot render helper.
 
+## AI Lab bar plugin
+
+The Ryoku bar plugin (`plugin/ailab/` in this repo) shows the stack state in
+the top bar: a glyph with the running/total count, and a panel listing every
+service in `services.json` with start/stop toggles and health.
+
+- Install: `ryoku plugin add plugin/ailab --bar --yes` (from the repo root).
+  The authoring copy at `~/Documents/ryoku-plugins/ailab` is a symlink into
+  this repo, so there is a single source of truth.
+- Settings: QS Bar Settings > Community > AI Lab — running/total count badge
+  and poll interval.
+- Remove: `ryoku plugin remove ailab`.
+- The plugin's only external commands are `systemctl --user`, `curl`
+  (127.0.0.1 health checks) and `python3` (registry parsing), declared in
+  `manifest.json`; keep that list honest if the CLI grows commands.
+
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
