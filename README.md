@@ -15,7 +15,7 @@ reboots, and can be rehydrated on a fresh machine with one command.
 │  ai.network ──── Podman network (container communication)    │
 │       ├── llama.cpp API: 0.0.0.0:11435                       │
 │       ├── llama.cpp research: 0.0.0.0:11436 (optional)        │
-│       ├── Strata API: 0.0.0.0:11437 (optional)                │
+│       ├── Strata API: 127.0.0.1:11437 (optional, loopback)    │
 │       ├── Open WebUI: 0.0.0.0:3100                            │
 │       ├── ComfyUI: 0.0.0.0:3101                               │
 │       ├── Sketch Lab: 0.0.0.0:3102                            │
@@ -40,7 +40,7 @@ reboots, and can be rehydrated on a fresh machine with one command.
 | **systemd-sketchlab** | diagram | `3102` | Diagramming SPA with local LLM support |
 | **systemd-deepseek-harness** | optional | `127.0.0.1:3105` | Agent runtime; host-loopback only, explicit opt-in |
 | **systemd-hermes-gateway** | optional | `3104` | Containerized Hermes gateway (explicit opt-in; separate from host Hermes Agent) |
-| **systemd-strata** | optional | `11437` | Strata OpenAI-compatible API, pinned to the RTX 5090 |
+| **systemd-strata** | optional | `127.0.0.1:11437` | Strata OpenAI-compatible API, pinned to the RTX 5090, loopback only |
 | **systemd-hyperframes** | video | `3103` | HTML-to-video render API (headless) |
 
 > **Container naming:** All containers are prefixed with `systemd-` to avoid conflicts
@@ -119,13 +119,13 @@ existing `ai.network` network. It does not start Strata or download its model:
 systemctl --user start strata.service
 ```
 
-The service is a systemd-generated Quadlet unit, so start it with
-`systemctl --user start strata.service`; do not use `systemctl enable`. It is
-intentionally not wired into `default.target`, preventing an unapproved model
-download at login.
+The service is a systemd-generated Quadlet unit; the installer never starts it
+and the first start downloads roughly 84 GB of IQ3_S model data. Once the model
+is on disk, the unit is wired into `default.target` (boot=true in
+`services.json`) so it comes back after every login.
 
-Host API: `http://<host-LAN-IP>:11437/v1` (also available via loopback at
-`http://127.0.0.1:11437/v1`). From another container on `ai.network`, use
+Host API: `http://127.0.0.1:11437/v1` (loopback only — the unit publishes on
+127.0.0.1 and is frozen that way). From another container on `ai.network`, use
 `http://systemd-strata:8080/v1`; configure the key from
 `~/.config/containers/config/strata/service.env` in that client. Model data is
 kept under `~/.local/share/strata`.
@@ -152,7 +152,7 @@ curl -sS -o /dev/null -w 'Open WebUI: %{http_code}\n' "http://${LAN_IP}:3100/"
 | Sketch Lab | `http://<host-LAN-IP>:3102` |
 | DeepSeek Harness (optional) | `http://127.0.0.1:3105` (loopback only) |
 | llama.cpp API | `http://<host-LAN-IP>:11435/v1` |
-| Strata (optional) | `http://<host-LAN-IP>:11437/v1` |
+| Strata (optional) | `http://127.0.0.1:11437/v1` (loopback only) |
 | HyperFrames API | `http://<host-LAN-IP>:3103` |
 
 ### ComfyUI opens but cannot generate
@@ -172,13 +172,14 @@ per-service GPU assignment.
 Allow only the app ports you need from your trusted LAN. For firewalld, for example:
 
 ```bash
-sudo firewall-cmd --permanent --add-port=3100-3104/tcp \
-  --add-port=11435-11436/tcp \
-  --add-port=11437/tcp
+sudo firewall-cmd --permanent --add-port=3100-3103/tcp \
+  --add-port=11435-11436/tcp
 sudo firewall-cmd --reload
 ```
 
-DeepSeek Harness intentionally stays bound to loopback and is not included above.
+Strata and DeepSeek Harness intentionally stay bound to loopback and are not
+included above. The containerized Hermes gateway (3104) is opt-in; open it only
+if you actually deployed it.
 
 ### Retained Caddy configuration (not installed)
 

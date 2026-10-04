@@ -24,9 +24,10 @@ EnvironmentFile=%h/.config/containers/config/deepseek-harness/service.env
 
 [Service]
 Restart=on-failure
-RestartSec=10
+RestartSec=30
 TimeoutStartSec=900
 TimeoutStopSec=120
 
-[Install]
-WantedBy=default.target
+# No [Install]: boot=false in services.json (the service is parked broken —
+# see docs/cleanup-plan.md phase 3). Start manually with
+# systemctl --user start deepseek-harness.service

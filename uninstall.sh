@@ -26,7 +26,14 @@ fi
 
 # ─── Stop and disable services ────────────────────────────────────────────
 echo "[1/3] Stopping and disabling services..."
-SERVICES="strata hermes comfyui sketchlab caddy open-webui deepseek-harness llama-cpp-research llama-cpp-main llama-cpp-cpu ai-network"
+SERVICES="caddy llama-cpp-cpu ai-network"
+# Registry-driven list (every unit in services.json), plus legacy names above.
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+if [ -f "$SCRIPT_DIR/services.json" ] && command -v python3 >/dev/null 2>&1; then
+    SERVICES="$SERVICES $(python3 -c "import json,sys; print(' '.join(s['unit'][:-8] for s in json.load(open(sys.argv[1]))['services']))" "$SCRIPT_DIR/services.json" 2>/dev/null)"
+else
+    SERVICES="$SERVICES strata hermes comfyui sketchlab open-webui deepseek-harness llama-cpp-research llama-cpp-main hyperframes"
+fi
 for svc in $SERVICES; do
     if systemctl --user is-active "${svc}.service" &>/dev/null; then
         systemctl --user stop "${svc}.service" 2>/dev/null && echo "  ✓ stopped $svc" || echo "  ~ $svc (stop reported warnings)"
@@ -45,7 +52,8 @@ echo "[2/3] Removing quadlet files..."
 for f in ai.network caddy.container comfyui.container hermes.container \
          deepseek-harness.container strata.container llama-cpp-cpu.container \
          llama-cpp-main.container llama-cpp-research.container \
-         llama-cpp-extra-*.container open-webui.container sketchlab.container; do
+         llama-cpp-extra-*.container open-webui.container sketchlab.container \
+         hyperframes.container; do
     # shellcheck disable=SC2086
     for file in "$QUADLET_DIR"/$f; do
         [ -f "$file" ] && rm -f "$file" && echo "  ✓ removed $(basename "$file")"
@@ -53,6 +61,25 @@ for f in ai.network caddy.container comfyui.container hermes.container \
 done
 
 systemctl --user daemon-reload 2>/dev/null || true
+
+# Unmask the network-online wait unit (masked during install to work around
+# podman#22197 on hosts where network-online.target never activates).
+if [ "$(systemctl --user is-enabled podman-user-wait-network-online.service 2>/dev/null)" = masked ]; then
+    systemctl --user unmask podman-user-wait-network-online.service 2>/dev/null \
+        && echo "  ✓ unmasked podman-user-wait-network-online" || echo "  ~ could not unmask podman-user-wait-network-online"
+fi
+
+# Remove the systemd-ai podman network (quadlet-managed; safe once services are gone).
+if podman network exists systemd-ai 2>/dev/null; then
+    podman network rm systemd-ai 2>/dev/null && echo "  ✓ removed podman network systemd-ai" \
+        || echo "  ~ podman network systemd-ai still in use (left in place)"
+fi
+
+# Remove the AI Lab bar plugin if the ryoku CLI is present.
+if command -v ryoku >/dev/null 2>&1 && ryoku plugin list 2>/dev/null | grep -q '^ailab'; then
+    ryoku plugin remove ailab >/dev/null 2>&1 && echo "  ✓ removed ailab bar plugin" \
+        || echo "  ~ could not remove ailab bar plugin"
+fi
 
 # Remove hf-download tool
 if [ -f "${HOME}/.local/bin/hf-download" ]; then

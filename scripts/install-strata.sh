@@ -96,9 +96,7 @@ systemctl --user daemon-reload
 printf '\nStrata image and Quadlet are ready.\n'
 printf 'Persistent model data: %s\n' "$DATA_DIR"
 printf 'API key is stored (mode 0600) in: %s\n' "$SERVICE_ENV"
-HOST_LAN_IP=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i == "src") {print $(i+1); exit}}')
-printf 'Host API: http://%s:11437/v1 (host bind: 0.0.0.0)\n' "${HOST_LAN_IP:-LAN-IP-unavailable}"
-printf 'Loopback API: http://127.0.0.1:11437/v1\n'
+printf 'Loopback API: http://127.0.0.1:11437/v1 (host bind: 127.0.0.1, loopback only)\n'
 printf 'Other ai.network containers: http://systemd-strata:8080/v1\n'
 printf 'The first start downloads about 84 GB of IQ3_S model data.\n'
 if [[ "$START_AFTER_INSTALL" == 1 ]]; then
