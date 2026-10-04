@@ -4,8 +4,8 @@
 
 [Unit]
 Description=llama.cpp {GPU_NAME} extra router
-After=network-online.target
-Wants=network-online.target
+# network-online.target intentionally omitted: this host never activates it (see podman#22197)
+
 
 [Container]
 ContainerName=systemd-llama-cpp-extra-{INDEX}
@@ -23,7 +23,7 @@ Network=ai.network
 
 # Native host clients:
 # http://127.0.0.1:1{INDEX}43{INDEX}/v1
-PublishPort=0.0.0.0:1{INDEX}43{INDEX}:8080
+PublishPort=0.0.0.0:{PORT}:8080
 
 Volume=%h/.local/share/llama.cpp/models:/models:ro
 Volume=%h/.config/containers/config/llama.cpp-extra-{INDEX}/presets.ini:/etc/llama-cpp/presets.ini:ro

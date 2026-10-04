@@ -5,7 +5,7 @@
 # generates:
 #   - llama-cpp-main.container  → largest VRAM GPU   (port 11435)
 #   - llama-cpp-research.container → 2nd largest GPU  (port 11436)
-#   - llama-cpp-extra-N.container  → 3rd+ GPUs        (port 1N43N)
+#   - llama-cpp-extra-N.container  → 3rd+ GPUs        (port 11438+N)
 #   - Config with VRAM-tuned settings per service
 #
 # If no NVIDIA GPU is found, a single CPU-based llama-cpp quadlet is deployed.
@@ -28,13 +28,13 @@ KEYS_FILE="${CONFIG_DIR}/llama.cpp/keys.txt"
 profile_for_vram() {
     local vram_gb=$1
 
-    if (( $(echo "$vram_gb >= 28" | bc -l) )); then
+    if (( vram_gb >= 28 )); then
         # 28 GB+ (RTX 5090 32 GB, RTX 4090 24 GB, A6000 48 GB)
         echo "vram_very_high"
-    elif (( $(echo "$vram_gb >= 20" | bc -l) )); then
+    elif (( vram_gb >= 20 )); then
         # 20-27 GB (RTX 4090 24 GB)
         echo "vram_high"
-    elif (( $(echo "$vram_gb >= 10" | bc -l) )); then
+    elif (( vram_gb >= 10 )); then
         # 10-19 GB (RTX 4070 Ti 12 GB, RTX 4080 16 GB)
         echo "vram_medium"
     else
@@ -320,7 +320,7 @@ CPUPRE
     PRIMARY_NAME=$(echo "$PRIMARY_LINE" | cut -d, -f2 | xargs)
     PRIMARY_UUID=$(echo "$PRIMARY_LINE" | cut -d, -f3 | xargs)
     PRIMARY_VRAM_MIB=$(echo "$PRIMARY_LINE" | cut -d, -f4 | xargs | awk '{print $1}')
-    PRIMARY_VRAM_GB=$(echo "scale=0; $PRIMARY_VRAM_MIB / 1024" | bc)
+    PRIMARY_VRAM_GB=$((PRIMARY_VRAM_MIB / 1024))
     PRIMARY_PROFILE=$(profile_for_vram "$PRIMARY_VRAM_GB")
 
     echo "=== Primary GPU (largest VRAM) ==="
@@ -355,7 +355,7 @@ CPUPRE
         SECONDARY_NAME=$(echo "$SECONDARY_LINE" | cut -d, -f2 | xargs)
         SECONDARY_UUID=$(echo "$SECONDARY_LINE" | cut -d, -f3 | xargs)
         SECONDARY_VRAM_MIB=$(echo "$SECONDARY_LINE" | cut -d, -f4 | xargs | awk '{print $1}')
-        SECONDARY_VRAM_GB=$(echo "scale=0; $SECONDARY_VRAM_MIB / 1024" | bc)
+        SECONDARY_VRAM_GB=$((SECONDARY_VRAM_MIB / 1024))
         SECONDARY_PROFILE=$(profile_for_vram "$SECONDARY_VRAM_GB")
 
         echo "=== Secondary GPU ==="
@@ -392,7 +392,7 @@ CPUPRE
         EXTRA_NAME=$(echo "$line" | cut -d, -f2 | xargs)
         EXTRA_UUID=$(echo "$line" | cut -d, -f3 | xargs)
         EXTRA_VRAM_MIB=$(echo "$line" | cut -d, -f4 | xargs)
-        EXTRA_VRAM_GB=$(echo "scale=0; $EXTRA_VRAM_MIB / 1024" | bc)
+        EXTRA_VRAM_GB=$((EXTRA_VRAM_MIB / 1024))
         EXTRA_PROFILE=$(profile_for_vram "$EXTRA_VRAM_GB")
 
         echo "=== Extra GPU #${EXTRA_INDEX} (GPU $EXTRA_GPU_INDEX) ==="
@@ -412,6 +412,7 @@ CPUPRE
             "GPU_VRAM=$EXTRA_VRAM_GB" \
             "GPU_UUID=$EXTRA_UUID" \
             "INDEX=${EXTRA_INDEX}" \
+            "PORT=$((11438 + EXTRA_INDEX))" \
             "MEMORY_MAX=$MEMORY_MAX"
     done
 

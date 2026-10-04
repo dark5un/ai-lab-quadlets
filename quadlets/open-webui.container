@@ -1,13 +1,13 @@
 [Unit]
 Description=Open WebUI
-After=network-online.target systemd-llama-cpp.service
-Wants=network-online.target systemd-llama-cpp.service
+After=llama-cpp-main.service
+Wants=llama-cpp-main.service
 
 [Container]
 ContainerName=systemd-open-webui
 Image=ghcr.io/open-webui/open-webui:v0.11.3
 Network=ai.network
-PublishPort=127.0.0.1:3000:8080
+PublishPort=0.0.0.0:3100:8080/tcp
 Volume=open-webui-data:/app/backend/data
 EnvironmentFile=%h/.config/containers/config/open-webui/service.env
 

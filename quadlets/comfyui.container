@@ -1,7 +1,7 @@
 [Unit]
 Description=ComfyUI
-After=network-online.target ai-network.service
-Wants=network-online.target
+After=ai-network.service
+
 
 [Container]
 ContainerName=systemd-comfyui
@@ -9,7 +9,7 @@ ContainerName=systemd-comfyui
 # Build with: podman build -t localhost/comfyui:v0.34.0-cu130 containers/comfyui/
 Image=localhost/comfyui:v0.34.0-cu130
 Network=ai.network
-PublishPort=127.0.0.1:8188:8188/tcp
+PublishPort=0.0.0.0:3101:8188/tcp
 Volume=%h/.local/share/comfyui:/data:Z
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1

@@ -9,29 +9,22 @@ reboots, and can be rehydrated on a fresh machine with one command.
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                 Host (Bluefin / Fedora)                       │
-│                                                               │
-│  ai.network ──── Podman network (internal)                    │
-│       │                                                      │
-│       ├── systemd-caddy:3001-3005  ──── HTTPS reverse proxy   │
-│       │    ├─ :3001 → systemd-open-webui:8080                 │
-│       │    ├─ :3002 → systemd-comfyui:8188                    │
-│       │    ├─ :3003 → systemd-hermes-gateway:9119             │
-│       │    ├─ :3004 → systemd-sketchlab:8080                  │
-│       │    └─ :3005 → systemd-deepseek-harness:3080           │
-│       │                                                      │
-│       ├── systemd-llama-cpp:11435  ←─ largest GPU / iGPU     │
-│       │    └─ /models:ro                                      │
-│       │    └─ /presets.ini                                    │
-│       │                                                      │
-│       ├── systemd-open-webui:3000  ──── AI chat frontend     │
-│       ├── systemd-comfyui:8188     ──── Image generation     │
-│       ├── systemd-sketchlab:8080   ──── Diagram editor        │
-│       ├── systemd-deepseek-harness:3080 ─ Agent runtime      │
-│       ├── systemd-hermes-gateway:9119 ── AI agent gateway    │
-│       └── systemd-hyperframes:3006 ──── Video render API     │
-└──────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│                 Host (Bluefin / Fedora)                      │
+│                                                              │
+│  ai.network ──── Podman network (container communication)    │
+│       ├── llama.cpp API: 0.0.0.0:11435                       │
+│       ├── llama.cpp research: 0.0.0.0:11436 (optional)        │
+│       ├── Strata API: 0.0.0.0:11437 (optional)                │
+│       ├── Open WebUI: 0.0.0.0:3100                            │
+│       ├── ComfyUI: 0.0.0.0:3101                               │
+│       ├── Sketch Lab: 0.0.0.0:3102                            │
+│       ├── Hermes gateway: 0.0.0.0:3104 (optional)              │
+│       ├── HyperFrames: 0.0.0.0:3103                           │
+│       └── DeepSeek Harness: 127.0.0.1:3105 (optional)          │
+│                                                              │
+│  Caddy configuration is retained, but Caddy is not deployed. │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ## Services
@@ -39,21 +32,26 @@ reboots, and can be rehydrated on a fresh machine with one command.
 | Service | Status | Port | Description |
 |---|---|---|---|
 | **ai-network** | core | — | Podman network for all container communication |
-| **systemd-llama-cpp** | core | `11435` | llama.cpp on the largest GPU (long context, big models) |
+| **systemd-llama-cpp-main** | core | `11435` | llama.cpp on the largest GPU (long context, big models) |
 | **systemd-llama-cpp-research** | optional | `11436` | llama.cpp on the 2nd GPU (conservative settings) |
-| **systemd-open-webui** | web | `3000` | AI chat frontend (OpenAI-compatible backend) |
-| **systemd-caddy** | proxy | `3001-3005` | HTTPS reverse proxy, internal TLS |
-| **systemd-comfyui** | image | `8188` | Stable Diffusion / AI image generation |
-| **systemd-sketchlab** | diagram | `8080` | Diagramming SPA with local LLM support |
-| **systemd-deepseek-harness** | agent | `3080` | Agent runtime (plugin-based, official npm) |
-| **systemd-hermes-gateway** | agents | `9119` | Nous Research Hermes Agent gateway |
-| **systemd-hyperframes** | video | `3006` | HTML-to-video render API (headless) |
+| **systemd-open-webui** | web | `3100` | AI chat frontend (OpenAI-compatible backend) |
+| **Caddy assets** | retained | — | Caddy Quadlet and config are kept in the repo, not installed or started |
+| **systemd-comfyui** | image | `3101` | Stable Diffusion / AI image generation |
+| **systemd-sketchlab** | diagram | `3102` | Diagramming SPA with local LLM support |
+| **systemd-deepseek-harness** | optional | `127.0.0.1:3105` | Agent runtime; host-loopback only, explicit opt-in |
+| **systemd-hermes-gateway** | optional | `3104` | Containerized Hermes gateway (explicit opt-in; separate from host Hermes Agent) |
+| **systemd-strata** | optional | `11437` | Strata OpenAI-compatible API, pinned to the RTX 5090 |
+| **systemd-hyperframes** | video | `3103` | HTML-to-video render API (headless) |
 
 > **Container naming:** All containers are prefixed with `systemd-` to avoid conflicts
 > with distrobox/toolbox containers that may share short names (e.g. `hermes`).
 >
 > **Network naming:** All containers connect to the Podman network `ai.network`
 > (created by `quadlets/ai.network`).
+>
+> **Network exposure:** Published app ports bind to `0.0.0.0` (all host interfaces)
+> except DeepSeek Harness, which remains loopback-only. Services use plain HTTP;
+> do not forward these ports to the public Internet.
 
 ## Quick Install
 
@@ -63,19 +61,13 @@ curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/instal
 ```
 
 The installer is **idempotent** — safe to re-run on an already-installed system.
-It detects the actual avahi/mDNS hostname so configs work on any machine.
-
-> **`.local` resolution preflight** — the installer stops up front if your
-> `<hostname>.local` doesn't resolve through the OS (`getent`), because all
-> service URLs depend on it. On Arch this needs `nss-mdns` + an nsswitch.conf
-> edit; the installer prints the exact fix. Use `--skip-resolve-check` to
-> install anyway:
-> ```bash
-> ./install.sh --skip-resolve-check
-> ```
-> Other flags: `--force-rebuild`, `--reset-comfyui`, `--dry-run`, `--backup`,
-> `--skip-hermes` (don't start the containerized Hermes gateway when you run
-> Hermes natively on the host).
+It installs the app services directly; Caddy's Quadlet and config files remain
+available in the repository but are not deployed. Use each service's LAN IP and
+port over HTTP. Other flags: `--force-rebuild`, `--reset-comfyui`, `--dry-run`, `--backup`,
+`--with-hermes`, and `--with-deepseek-harness`. The containerized Hermes gateway
+is optional and separate from the host Hermes Agent; DeepSeek Harness is also
+opt-in. Both are omitted by default to avoid unnecessary image builds, pulls,
+and service restarts.
 
 ## Uninstall
 
@@ -91,7 +83,7 @@ Stops all services, removes quadlet files, preserves data and configs.
 git clone https://github.com/dark5un/ai-lab-quadlets.git
 cd ai-lab-quadlets
 
-just -f ai-lab.just install    # Install everything
+just -f ai-lab.just install    # Install the default services (Hermes/DSH are opt-in)
 just -f ai-lab.just status     # Check what's running
 just -f ai-lab.just uninstall  # Tear it all down
 ```
@@ -99,58 +91,104 @@ just -f ai-lab.just uninstall  # Tear it all down
 > **On Universal Blue?** See [docs/ujust-integration.md](docs/ujust-integration.md)
 > for three ways to make these commands available as native `ujust install-ai-lab`.
 
-## Troubleshooting — can't connect to services
+### Optional services
+
+The containerized Hermes gateway and DeepSeek Harness stay in this repository, but
+are excluded from normal installs. The standalone installer can opt them in:
+
+```bash
+./install.sh --with-hermes
+./install.sh --with-deepseek-harness
+```
+
+These options run the full installer; the service-only Quadlet templates remain
+in `quadlets/` for manual deployment too. This containerized Hermes service is not
+the host Hermes Agent used to manage this machine.
+
+### Strata on the RTX 5090
+
+Strata is an explicit opt-in. Its installer builds the local checkout in
+`~/workspace/github.com/Niko1221/Strata` for CUDA architecture 120, writes a
+Quadlet pinned to the RTX 5090, generates a protected API key, and joins the
+existing `ai.network` network. It does not start Strata or download its model:
+
+```bash
+just -f ai-lab.just strata-install
+just -f ai-lab.just strata-status
+# When ready for the first ~84 GB IQ3_S model download:
+systemctl --user start strata.service
+# Or use the just recipe:
+just -f ai-lab.just strata-start
+```
+
+The service is a systemd-generated Quadlet unit, so start it with
+`systemctl --user start strata.service`; do not use `systemctl enable`. It is
+intentionally not wired into `default.target`, preventing an unapproved model
+download at login.
+
+Host API: `http://<host-LAN-IP>:11437/v1` (also available via loopback at
+`http://127.0.0.1:11437/v1`). From another container on `ai.network`, use
+`http://systemd-strata:8080/v1`; configure the key from
+`~/.config/containers/config/strata/service.env` in that client. Model data is
+kept under `~/.local/share/strata`.
+Strata defaults to Qwen IQ3_S at a 262,144-token context for every model setup.
+Monitor RAM/VRAM on first run because long-context KV cache raises memory use.
+
+## Direct service access
 
 After install, verify the services are up:
 
 ```bash
 podman ps
-curl -sk https://$(avahi-resolve -n "$(hostname -s).local" 2>/dev/null | awk '{print $2}'):3001 -o /dev/null -w "Open WebUI: %{http_code}\n"
+LAN_IP=$(ip -4 route get 1.1.1.1 | awk '{for (i=1; i<=NF; i++) if ($i=="src") {print $(i+1); exit}}')
+curl -sS -o /dev/null -w 'Open WebUI: %{http_code}\n' "http://${LAN_IP}:3100/"
 ```
-
-If that returns `200`, open a browser to `https://<avahi-name>.local:3001`.
 
 ### Service endpoints
 
 | Service | URL |
 |---|---|
-| Open WebUI | `https://<avahi-name>.local:3001` |
-| ComfyUI | `https://<avahi-name>.local:3002` |
-| Hermes Agent | `https://<avahi-name>.local:3003` |
-| Sketch Lab | `https://<avahi-name>.local:3004` |
-| DeepSeek Harness | `https://<avahi-name>.local:3005` |
-| HyperFrames API | `http://127.0.0.1:3006` (headless, localhost only) |
+| Open WebUI | `http://<host-LAN-IP>:3100` |
+| ComfyUI | `http://<host-LAN-IP>:3101` |
+| Containerized Hermes Gateway (optional) | `http://<host-LAN-IP>:3104` |
+| Sketch Lab | `http://<host-LAN-IP>:3102` |
+| DeepSeek Harness (optional) | `http://127.0.0.1:3105` (loopback only) |
+| llama.cpp API | `http://<host-LAN-IP>:11435/v1` |
+| Strata (optional) | `http://<host-LAN-IP>:11437/v1` |
+| HyperFrames API | `http://<host-LAN-IP>:3103` |
+
+### ComfyUI opens but cannot generate
+
+The container serves the UI/API but the default installer does not download
+checkpoint weights. Put compatible checkpoints under
+`~/.local/share/comfyui/models/checkpoints/` (plus any workflow-specific VAE,
+text encoder, or LoRA files in their matching `models/` subdirectories), then
+refresh the model list in ComfyUI. Check backend readiness at
+`http://<host-LAN-IP>:3101/system_stats`; an empty checkpoints directory
+means workflows cannot run yet. The CUDA image can expose multiple NVIDIA GPUs;
+its `torch.cuda` runtime selects CUDA devices, while llama.cpp has its own
+per-service GPU assignment.
 
 ### Firewall
 
-mDNS (`.local` name resolution) needs UDP port 5353 open:
+Allow only the app ports you need from your trusted LAN. For firewalld, for example:
 
 ```bash
-sudo firewall-cmd --permanent --add-service=mdns --add-port=3001-3005/tcp
+sudo firewall-cmd --permanent --add-port=3100-3104/tcp \
+  --add-port=11435-11436/tcp \
+  --add-port=11437/tcp
 sudo firewall-cmd --reload
 ```
 
-Verify: `avahi-resolve -n $(hostname -s).local` should return an IP, not timeout.
+DeepSeek Harness intentionally stays bound to loopback and is not included above.
 
-### Local TLS certificates (mkcert)
+### Retained Caddy configuration (not installed)
 
-All service URLs (`https://<hostname>.local:3001-3005`) are served over HTTPS by
-Caddy. The installer uses **mkcert** to issue a locally-trusted certificate if
-available:
-
-- It creates a CA trusted in the system store (`mkcert -install`) and issues a
-  long-lived (~2y3m) certificate for your `.local` hostname.
-- The CA and certs live **on the host** in
-  `~/.config/containers/config/caddy/certs/`, bind-mounted read-only into the
-  caddy container. Because they live on the host (not inside the ephemeral
-  `caddy-data` volume), they survive container rebuilds, and you **don't** get
-  Caddy's default 12-hour leaf-cert churn or its Chromium "expired certificate"
-  quirk.
-
-If `mkcert` is not installed, the installer falls back to Caddy's `tls internal`
-CA and prints the commands to trust that CA root manually. To force the mkcert
-path on an existing install, ensure `mkcert` is present, re-run the installer,
-and (if the CA couldn't be auto-trusted) run `sudo mkcert -install` once.
+The installer deliberately does not deploy or start Caddy, install mkcert, or
+modify certificate trust. The source files (`quadlets/caddy.container` and
+`config/caddy/`) and host Caddy configuration/data are retained for manual use.
+Default app services are plain HTTP on their direct host ports; do not expose
+them outside a trusted network.
 
 ### Missing runtime directories
 
@@ -158,16 +196,16 @@ If services fail to start, create missing directories:
 
 ```bash
 mkdir -p ~/.local/share/llama.cpp/models ~/.local/share/sketchlab \
-         ~/.local/share/comfyui ~/.local/share/hermes-service \
-         ~/.local/share/deepseek-harness
+         ~/.local/share/comfyui
+# Strata (optional): ~/.local/share/strata
+# Hermes/DeepSeek Harness data dirs are only needed when those services are opted in.
 ```
 
 ### Podman network
 
-The `ai.network` network is created by the quadlet (`ai.network`). If it's missing:
+The Podman network `systemd-ai` is created by the `ai.network` quadlet. If it's missing:
 
 ```bash
-podman network exists ai.network || podman network create ai.network
 systemctl --user daemon-reload
 systemctl --user restart ai-network.service
 ```
@@ -175,22 +213,22 @@ systemctl --user restart ai-network.service
 ### DeepSeek Harness
 
 The container is built from `containers/deepseek-harness/Containerfile`, which
-packages the official `@deepseek-ai/dsh` npm package. To force a rebuild:
+packages the official `@deepseek-ai/dsh` npm package **unpatched**. To force a
+rebuild:
 
 ```bash
 podman rmi -f localhost/deepseek-harness:0.1.2-rc.1
 curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/install.sh | bash -s -- --force-rebuild
 ```
 
-#### Reverse proxy (Caddy) — the 403 fix
+#### Loopback-only access
 
-dsh puts a browser-trust fence on all `/api` endpoints. Accessing through Caddy
-requires `DSH_TRUSTED_HOSTS` set to the external hostname:port. This is configured
-in `config/deepseek-harness/service.env`.
-
-The client-side `isLoopback` check is also patched via
-`containers/deepseek-harness/patch-client-loopback.mjs` — it injects the trusted
-hostnames into the SPA so the Settings and Models pages work remotely.
+dsh puts a browser-trust fence on all `/api` endpoints and binds 127.0.0.1
+only (upstream safety). The Quadlet runs it with `Network=host`, so that
+loopback bind lands on the host loopback directly: use
+`http://127.0.0.1:3105` on the host. This service is deliberately not exposed
+to the LAN, and because the browser's hostname is literally `127.0.0.1`, the
+stock `isLoopback` check passes with no patches or trusted-host injection.
 
 #### Authentication (dsh ≥ 0.1.2-rc.1)
 
@@ -200,14 +238,14 @@ dsh requires a one-time token to set a browser cookie. Get the token from:
 podman --remote logs systemd-deepseek-harness | grep "?token="
 ```
 
-Then open `https://<avahi-name>.local:3005/?token=<token>` in your browser.
+Then open `http://127.0.0.1:3105/?token=<token>` in your browser.
 
 ### Hermes Agent gateway
 
 Hermes runs in the `hermes` systemd quadlet (`quadlets/hermes.container`, image
 `docker.io/nousresearch/hermes-agent:latest`) and is started and managed like the
-other services. It connects to `systemd-llama-cpp` for local model serving and the
-dashboard is reachable at `https://<avahi-name>.local:3003`.
+other services. It connects to `systemd-llama-cpp-main` for local model serving and the
+dashboard is reachable at `http://<host-LAN-IP>:3104`.
 
 Dashboard credentials are read from
 `config/hermes-service/service.env` (generated by `scripts/generate-secrets.sh`).
@@ -215,7 +253,6 @@ Dashboard credentials are read from
 ### View logs
 
 ```bash
-journalctl --user -u caddy.service -n 20 --no-pager
 journalctl --user -u open-webui.service -n 20 --no-pager
 podman --remote logs deepseek-harness
 podman --remote logs systemd-hermes-gateway
@@ -233,11 +270,7 @@ podman --remote logs systemd-hermes-gateway
   rpm-ostree install nvidia-container-toolkit
   systemctl reboot
   ```
-- **mkcert** (recommended for locally-trusted TLS; optional — the installer
-  falls back to Caddy's internal CA if absent):
-  - Arch: `sudo pacman -S mkcert` (auto-installed by the installer)
-  - macOS: `brew install mkcert`
-  - Linux: see https://github.com/FiloSottile/mkcert#installation
+
 
 ### 2. Deploy
 
@@ -245,16 +278,22 @@ podman --remote logs systemd-hermes-gateway
 QUADLET_DIR="${HOME}/.config/containers/systemd"
 CONFIG_DIR="${HOME}/.config/containers/config"
 mkdir -p "$QUADLET_DIR" "$CONFIG_DIR"
-# Copy quadlets and the config tree as-is:
-cp quadlets/*.network quadlets/*.container "$QUADLET_DIR/"
-cp -r config/* "$CONFIG_DIR/"
+# Copy Quadlets, excluding the retained Caddy asset:
+cp quadlets/*.network "$QUADLET_DIR/"
+for q in quadlets/*.container; do
+  [[ "$(basename "$q")" == caddy.container ]] && continue
+  cp "$q" "$QUADLET_DIR/"
+done
+for item in config/*; do
+  [[ "$(basename "$item")" == caddy ]] && continue
+  cp -rn "$item" "$CONFIG_DIR/" 2>/dev/null || true
+done
 # Metadata service.env files: generate-secrets.sh fills in the env files from
 # their .example templates, and the dsh quadlet additionally needs a service.env
 # (install.sh generates one automatically):
 bash scripts/generate-secrets.sh
 mkdir -p "$CONFIG_DIR/deepseek-harness"
-printf 'DSH_PORT=3080\nDSH_INTERNAL_PORT=3081\nDSH_TRUSTED_HOSTS=%s.local:3005\nDSH_ALLOW_REMOTE_CONFIGURATION=true\n' "$(hostname -s)" \
-  > "$CONFIG_DIR/deepseek-harness/service.env"
+printf 'DSH_PORT=3105\n' > "$CONFIG_DIR/deepseek-harness/service.env"
 systemctl --user daemon-reload
 # Start in dependency order (generated units are quadlet-managed — use
 # `restart`, not `enable --now`, or systemd reports "transient or generated"):
@@ -263,7 +302,6 @@ sleep 1
 systemctl --user restart llama-cpp-main.service
 systemctl --user restart open-webui.service
 systemctl --user restart comfyui.service
-systemctl --user restart caddy.service
 systemctl --user restart sketchlab.service
 systemctl --user restart deepseek-harness.service
 systemctl --user restart hermes.service      # omit if running Hermes natively
@@ -271,8 +309,8 @@ systemctl --user restart hyperframes.service
 ```
 
 > Prefer the installer (`./install.sh` or `just -f ai-lab.just install`) — it
-> handles the `.local` resolution preflight, mkcert TLS, the dsh/hermes
-> metadata env files, and the start ordering above automatically.
+> handles direct port publication, the dsh/hermes metadata env files, and the
+> start ordering above automatically while retaining Caddy files without deploying them.
 
 ### iGPU/Vulkan acceleration (non-NVIDIA machines)
 
@@ -319,6 +357,10 @@ The `detect-gpus.sh` script:
 
 ## Downloading models (hf-download)
 
+The installer does not download GGUF model weights. The API may be healthy but
+show zero available models and perform no inference until a model is downloaded
+and registered below.
+
 The installer puts `hf-download` in `~/.local/bin/` — a simple wrapper around
 the HuggingFace CLI that downloads a model and registers it with llama.cpp:
 
@@ -329,9 +371,11 @@ hf-download unsloth/Qwen3.8-27B-GGUF UD-IQ1_M
 - arg1 — HuggingFace repo ID (e.g. `unsloth/Qwen3.8-27B-GGUF`)
 - arg2 (optional) — quantization or filename filter (e.g. `UD-IQ1_M`, `*IQ4_XS.gguf`)
 
-It downloads to `~/.local/share/llama.cpp/models/` and appends the model
-section to `~/.config/containers/config/llama.cpp/presets.ini`, then restarts
-llama-cpp-main. Requires `hf` (the installer tries brew, then pip,
+On this RTX 5090, the global llama.cpp preset is also 262,144 tokens.
+`refresh-presets.py` writes per-model overrides capped by the model's trained
+context and its VRAM estimate. Downloads go to `~/.local/share/llama.cpp/models/`
+and are registered in `~/.config/containers/config/llama.cpp/presets.ini`, then
+llama-cpp-main restarts. Requires `hf` (the installer tries brew, then pip,
 then standalone installer, and tells you what's missing).
 
 To place files manually instead, drop GGUF files in
@@ -341,9 +385,9 @@ To place files manually instead, drop GGUF files in
 
 Sketch Lab's AI panel connects to any OpenAI-compatible endpoint:
 
-1. Open Sketch Lab at `https://<avahi-name>.local:3004`
+1. Open Sketch Lab at `http://<host-LAN-IP>:3102`
 2. Click the AI button in the editor
-3. Set endpoint to: `http://systemd-llama-cpp:8080` (within the network)
+3. Set endpoint to: `http://systemd-llama-cpp-main:8080` (within the network)
    or `http://127.0.0.1:11435` (from the host)
 4. Select a model from the dropdown (populated from `/v1/models`)
 
@@ -355,7 +399,7 @@ For AI agents: the Sketch Lab skill is at
 
 HyperFrames is an HTML-to-video render engine. The quadlet runs the
 [GCP Cloud Run server](https://github.com/heygen-com/hyperframes) image,
-which provides a headless render API on `http://127.0.0.1:3006`. The image is
+which provides a headless render API on `http://<host-LAN-IP>:3103`. The image is
 built automatically by the installer from a hyperframes repo checkout; if you build
 it manually:
 

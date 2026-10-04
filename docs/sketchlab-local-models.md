@@ -14,8 +14,7 @@ It connects to any **OpenAI-compatible API** endpoint — no special integration
 
 ### From the host (outside the container network)
 
-Open Sketch Lab at `https://<your-hostname>.local:3004` (the avahi/mDNS name,
-e.g. `framework.local`) and click the AI button (magic wand
+Open Sketch Lab at `http://<host-LAN-IP>:3102` and click the AI button (magic wand
 or brain icon in the editor toolbar). In the settings panel:
 
 | Setting | Value (example) |
@@ -31,7 +30,7 @@ directly:
 
 | Endpoint | Service |
 |---|---|
-| `http://systemd-llama-cpp:8080` | Primary llama.cpp (largest GPU) |
+| `http://systemd-llama-cpp-main:8080` | Primary llama.cpp (largest GPU) |
 | `http://systemd-llama-cpp-research:8080` | Research llama.cpp (2nd GPU) |
 
 ### For AI agents (Claude Code, Codex, etc.)
@@ -71,8 +70,7 @@ Recommended models:
 **Can't reach Sketch Lab in the browser**
 - Your machine's avahi-published name may differ from the kernel hostname due
   to LAN conflicts. Check the actual name: `systemctl status avahi-daemon 2>/dev/null | grep -o 'running \[[^]]*\]'`
-- The firewall needs mDNS and the service ports open:
-  `sudo firewall-cmd --permanent --add-service=mdns --add-port=3001-3005/tcp && sudo firewall-cmd --reload`
+- Allow TCP port 3102 plus any model API ports needed from your trusted LAN; do not port-forward these unauthenticated HTTP endpoints to the public Internet.
 
 **"No models available"**
 - Verify the endpoint is running: `curl http://127.0.0.1:11435/v1/models`

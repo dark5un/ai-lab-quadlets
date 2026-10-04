@@ -1,7 +1,7 @@
 [Unit]
 Description=Caddy HTTPS reverse proxy
-After=network-online.target systemd-open-webui.service
-Wants=network-online.target systemd-open-webui.service
+After=systemd-open-webui.service
+Wants=systemd-open-webui.service
 
 [Container]
 ContainerName=systemd-caddy

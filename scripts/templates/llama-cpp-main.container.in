@@ -4,8 +4,8 @@
 
 [Unit]
 Description=llama.cpp {GPU_NAME} long-context router
-After=network-online.target
-Wants=network-online.target
+# network-online.target intentionally omitted: this host never activates it (see podman#22197)
+
 
 [Container]
 ContainerName=systemd-llama-cpp-main
@@ -29,8 +29,8 @@ UserNS=keep-id
 
 Network=ai.network
 
-# Native host clients:
-# http://127.0.0.1:11435/v1
+# Host/LAN clients: http://<host-LAN-IP>:11435/v1 (published on 0.0.0.0)
+# Loopback clients: http://127.0.0.1:11435/v1
 PublishPort=0.0.0.0:11435:8080
 
 # Shared read-only model library.

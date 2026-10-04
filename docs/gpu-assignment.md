@@ -15,8 +15,8 @@ When you run `./scripts/detect-gpus.sh`, the script:
 |---|---|---|---|
 | 1st (largest VRAM) | e.g. RTX 5090 (32 GB) | `systemd-llama-cpp-main` | `11435` |
 | 2nd | e.g. RTX 4070 Ti (12 GB) | `systemd-llama-cpp-research` | `11436` |
-| 3rd | e.g. RTX 4080 (16 GB) | `systemd-llama-cpp-extra-1` | `11431` |
-| 4th | ... | `systemd-llama-cpp-extra-2` | `11432` |
+| 3rd | e.g. RTX 4080 (16 GB) | `systemd-llama-cpp-extra-1` | `11439` |
+| 4th | ... | `systemd-llama-cpp-extra-2` | `11440` |
 | No GPU | CPU | `systemd-llama-cpp-main` | `11435` |
 
 > **Why UUIDs?** Quadlet's `AddDevice=nvidia.com/gpu=GPU-xxxx` accepts UUIDs,
