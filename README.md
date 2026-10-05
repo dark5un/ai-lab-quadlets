@@ -229,10 +229,20 @@ profile's `patchReload` from `live` to `startup`: the live watcher requires the
 Cordis HMR service, which is absent in this headless composition, and dsh
 crashes without the rewrite.
 
-Preset model connections (strata + llama.cpp router, 262k context) ship as
+Preset model connections (strata, 262k context) ship as
 `config/deepseek-harness/settings.yaml.example`; the installer copies it to
 `~/.local/share/deepseek-harness/settings.yaml` and expects `STRATA_API_KEY` /
-`LLAMA_CPP_API_KEY` in the dsh `service.env`.
+`LLAMA_CPP_API_KEY` in the dsh `service.env`. The llama.cpp router route is
+commented out in the template: a hand-declared provider must list at least one
+model or dsh refuses the entire `llm-pi-ai` settings section at boot, and the
+router serves no models until GGUFs are placed in
+`~/.local/share/llama.cpp/models`. Uncomment the block and list the served
+model id(s) once the router has models.
+
+The web UI's "Open configuration file" button does not work in this container
+(no desktop opener inside the image); edit
+`~/.local/share/deepseek-harness/settings.yaml` on the host instead — dsh
+hot-reloads it.
 
 To force a rebuild:
 

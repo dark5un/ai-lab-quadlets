@@ -19,9 +19,18 @@ llm-pi-ai:
           maxTokens: 32768
           input: [text]
           reasoningEfforts: false
-    llama-cpp:
-      displayName: llama.cpp router (11435)
-      api: openai-completions
-      baseURL: http://127.0.0.1:11435/v1
-      apiKeyEnv: LLAMA_CPP_API_KEY
-      defaultContextWindow: 262144
+    # A hand-declared route MUST list at least one model or dsh refuses the
+    # WHOLE llm-pi-ai section at boot ("resolves no models"). The llama.cpp
+    # router serves whatever GGUFs are in ~/.local/share/llama.cpp/models;
+    # with none loaded there is nothing to declare, so the route stays
+    # commented out. When a model is loaded, uncomment and list its id
+    # (check `curl http://127.0.0.1:11435/v1/models`).
+    # llama-cpp:
+    #   displayName: llama.cpp router (11435)
+    #   api: openai-completions
+    #   baseURL: http://127.0.0.1:11435/v1
+    #   apiKeyEnv: LLAMA_CPP_API_KEY
+    #   defaultContextWindow: 262144
+    #   models:
+    #     - id: <model id served by /v1/models>
+    #       contextWindow: 262144
