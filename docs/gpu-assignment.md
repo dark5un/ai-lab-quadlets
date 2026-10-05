@@ -100,7 +100,7 @@ Check: `systemctl --user status llama-cpp-main.service`
 
 Common issues:
 - GPU UUID mismatch (GPU replaced or BIOS changed): re-run `detect-gpus.sh`
-- nvidia-container-toolkit not installed: `rpm-ostree install nvidia-container-toolkit`
+- nvidia-container-toolkit not installed: `sudo pacman -S nvidia-container-toolkit`
 - Rootless podman can't access GPU: check `podman info | grep runtime`
 - GPU UUID may have changed: run `nvidia-smi -L` and compare with the UUID
   in the quadlet file.

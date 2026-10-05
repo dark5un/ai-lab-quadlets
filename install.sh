@@ -62,8 +62,7 @@ echo "[1/6] Checking prerequisites..."
 # Podman
 if ! command -v podman &>/dev/null; then
     echo "ERROR: podman not found."
-    echo "Install it on Bluefin: rpm-ostree install podman"
-    echo "Or use the toolbox/distrobox version."
+    echo "Install it: sudo pacman -S podman (Arch) or your distro's equivalent."
     exit 1
 fi
 echo "  ✓ podman: $(podman --version)"
@@ -197,7 +196,7 @@ else
         git clone --depth=1 "$REPO_URL" "$SOURCE_DIR"
     else
         echo "ERROR: git not found — can't clone."
-        echo "Install git: rpm-ostree install git"
+        echo "Install git: sudo pacman -S git (Arch) or your distro's equivalent."
         exit 1
     fi
 fi
