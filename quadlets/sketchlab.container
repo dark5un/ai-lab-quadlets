@@ -5,8 +5,9 @@ After=ai-network.service
 
 [Container]
 ContainerName=systemd-sketchlab
-Image=localhost/sketchlab:v0.5.0
+Image=localhost/sketchlab:v0.6.0
 Network=ai.network
+EnvironmentFile=%h/.config/containers/config/sketchlab/service.env
 PublishPort=0.0.0.0:3102:8080/tcp
 UserNS=keep-id
 Volume=%h/.local/share/sketchlab:/data:Z
