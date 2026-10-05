@@ -61,7 +61,7 @@ Item {
                 }
 
                 Column {
-                    width: root.widthBudget - 120 * root.s
+                    width: root.widthBudget - 170 * root.s
                     spacing: 1 * root.s
                     Text {
                         text: modelData.name
@@ -70,6 +70,13 @@ Item {
                         font.pixelSize: 13 * root.s
                         elide: Text.ElideRight
                         width: parent.width
+                        // Click the name to open the service in the browser.
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: if (root.service)
+                                root.service.launchNamed(modelData.name)
+                        }
                     }
                     Text {
                         text: modelData.bind + ":" + modelData.host_port +
@@ -79,6 +86,30 @@ Item {
                         font.pixelSize: 10 * root.s
                         elide: Text.ElideRight
                         width: parent.width
+                    }
+                }
+
+                // Launch: open the service URL in the default browser.
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 56 * root.s
+                    height: 20 * root.s
+                    radius: Theme.radius
+                    color: modelData.state === "running" ? Theme.accent : Theme.dim
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "LAUNCH"
+                        color: Theme.cardBot
+                        font.family: Theme.font
+                        font.pixelSize: 10 * root.s
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: if (root.service)
+                            root.service.launchNamed(modelData.name)
                     }
                 }
 

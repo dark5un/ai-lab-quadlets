@@ -223,8 +223,18 @@ systemctl --user restart ai-network.service
 ### DeepSeek Harness
 
 The container is built from `containers/deepseek-harness/Containerfile`, which
-packages the official `@deepseek-ai/dsh` npm package **unpatched**. To force a
-rebuild:
+packages the official `@deepseek-ai/dsh` npm package **unpatched**, started as
+stock `dsh web` (no interpreter wrapper). The entrypoint rewrites the web
+profile's `patchReload` from `live` to `startup`: the live watcher requires the
+Cordis HMR service, which is absent in this headless composition, and dsh
+crashes without the rewrite.
+
+Preset model connections (strata + llama.cpp router, 262k context) ship as
+`config/deepseek-harness/settings.yaml.example`; the installer copies it to
+`~/.local/share/deepseek-harness/settings.yaml` and expects `STRATA_API_KEY` /
+`LLAMA_CPP_API_KEY` in the dsh `service.env`.
+
+To force a rebuild:
 
 ```bash
 podman rmi -f localhost/deepseek-harness:0.1.2-rc.1
@@ -430,7 +440,9 @@ The `scripts/hyperframes-render.sh` script provides a one-shot render helper.
 
 The Ryoku bar plugin (`plugin/ailab/` in this repo) shows the stack state in
 the top bar: a glyph with the running/total count, and a panel listing every
-service in `services.json` with start/stop toggles and health.
+service in `services.json` with start/stop toggles and health. Clicking a
+service name or its LAUNCH button opens the service URL in your default
+browser.
 
 - Install: `ryoku plugin add plugin/ailab --bar --yes` (from the repo root).
   The authoring copy at `~/Documents/ryoku-plugins/ailab` is a symlink into
@@ -439,8 +451,9 @@ service in `services.json` with start/stop toggles and health.
   and poll interval.
 - Remove: `ryoku plugin remove ailab`.
 - The plugin's only external commands are `systemctl --user`, `curl`
-  (127.0.0.1 health checks) and `python3` (registry parsing), declared in
-  `manifest.json`; keep that list honest if the CLI grows commands.
+  (127.0.0.1 health checks), `python3` (registry parsing) and `xdg-open`
+  (launch), declared in `manifest.json`; keep that list honest if the CLI
+  grows commands.
 
 ## License
 

@@ -1,22 +1,41 @@
 // docker-entrypoint.mjs — DeepSeek Harness (dsh) launcher.
 //
-// Runs `dsh web` exactly as upstream intends: it binds 127.0.0.1 only.
+// Runs stock `dsh web` with no patches and no interpreter wrapper: the CLI
+// starts exactly as the npm package ships it. It binds 127.0.0.1 only.
 // The quadlet uses Network=host so that loopback bind lands on the host
 // loopback directly — no TCP bridge, no client patches, no trusted-hosts.
-//
-// --expose-internals is required by the HMR service used by `dsh web`;
-// invoking the CLI via Node directly avoids spawning a fresh interpreter
-// without the flag.
 
 import { spawn } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 
 const DEFAULT_PORT = 3105
-const DSH_CLI = '/opt/deepseek-harness/node_modules/@deepseek-ai/dsh/lib/bin.js'
 
 function fail(message) {
   console.error(`deepseek-harness: ${message}`)
   process.exit(1)
+}
+
+// The shipped `web` profile template sets patchReload: "live", which starts a
+// watcher that requires the Cordis HMR service — absent in this headless
+// composition, so dsh crashes right after printing the token URL. Rewrite the
+// initialized profile to "startup" (patches load once at boot; no watcher).
+function fixProfilePatchReload() {
+  const home = process.env.DSH_HOME || join(homedir(), '.dsh')
+  const pkgPath = join(home, 'profiles', 'web', 'package.json')
+  if (!existsSync(pkgPath)) return // profile not initialized yet; dsh will create it, we fix it next start
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'))
+    const prof = pkg?.dsh?.profile
+    if (prof && prof.patchReload === 'live') {
+      prof.patchReload = 'startup'
+      writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n')
+      console.log('deepseek-harness: profile patchReload set to startup (HMR watcher disabled)')
+    }
+  } catch (error) {
+    console.error(`deepseek-harness: could not patch profile: ${error.message}`)
+  }
 }
 
 function parsePort(name, fallback) {
@@ -45,14 +64,10 @@ if (args.length === 0) args = ['web']
 loadSecretFile('DEEPSEEK_API_KEY', 'DEEPSEEK_API_KEY_FILE')
 
 if (args[0] === 'web') {
+  fixProfilePatchReload()
   const port = parsePort('DSH_PORT', DEFAULT_PORT)
-  const child = spawn(process.execPath, [
-    '--expose-internals',
-    DSH_CLI,
-    'web',
-    '--port', String(port),
-    ...args.slice(1),
-  ], { cwd: process.cwd(), env: process.env, stdio: 'inherit' })
+  const child = spawn('dsh', ['web', '--port', String(port), ...args.slice(1)],
+    { cwd: process.cwd(), env: process.env, stdio: 'inherit' })
   child.once('error', (error) => fail(`cannot start dsh web: ${error.message}`))
   child.once('exit', (code, signal) => process.exit(code ?? (signal === 'SIGINT' ? 130 : 1)))
 } else {

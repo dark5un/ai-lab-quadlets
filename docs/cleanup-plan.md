@@ -79,7 +79,16 @@ that services.json already declares. Make services.json the only writer:
 - Keep the extra-GPU template formula (PORT=11438+INDEX) in sync with the
   docs/gpu-assignment.md table.
 
-## Phase 3 — deepseek-harness open issue (parked, not fixed)
+## Phase 3 — deepseek-harness (FIXED 2026-10-05)
+
+Resolution: the stock `dsh web` entrypoint works once the web profile's
+`patchReload` is `startup` instead of the shipped `live` (the live watcher
+requires the Cordis HMR service, absent in this composition). The container
+entrypoint now rewrites profiles/web/package.json on start. The
+--expose-internals wrapper was removed (it was never the cause). Preset
+providers for strata and llama-cpp ship via settings.yaml (262k context).
+Original investigation below.
+
 
 The de-patched image builds and dsh starts (prints the token URL on
 127.0.0.1:3105) but then crashes: "user patch-layer watching requires the

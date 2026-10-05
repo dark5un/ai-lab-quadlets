@@ -38,7 +38,8 @@
     "commands": [
       "systemctl",
       "curl",
-      "python3"
+      "python3",
+      "xdg-open"
     ]
   },
   "metadata": {

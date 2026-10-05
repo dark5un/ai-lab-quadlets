@@ -28,6 +28,5 @@ RestartSec=30
 TimeoutStartSec=900
 TimeoutStopSec=120
 
-# No [Install]: boot=false in services.json (the service is parked broken —
-# see docs/cleanup-plan.md phase 3). Start manually with
-# systemctl --user start deepseek-harness.service
+# No [Install]: opt-in service (boot=false in services.json); start manually
+# with systemctl --user start deepseek-harness.service or the ailab bar plugin.

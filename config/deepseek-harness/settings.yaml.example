@@ -1,0 +1,27 @@
+# DeepSeek Harness settings template — preset OpenAI-compatible connections.
+# Copy to ~/.local/share/deepseek-harness/settings.yaml and adjust.
+# Provider routes point at the local ai-lab-quadlets model servers; API keys
+# are resolved from the container environment (env vars listed in
+# ~/.config/containers/config/deepseek-harness/service.env, mode 600).
+# Context windows default to 262144 (262k) per operator preference.
+llm-pi-ai:
+  providers:
+    strata:
+      displayName: Strata (RTX 5090, loopback)
+      api: openai-completions
+      baseURL: http://127.0.0.1:11437/v1
+      apiKeyEnv: STRATA_API_KEY
+      defaultContextWindow: 262144
+      models:
+        - id: qwen3.8-flash-next-iq3_s
+          name: Qwen3.8 Flash next IQ3_S
+          contextWindow: 262144
+          maxTokens: 32768
+          input: [text]
+          reasoningEfforts: false
+    llama-cpp:
+      displayName: llama.cpp router (11435)
+      api: openai-completions
+      baseURL: http://127.0.0.1:11435/v1
+      apiKeyEnv: LLAMA_CPP_API_KEY
+      defaultContextWindow: 262144

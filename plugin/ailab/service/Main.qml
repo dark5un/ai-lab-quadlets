@@ -1,6 +1,7 @@
 pragma ComponentBehavior: Bound
 
 import QtQuick
+import Quickshell
 import Quickshell.Io
 
 // service/Main.qml — the ailab plugin's logic: no UI.
@@ -50,6 +51,16 @@ Item {
                     health: s.state === "running" ? "down" : "up"
                 })
                 : s);
+    }
+
+    // Open a service's web/API surface in the default browser. Loopback binds
+    // are reached directly; 0.0.0.0 binds are also reachable on 127.0.0.1.
+    function launchNamed(name) {
+        for (const s of svc.services) {
+            if (s.name !== name) continue;
+            Quickshell.execDetached(["xdg-open", "http://127.0.0.1:" + s.host_port + "/"]);
+            return;
+        }
     }
 
     Process {
