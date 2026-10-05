@@ -11,8 +11,10 @@ service with a live state dot, its host port, health, and a START/STOP switch.
 - **Widget** (`content/Widget.qml`): the bar glyph plus the running/total
   count. A left click only opens the panel; it never changes state.
 - **Panel** (`content/Panel.qml`): one row per service; clicking START/STOP
-  calls `bin/ai-lab toggle <name>`; clicking the service name or LAUNCH opens
-  `http://127.0.0.1:<port>/` in the default browser (xdg-open).
+  calls `bin/ai-lab toggle <name>`; clicking the service name or LAUNCH
+  resolves the URL via `bin/ai-lab url <name>` (token-gated services like dsh
+  get their one-time token appended), opens it with xdg-open, and closes the
+  panel so focus lands on the browser.
 
 ## What it runs, reads, and writes
 

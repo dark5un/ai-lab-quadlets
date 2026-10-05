@@ -39,7 +39,8 @@
       "systemctl",
       "curl",
       "python3",
-      "xdg-open"
+      "xdg-open",
+      "podman"
     ]
   },
   "metadata": {

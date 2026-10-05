@@ -53,13 +53,29 @@ Item {
                 : s);
     }
 
-    // Open a service's web/API surface in the default browser. Loopback binds
-    // are reached directly; 0.0.0.0 binds are also reachable on 127.0.0.1.
+    // Open a service's web surface in the default browser, then close the
+    // panel so focus lands on the browser. The URL comes from `ai-lab url`,
+    // which appends the one-time token for token-gated services (dsh).
+    property string pendingLaunch: ""
     function launchNamed(name) {
-        for (const s of svc.services) {
-            if (s.name !== name) continue;
-            Quickshell.execDetached(["xdg-open", "http://127.0.0.1:" + s.host_port + "/"]);
-            return;
+        svc.pendingLaunch = name;
+        urlProc.running = true;
+        if (svc.pluginApi) svc.pluginApi.closePanel();
+    }
+
+    Process {
+        id: urlProc
+        property string out: ""
+        stdout: StdioCollector { onStreamFinished: urlProc.out += this.text }
+        command: [(svc.pluginApi ? svc.pluginApi.pluginDir : "") + "/bin/ai-lab",
+                  "url", svc.pendingLaunch]
+        onExited: (code) => {
+            const url = urlProc.out.trim();
+            urlProc.out = "";
+            if (code === 0 && url !== "")
+                Quickshell.execDetached(["xdg-open", url]);
+            else
+                svc.lastError = "could not resolve URL for " + svc.pendingLaunch;
         }
     }
 

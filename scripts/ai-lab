@@ -9,6 +9,7 @@
 #   ai-lab stop <name>            systemctl --user stop
 #   ai-lab restart <name>         systemctl --user restart
 #   ai-lab toggle <name>          start if stopped, stop if running
+#   ai-lab url <name>             browser launch URL (token-aware for dsh)
 #   ai-lab ports                  name -> host port table
 set -euo pipefail
 
@@ -102,6 +103,26 @@ EOF
     fi
 }
 
+cmd_url() {  # print the browser launch URL for a service
+    check_name "$1"
+    local port bind
+    port=$(registry_get "$1" host_port)
+    bind=$(registry_get "$1" bind)
+    local host=127.0.0.1
+    [ "$bind" = "0.0.0.0" ] && host=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i == "src") {print $(i+1); exit}}')
+    [ -n "$host" ] || host=127.0.0.1
+    if [ "$1" = "deepseek-harness" ]; then
+        # dsh gates its web surface behind a one-time token printed on start.
+        local token
+        token=$(podman logs systemd-deepseek-harness 2>&1 | grep -oP '\?token=\K\S+' | tail -1)
+        if [ -n "$token" ]; then
+            echo "http://${host}:${port}/?token=${token}"
+            return
+        fi
+    fi
+    echo "http://${host}:${port}/"
+}
+
 action() {  # start|stop|restart <name>
     check_name "$2"
     systemctl --user "$1" "$(registry_get "$2" unit)"
@@ -111,6 +132,7 @@ action() {  # start|stop|restart <name>
 case "${1:-status}" in
     status)  shift; cmd_status "$@" ;;
     ports)   cmd_ports ;;
+    url)     shift; cmd_url "$@" ;;
     info)    shift; cmd_info "$@" ;;
     start)   action start "$2" ;;
     stop)    action stop "$2" ;;
@@ -122,5 +144,5 @@ case "${1:-status}" in
         else
             action start "$2"
         fi ;;
-    *) echo "usage: ai-lab status [--json] | ports | info [name] | start|stop|restart|toggle <name>" >&2; exit 1 ;;
+    *) echo "usage: ai-lab status [--json] | ports | url <name> | info [name] | start|stop|restart|toggle <name>" >&2; exit 1 ;;
 esac

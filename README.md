@@ -252,7 +252,9 @@ stock `isLoopback` check passes with no patches or trusted-host injection.
 
 #### Authentication (dsh ≥ 0.1.2-rc.1)
 
-dsh requires a one-time token to set a browser cookie. Get the token from:
+dsh requires a one-time token to set a browser cookie. The quickest way:
+`./scripts/ai-lab url deepseek-harness` prints the ready-to-open URL (the bar
+plugin's LAUNCH button uses the same). Or grab it from the logs:
 
 ```bash
 podman --remote logs systemd-deepseek-harness | grep "?token="
@@ -442,7 +444,8 @@ The Ryoku bar plugin (`plugin/ailab/` in this repo) shows the stack state in
 the top bar: a glyph with the running/total count, and a panel listing every
 service in `services.json` with start/stop toggles and health. Clicking a
 service name or its LAUNCH button opens the service URL in your default
-browser.
+browser (with the dsh auth token appended automatically) and closes the
+panel.
 
 - Install: `ryoku plugin add plugin/ailab --bar --yes` (from the repo root).
   The authoring copy at `~/Documents/ryoku-plugins/ailab` is a symlink into
