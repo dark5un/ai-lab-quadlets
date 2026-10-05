@@ -155,7 +155,7 @@ Auth status mirrors the `"auth"` field in `services.json`
 | Open WebUI | `http://<host-LAN-IP>:3100` | account (login required) |
 | ComfyUI | `http://<host-LAN-IP>:3101` | none |
 | Containerized Hermes Gateway (optional) | `http://<host-LAN-IP>:3104` | account |
-| Sketch Lab | `http://<host-LAN-IP>:3102` | none |
+| Sketch Lab | `http://<host-LAN-IP>:3102` | none (proxies Strata on `/v1/`, key server-side) |
 | DeepSeek Harness (optional) | `http://127.0.0.1:3105` (loopback only) | one-time token |
 | llama.cpp API | `http://<host-LAN-IP>:11435/v1` | none (open mode) |
 | Strata (optional) | `http://<host-LAN-IP>:11434/v1` | API key |
@@ -428,17 +428,29 @@ To place files manually instead, drop GGUF files in
 
 ## Sketch Lab local models
 
-Sketch Lab's AI panel connects to any OpenAI-compatible endpoint:
+Sketch Lab's AI panel works out of the box: since v0.6.0 the app's own
+nginx proxies `/v1/` to Strata and injects the API key server-side (from
+`config/sketchlab/service.env`), so the default endpoint is same-origin
+and the default model is the loaded Strata model — no key entry, no CORS.
+
+To point it at a different OpenAI-compatible endpoint instead:
 
 1. Open Sketch Lab at `http://<host-LAN-IP>:3102`
 2. Click the AI button in the editor
-3. Set endpoint to: `http://systemd-llama-cpp-main:8080` (within the network)
-   or `http://127.0.0.1:11435` (from the host)
+3. Set endpoint to: `http://<host-LAN-IP>:11435` (llama.cpp, open mode)
+   or any OpenAI-compatible server reachable from the browser
 4. Select a model from the dropdown (populated from `/v1/models`)
 
-For AI agents: the Sketch Lab skill is at
+Note: the `/v1/` proxy on :3102 is unauthenticated on the LAN like the
+sketchlab app itself — anyone who can reach :3102 can use the Strata key.
+
+For AI agents: the Sketch Lab repo
 [github.com/dark5un/sketchlab.app](https://github.com/dark5un/sketchlab.app)
-— see `SKILL.md` in the repo for the agent skill.
+ships a zero-dependency stdio MCP server (`mcp/server.mjs`, tools
+`sketchlab_icons` / `sketchlab_validate` / `sketchlab_diagram`) that
+validates diagrams with the app's own parser and returns ready-to-open
+`?g=` URLs; setup snippets for Hermes, Claude Code and Strata are in its
+README.
 
 ## HyperFrames
 
