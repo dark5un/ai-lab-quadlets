@@ -528,20 +528,20 @@ fi
 
 # Sketch Lab — try GHCR first, fall back to local build
 echo "  ~ Sketch Lab image..."
-if podman image exists localhost/sketchlab:v0.6.0 2>/dev/null; then
-    echo "  ✓ localhost/sketchlab:v0.6.0 (already exists)"
-elif podman pull ghcr.io/dark5un/sketchlab:v0.6.0; then
+if podman image exists localhost/sketchlab:v0.6.1 2>/dev/null; then
+    echo "  ✓ localhost/sketchlab:v0.6.1 (already exists)"
+elif podman pull ghcr.io/dark5un/sketchlab:v0.6.1; then
     # Tag as localhost too so the quadlet can find it
-    podman tag ghcr.io/dark5un/sketchlab:v0.6.0 localhost/sketchlab:v0.6.0 2>/dev/null || true
-    echo "  ✓ ghcr.io/dark5un/sketchlab:v0.6.0"
+    podman tag ghcr.io/dark5un/sketchlab:v0.6.1 localhost/sketchlab:v0.6.1 2>/dev/null || true
+    echo "  ✓ ghcr.io/dark5un/sketchlab:v0.6.1"
 elif [ -d "${HOME}/sketchlab.app" ]; then
     echo "  ~ Building from local sketchlab.app clone..."
-    (cd "${HOME}/sketchlab.app" && podman build -t localhost/sketchlab:v0.6.0 .) && echo "  ✓ built sketchlab" || echo "  ! Build failed"
+    (cd "${HOME}/sketchlab.app" && podman build -t localhost/sketchlab:v0.6.1 .) && echo "  ✓ built sketchlab" || echo "  ! Build failed"
 elif command -v git &>/dev/null; then
     echo "  ~ Building sketchlab from source..."
     TMP_CLONE=$(mktemp -d /tmp/sketchlab-XXXXX)
     git clone --depth=1 https://github.com/dark5un/sketchlab.app.git "$TMP_CLONE" 2>/dev/null && \
-        (cd "$TMP_CLONE" && podman build -t localhost/sketchlab:v0.6.0 .) && \
+        (cd "$TMP_CLONE" && podman build -t localhost/sketchlab:v0.6.1 .) && \
         echo "  ✓ built sketchlab from source" || \
         echo "  ! Sketch Lab image not available — build manually: see README"
     rm -rf "$TMP_CLONE" 2>/dev/null || true
