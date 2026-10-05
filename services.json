@@ -35,15 +35,15 @@
       "name": "strata",
       "unit": "strata.service",
       "container": "systemd-strata",
-      "host_port": 11437,
+      "host_port": 11434,
       "container_port": 8080,
-      "bind": "127.0.0.1",
+      "bind": "0.0.0.0",
       "health": "/health",
       "tier": "optional",
       "image": "localhost/strata:rtx5090",
       "boot": true,
       "auth": "api-key",
-      "note": "frozen: port 11437, loopback bind; built from ~/workspace/github.com/Niko1221/Strata"
+      "note": "port 11434 (Ollama-default slot), LAN bind (every request requires the API key); built from ~/workspace/github.com/Niko1221/Strata"
     },
     {
       "name": "open-webui",

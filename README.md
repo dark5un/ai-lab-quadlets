@@ -16,7 +16,7 @@ reboots, and can be rehydrated on a fresh machine with one command.
 │  systemd-ai ──── Podman network (container communication)    │
 │       ├── llama.cpp API: 0.0.0.0:11435                       │
 │       ├── llama.cpp research: 0.0.0.0:11436 (optional)        │
-│       ├── Strata API: 127.0.0.1:11437 (optional, loopback)    │
+│       ├── Strata API: 0.0.0.0:11434 (optional)                │
 │       ├── Open WebUI: 0.0.0.0:3100                            │
 │       ├── ComfyUI: 0.0.0.0:3101                               │
 │       ├── Sketch Lab: 0.0.0.0:3102                            │
@@ -41,7 +41,7 @@ reboots, and can be rehydrated on a fresh machine with one command.
 | **systemd-sketchlab** | diagram | `3102` | Diagramming SPA with local LLM support |
 | **systemd-deepseek-harness** | optional | `127.0.0.1:3105` | Agent runtime; host-loopback only, explicit opt-in |
 | **systemd-hermes** | optional | `3104` | Containerized Hermes gateway (explicit opt-in; separate from host Hermes Agent) |
-| **systemd-strata** | optional | `127.0.0.1:11437` | Strata OpenAI-compatible API, pinned to the RTX 5090, loopback only |
+| **systemd-strata** | optional | `0.0.0.0:11434` | Strata OpenAI-compatible API, pinned to the RTX 5090, LAN bind, API key required |
 | **systemd-hyperframes** | video | `3103` | HTML-to-video render API (headless) |
 
 > **Container naming:** All containers are prefixed with `systemd-` to avoid conflicts
@@ -126,8 +126,9 @@ and the first start downloads roughly 84 GB of IQ3_S model data. Once the model
 is on disk, the unit is wired into `default.target` (boot=true in
 `services.json`) so it comes back after every login.
 
-Host API: `http://127.0.0.1:11437/v1` (loopback only — the unit publishes on
-127.0.0.1 and is frozen that way). From another container on `systemd-ai`, use
+Host API: `http://<host-LAN-IP>:11434/v1` (the unit publishes on `0.0.0.0`;
+every request must carry the API key — from the host itself use
+`http://127.0.0.1:11434/v1`). From another container on `systemd-ai`, use
 `http://systemd-strata:8080/v1`; configure the key from
 `~/.config/containers/config/strata/service.env` in that client. Model data is
 kept under `~/.local/share/strata`.
@@ -157,16 +158,17 @@ Auth status mirrors the `"auth"` field in `services.json`
 | Sketch Lab | `http://<host-LAN-IP>:3102` | none |
 | DeepSeek Harness (optional) | `http://127.0.0.1:3105` (loopback only) | one-time token |
 | llama.cpp API | `http://<host-LAN-IP>:11435/v1` | none (open mode) |
-| Strata (optional) | `http://127.0.0.1:11437/v1` (loopback only) | API key |
+| Strata (optional) | `http://<host-LAN-IP>:11434/v1` | API key |
 | HyperFrames API | `http://<host-LAN-IP>:3103` | none |
 
 **LAN exposure decision (deliberate):** this stack runs on a trusted home LAN.
 The unauthenticated endpoints (ComfyUI, Sketch Lab, HyperFrames, llama.cpp in
 open mode) are intentionally reachable from the LAN for convenience; they are
-never port-forwarded to the Internet. Model servers that hold paid API keys
-(strata) bind loopback only. If the trust model changes, rebind those services
-to `127.0.0.1` in `services.json` + quadlets and expose them per-device via a
-VPN instead.
+never port-forwarded to the Internet. Strata (11434) is likewise LAN-bound but
+key-gated: every request must carry the API key from
+`~/.config/containers/config/strata/service.env`. If the trust model changes,
+rebind strata to `127.0.0.1` in `services.json` + quadlets and expose it
+per-device via a VPN instead.
 
 ### ComfyUI opens but cannot generate
 
@@ -189,12 +191,13 @@ for example:
 
 ```bash
 sudo firewall-cmd --permanent --add-port=3100-3103/tcp \
-  --add-port=11435-11436/tcp
+  --add-port=11434-11436/tcp
 sudo firewall-cmd --reload
 ```
 
-Strata and DeepSeek Harness intentionally stay bound to loopback and are not
-included above. The containerized Hermes gateway (3104) is opt-in; open it only
+DeepSeek Harness intentionally stays bound to loopback and is not
+included above; strata is in the opened range but every request requires
+its API key. The containerized Hermes gateway (3104) is opt-in; open it only
 if you actually deployed it.
 
 ### Retained Caddy configuration (not installed)

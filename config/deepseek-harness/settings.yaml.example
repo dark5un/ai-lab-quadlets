@@ -7,9 +7,9 @@
 llm-pi-ai:
   providers:
     strata:
-      displayName: Strata (RTX 5090, loopback)
+      displayName: Strata (RTX 5090)
       api: openai-completions
-      baseURL: http://127.0.0.1:11437/v1
+      baseURL: http://127.0.0.1:11434/v1
       apiKeyEnv: STRATA_API_KEY
       defaultContextWindow: 262144
       models:

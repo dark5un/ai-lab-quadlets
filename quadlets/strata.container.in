@@ -14,7 +14,7 @@ SecurityLabelDisable=true
 Environment=CUDA_VISIBLE_DEVICES=__STRATA_GPU_UUID__
 EnvironmentFile=%h/.config/containers/config/strata/service.env
 Volume=%h/.local/share/strata:/data:Z
-PublishPort=127.0.0.1:11437:8080/tcp
+PublishPort=0.0.0.0:11434:8080/tcp
 
 [Service]
 Restart=on-failure

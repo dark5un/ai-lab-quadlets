@@ -2,7 +2,8 @@
 
 Goal: one coherent port scheme, one source of truth for service metadata,
 a CLI control plane, and a Ryoku bar plugin to toggle services.
-Strata is frozen at 11437 (not changed by this plan).
+Strata was frozen at 11437 by this plan; that freeze was later lifted —
+strata has since moved to 11434 (model-API family alignment, 2026-10-05).
 
 ## Research findings (Phase 0)
 
@@ -24,8 +25,11 @@ Model APIs (1143x family, Ollama-adjacent):
 |----------------------|------|-------|---------|
 | llama-cpp-main       | 11435| 11435 | LAN     |
 | llama-cpp-research   | 11436| 11436 | LAN     |
-| strata (frozen)      | 11437| 11437 | loopback|
+| strata               | 11437| 11434 | LAN   |
 | llama-cpp-extra-N    | 1N43N| 11438+N | LAN   |
+
+11437 is intentionally unused after strata's move (no gap-filling; the
+extra-GPU formula stays 11438+INDEX).
 
 Web apps (31xx family, sequential):
 
