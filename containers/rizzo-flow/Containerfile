@@ -1,0 +1,28 @@
+# rizzo-flow image — local Jev-compatible System One decision server
+# Rizzo Flow (Apache-2.0) on llama.cpp CUDA, Spark-X2.5-4B fine-tune Q8_0.
+# Model + runtime are baked in (pinned by upstream sha256) for reproducibility.
+
+FROM docker.io/library/python:3.12-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git curl ca-certificates libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir uv
+
+WORKDIR /opt/rizzo-flow
+RUN git clone --depth=1 https://github.com/Rizzo-AI-Academy/rizzo-flow . \
+    && uv sync --locked
+
+# llama.cpp CUDA runtime (~570 MB, CUDA 13 libs included) + fine-tuned 4B Q8_0 (~4.4 GB)
+RUN uv run --no-sync rizzo download --runtime cuda --size 4b --quant q8_0
+
+EXPOSE 8017
+
+# UserNS=keep-id runs as host uid 1000; /opt is root-owned, so uv must not
+# write its cache into the project dir. /data is the quadlet's volume.
+ENV UV_CACHE_DIR=/data/uv-cache
+
+# Bearer auth is enforced only if RIZZO_API_KEY is set in the quadlet env.
+ENTRYPOINT ["uv", "run", "--no-sync", "rizzo", "serve", \
+            "--host", "0.0.0.0", "--port", "8017", "--device", "cuda"]

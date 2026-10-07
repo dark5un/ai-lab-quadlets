@@ -1,0 +1,34 @@
+# Rizzo Flow — local Jev-compatible System One decisions (llama.cpp)
+# Port 11437: the reserved 1143x model-API slot (see docs/cleanup-plan.md port scheme).
+# GPU: pinned to the 4070 Ti by CUDA UUID (never CDI device pinning — minor
+# numbers reshuffle at driver load; see llama-cpp-main.container comment).
+
+[Unit]
+Description=Rizzo Flow System One decision server (4070 Ti)
+
+[Container]
+ContainerName=systemd-rizzo
+Image=localhost/rizzo-flow:4b-q8_0
+Network=ai.network
+AddDevice=nvidia.com/gpu=all
+Environment=CUDA_VISIBLE_DEVICES=GPU-58e5f98d-a4f4-4cff-a9fc-16df0667d2fd
+SecurityLabelDisable=true
+UserNS=keep-id
+
+# Jev-compatible endpoint: POST http://<host>:11437/v1/systemone
+# Playground: http://<host>:11437/playground
+PublishPort=0.0.0.0:11437:8017
+
+# Optional calibration files (rizzo calibrate -> fit.json, then add
+# --calibration /data/fit.json to Exec below once fitted on your own data).
+Volume=%h/.local/share/rizzo:/data:Z
+
+[Service]
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=600
+TimeoutStopSec=60
+MemoryMax=16G
+
+[Install]
+WantedBy=default.target

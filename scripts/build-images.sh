@@ -52,4 +52,17 @@ else
 fi
 echo ""
 
+# ─── Rizzo Flow (Jev-compatible System One decisions) ─────────────────────
+echo "N) Ensuring rizzo-flow image (localhost/rizzo-flow:4b-q8_0)..."
+if podman image exists localhost/rizzo-flow:4b-q8_0 2>/dev/null; then
+    echo "   ✓ Already exists"
+elif [ -f "${PROJECT_DIR}/containers/rizzo-flow/Containerfile" ]; then
+    echo "   Building from containers/rizzo-flow/ (downloads ~5 GB: llama.cpp CUDA + 4B Q8_0)..."
+    podman build -t localhost/rizzo-flow:4b-q8_0 \
+        -f "${PROJECT_DIR}/containers/rizzo-flow/Containerfile" \
+        "${PROJECT_DIR}/containers/rizzo-flow/" && echo "   ✓ Built" \
+        || echo "   ! Build failed"
+fi
+echo ""
+
 echo "=== Image check complete ==="
