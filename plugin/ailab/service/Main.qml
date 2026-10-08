@@ -9,9 +9,11 @@ import Quickshell.Io
 // scripts/ai-lab, which reads services.json) and exposes the parsed service
 // list to the widget and the panel. Toggling a service shells out to
 // `ai-lab toggle <name>`, which drives `systemctl --user` on the quadlet unit.
-// Strata's three GPU variants (registry group "strata") are one row with a
-// selector: `ai-lab strata 5090|4070ti|both|off` (Conflicts= in the units
-// stops the running variant, and rizzo when the 4070 Ti is taken).
+// Strata's GPU variants (registry group "strata") are one row with a card
+// selector (`ai-lab strata 5090|4070ti|both|off`) and, for the 5090, context
+// chips (5090 = 256K, 5090-524k, 5090-1m). strata-coder (the Coder model on
+// the 4070 Ti, beside a 5090 variant) is a CODER chip on that row, toggled
+// like any service; the arbiter applies the card rules.
 // llama.cpp's three servers (group "llama-cpp") are one row too, but its
 // 5090 / 4070 Ti chips are independent toggles (both cards may serve at
 // once); BOTH is exclusive and OFF stops the group. Every start goes through
@@ -36,14 +38,14 @@ Item {
     // synthesized row for ComfyUI, whose card the arbiter picks (the variant
     // is shown as `card`). Strata has its own selector row.
     readonly property var plainServices: {
-        const rows = services.filter(s => s.installed && !s.group);
+        const rows = services.filter(s => s.installed && !s.group && s.name !== "strata-coder");
         const comfy = services.filter(s => s.installed && s.group === "comfyui");
         if (comfy.length > 0) {
             const live = comfy.find(s => s.state === "running" || s.state === "starting");
             const base = live || comfy[0];
             rows.push(Object.assign({}, base, {
                 name: "comfyui",
-                card: live ? live.variant : "",
+                card: live ? live.variant : "auto",
                 state: live ? live.state : "stopped",
                 health: live ? live.health : "-"
             }));
@@ -60,6 +62,11 @@ Item {
         return null;
     }
     readonly property string strataVariant: strataLive ? strataLive.variant : "off"
+    // The card part of the live variant: 5090-524k / 5090-1m -> "5090".
+    readonly property string strataCard: strataVariant.startsWith("5090") ? "5090" : strataVariant
+    // strata-coder, if deployed (null otherwise); shown on the strata row.
+    readonly property var coder: services.find(s => s.installed && s.name === "strata-coder") || null
+    readonly property bool coderLive: coder !== null && (coder.state === "running" || coder.state === "starting")
 
     // The llama-cpp group: deployed variants and the live ones ([] = off).
     readonly property var llamaVariants:
@@ -68,12 +75,12 @@ Item {
         llamaVariants.filter(s => s.state === "running" || s.state === "starting")
 
     readonly property int runningCount: {
-        let n = (strataLive ? 1 : 0) + (llamaLive.length > 0 ? 1 : 0);
+        let n = (strataLive ? 1 : 0) + (coderLive ? 1 : 0) + (llamaLive.length > 0 ? 1 : 0);
         for (const s of plainServices) if (s.state === "running") n += 1;
         return n;
     }
     readonly property int totalCount:
-        plainServices.length + (strataVariants.length > 0 ? 1 : 0)
+        plainServices.length + (strataVariants.length > 0 ? 1 : 0) + (coder ? 1 : 0)
         + (llamaVariants.length > 0 ? 1 : 0)
 
     readonly property int pollMs: {
@@ -100,7 +107,8 @@ Item {
                 : s);
     }
 
-    // Switch strata to a variant (5090 | 4070ti | both) or "off". The start
+    // Switch strata to a variant (5090 | 5090-524k | 5090-1m | 4070ti | both)
+    // or "off". The start
     // blocks until the old variant has stopped, so it runs in its own process;
     // the poll shows the new state.
     function switchStrata(variant) {
@@ -147,6 +155,59 @@ Item {
         onExited: (code) => {
             if (code !== 0) svc.lastError = llamaProc.verb + " " + llamaProc.target + " failed (exit " + code + ")";
             svc.refresh();
+        }
+    }
+
+    // Health in words: "up (200)" -> "ready", "down" -> "loading model".
+    function healthText(r) {
+        if (!r) return "off";
+        if (r.state === "starting") return "starting";
+        if (r.state !== "running") return "stopped";
+        if (r.health === "down") return "loading model";
+        const m = String(r.health).match(/up \((\d+)\)/);
+        if (m) return m[1] === "200" ? "ready" : "http " + m[1];
+        return r.health;
+    }
+
+    // Consequence preview for the panel's hover hint: the arbiter's plan for
+    // an action (`ai-lab ... --dry-run`), condensed to "stops a, b · starts c".
+    property string previewKey: ""
+    property string previewText: ""
+    property var previewQueued: null      // [key, argv] waiting for the running dry-run
+    function preview(key, argv) {
+        svc.previewKey = key;
+        svc.previewText = "";
+        if (key === "" || !argv) return;
+        if (previewProc.running) { svc.previewQueued = [key, argv]; return; }
+        previewProc.forKey = key;
+        previewProc.argv = argv;
+        previewProc.running = true;
+    }
+    Process {
+        id: previewProc
+        property var argv: []
+        property string forKey: ""
+        property string out: ""
+        stdout: StdioCollector { onStreamFinished: previewProc.out += this.text }
+        command: [(svc.pluginApi ? svc.pluginApi.pluginDir : "") + "/bin/ai-lab"].concat(previewProc.argv, ["--dry-run"])
+        onExited: (code) => {
+            const q = svc.previewQueued;
+            svc.previewQueued = null;
+            if (previewProc.forKey !== svc.previewKey) {   // the pointer moved on
+                previewProc.out = "";
+                if (q && q[0] === svc.previewKey) svc.preview(q[0], q[1]);
+                return;
+            }
+            const stops = [], starts = [];
+            for (const line of previewProc.out.split("\n")) {
+                const m = line.match(/would (stop|start): (\S+)/);
+                if (m) (m[1] === "stop" ? stops : starts).push(m[2]);
+            }
+            previewProc.out = "";
+            const parts = [];
+            if (starts.length) parts.push("starts " + starts.join(", "));
+            if (stops.length) parts.push("stops " + stops.join(", "));
+            svc.previewText = parts.length ? parts.join("  ·  ") : "nothing to change";
         }
     }
 

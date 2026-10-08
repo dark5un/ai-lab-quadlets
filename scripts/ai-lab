@@ -90,7 +90,7 @@ for s in reg["services"]:
                               capture_output=True, text=True).stdout.strip()
         health = "down" if code in ("000", "") else f"up ({code})"
     out.append({**{k: s[k] for k in ("name", "unit", "host_port", "bind", "tier", "boot")},
-                "group": s.get("group", ""), "variant": s.get("variant", ""),
+                "group": s.get("group", ""), "variant": s.get("variant", ""), "gpu": s.get("gpu", ""),
                 "installed": p.get("LoadState") == "loaded",
                 "state": STATE.get(active, "stopped"), "health": health})
 if as_json:

@@ -10,18 +10,26 @@ service with a live state dot, its host port, health, and a START/STOP switch.
   timer (default 10 s) and exposes the parsed rows to both views.
 - **Widget** (`content/Widget.qml`): the bar glyph plus the running/total
   count. A left click only opens the panel; it never changes state.
-- **Panel** (`content/Panel.qml`): one row per deployed service (registry
-  entries whose quadlet is not installed are hidden); clicking START/STOP
-  calls `bin/ai-lab toggle <name>`. Strata is a single row with an
-  OFF / 5090 / 4070TI / BOTH selector that calls `bin/ai-lab strata <variant>`
-  (scripts/gpu-arbiter.py moves or stops what shares its card). llama.cpp is
-  a single row with the same chips: 5090 and 4070TI toggle their server
-  independently (`bin/ai-lab toggle llama-cpp-<card>`), BOTH starts the
-  exclusive layer-split server (the arbiter stops the others first), OFF runs
-  `bin/ai-lab stop llama-cpp`. Clicking the service name or LAUNCH
-  resolves the URL via `bin/ai-lab url <name>` (token-gated services like dsh
-  get their one-time token appended), opens it with xdg-open, and closes the
-  panel so focus lands on the browser.
+- **Panel** (`content/Panel.qml`), three sections; every control is a
+  labelled segmented row (`content/Segmented.qml`) whose segments share the
+  row's width, so nothing runs off the card at any option count:
+  - **STRATA**: a status line per instance (main, coder), then
+    CARD `OFF | 5090 | 4070 TI | BOTH` (`bin/ai-lab strata <variant>`),
+    CONTEXT `256K | 524K | 1M` (the 5090 variants strata-5090,
+    strata-5090-524k, strata-5090-1m; picking one moves Strata to the 5090)
+    and CODER `OFF | ON · 4070 TI` (strata-coder, port 11439, beside a 5090
+    variant). Hovering a choice shows the arbiter's plan under the controls
+    (`bin/ai-lab ... --dry-run`: "→ starts strata-5090-1m · stops rizzo").
+  - **GPU SERVICES**: LLAMA `OFF | 5090 | 4070 TI | BOTH` (single cards toggle
+    independently via `bin/ai-lab toggle llama-cpp-<card>`, BOTH is the
+    exclusive layer-split server, OFF runs `bin/ai-lab stop llama-cpp`), then
+    a row per other card service (rizzo, ComfyUI with its card or "card auto").
+  - **APPS**: services without a card.
+  Service rows (`content/ServiceRow.qml`) anchor OPEN and START/STOP to the
+  right edge and elide the text; hovering START/STOP previews what else it
+  would stop or move. OPEN (or the name) resolves the URL via
+  `bin/ai-lab url <name>` (token-gated services like dsh get their one-time
+  token appended), opens it with xdg-open, and closes the panel.
 
 ## What it runs, reads, and writes
 
@@ -33,6 +41,7 @@ registry and shells out to:
 - `systemctl --user show|start|stop|restart|reset-failed <unit>` — user units only,
   no privileged action anywhere (no sudo/pkexec).
 - `curl http://127.0.0.1:<port><health>` — loopback health probes only.
+- `scripts/gpu-arbiter.py --dry-run` — the hover previews; plans only, changes nothing.
 - `python3` — JSON parsing of the registry and status output.
 
 The plugin reads no files outside the repo's registry and writes nothing

@@ -1,303 +1,275 @@
 import QtQuick
+import Ryoku.PluginKit
 import Ryoku.PluginKit.Singletons
 
-// content/Panel.qml — the AI Lab panel: one row per registered service with a
-// live state dot, its host port, and a start/stop switch. Clicks call
-// service.toggleNamed(name), which shells out to `ai-lab toggle` (systemctl
-// --user on the quadlet unit). Strata's GPU variants are one row with an
-// OFF / 5090 / 4070TI / BOTH selector (service.switchStrata). llama.cpp is one
-// row with the same chips, but 5090 and 4070TI toggle independently (both
-// cards may serve at once) and BOTH is exclusive (service.toggleLlama).
-// Services whose
-// quadlet is not deployed are hidden. The host sizes the card to implicitHeight.
+// content/Panel.qml — the AI Lab panel, in three sections:
+//
+//   STRATA        status lines (main model, coder), then one labelled control
+//                 per decision:
+//                   CARD     OFF | 5090 | 4070 TI | BOTH   (one variant at a time)
+//                   CONTEXT  256K | 524K | 1M              (the 5090's variants;
+//                                                         picking one moves Strata
+//                                                         to the 5090)
+//                   CODER    OFF | ON · 4070 TI            (strata-coder, beside a
+//                                                         5090 variant)
+//                 and a hint line that previews what a hovered choice starts and
+//                 stops (the arbiter's --dry-run).
+//   GPU SERVICES  llama.cpp (OFF | 5090 | 4070 TI | BOTH; the single cards
+//                 toggle independently), then the other services that use a card.
+//   APPS          services without a card.
+//
+// Every control is a Segmented (content/Segmented.qml): its segments share the
+// row's width, so options never run off the card. Service rows
+// (content/ServiceRow.qml) anchor their buttons to the right edge and elide
+// the text column, for the same reason. The host adds the card's 12 px margin.
 Item {
     id: root
 
     property var pluginApi
     property string density: "full"
     property real s: 1
-    property real widthBudget: 320
+    property real widthBudget: 356
     property bool active: false
 
     readonly property var service: pluginApi ? pluginApi.mainInstance : null
-    readonly property var services: service ? service.plainServices : []
     readonly property var strataVariants: service ? service.strataVariants : []
     readonly property var strataLive: service ? service.strataLive : null
+    readonly property string strataVariant: service ? service.strataVariant : "off"
+    readonly property string strataCard: service ? service.strataCard : "off"
+    readonly property var coder: service ? service.coder : null
+    readonly property bool coderLive: service ? service.coderLive : false
     readonly property var llamaVariants: service ? service.llamaVariants : []
     readonly property var llamaLive: service ? service.llamaLive : []
+    // Plain rows split by whether the service needs a card.
+    readonly property var gpuRows: service ? service.plainServices.filter(r => r.gpu || r.name === "comfyui") : []
+    readonly property var appRows: service ? service.plainServices.filter(r => !r.gpu && r.name !== "comfyui") : []
+    readonly property string previewKey: service ? service.previewKey : ""
+    readonly property string previewText: service ? service.previewText : ""
+
+    readonly property real labelW: 64
+
+    function has(variant) { return strataVariants.some(v => v.variant === variant) }
+    function stateText(r) { return service ? service.healthText(r) : "" }
+    function ctxLabel(v) { return v === "5090" ? "256K" : v === "5090-524k" ? "524K" : v === "5090-1m" ? "1M" : "" }
+    function hover(key, argv) { if (service) service.preview(key, argv) }
 
     implicitWidth: root.widthBudget
-    implicitHeight: col.implicitHeight + 24 * root.s
+    implicitHeight: col.implicitHeight
 
     Column {
         id: col
-        x: 12 * root.s
-        y: 12 * root.s
-        width: root.width - 24 * root.s
+        width: root.widthBudget
         spacing: 8 * root.s
 
-        Row {
-            spacing: 8 * root.s
+        // Header: title and running/total count.
+        Item {
+            width: col.width
+            height: 22 * root.s
             Text {
+                anchors.verticalCenter: parent.verticalCenter
                 text: "AI Lab"
                 color: Theme.bright
                 font.family: Theme.display
                 font.pixelSize: 16 * root.s
             }
             Text {
+                anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                text: service ? (service.runningCount + "/" + service.totalCount) : ""
+                text: root.service ? (root.service.runningCount + " / " + root.service.totalCount + " running") : ""
                 color: Theme.dim
                 font.family: Theme.mono
-                font.pixelSize: 12 * root.s
+                font.pixelSize: 10 * root.s
             }
         }
 
-        // Strata: one row, one variant at a time.
-        Row {
+        // ---- STRATA -----------------------------------------------------------
+        MicroLabel { label: "STRATA"; s: root.s; visible: root.strataVariants.length > 0 }
+
+        Column {
             visible: root.strataVariants.length > 0
-            spacing: 8 * root.s
+            width: col.width
+            spacing: 4 * root.s
 
-            Rectangle {
-                anchors.verticalCenter: parent.verticalCenter
-                width: 8 * root.s
-                height: width
-                radius: width / 2
-                color: root.strataLive ? Theme.accent : Theme.dim
-            }
-
-            Column {
-                width: root.widthBudget - 226 * root.s
-                spacing: 1 * root.s
-                Text {
-                    text: "strata"
-                    color: Theme.bright
-                    font.family: Theme.font
-                    font.pixelSize: 13 * root.s
-                    elide: Text.ElideRight
-                    width: parent.width
-                }
-                Text {
-                    text: root.strataLive
-                        ? (root.strataLive.bind + ":" + root.strataLive.host_port + "  " +
-                           (root.strataLive.state === "starting" ? "starting"
-                            : root.strataLive.health === "down" ? "loading model" : root.strataLive.health))
-                        : "off"
-                    color: Theme.dim
-                    font.family: Theme.mono
-                    font.pixelSize: 10 * root.s
-                    elide: Text.ElideRight
-                    width: parent.width
-                }
-            }
-
-            // Selector: OFF plus one segment per deployed variant.
-            Row {
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 2 * root.s
-                Repeater {
-                    model: ["off"].concat(root.strataVariants.map(v => v.variant))
-                    delegate: Rectangle {
-                        required property var modelData
-                        readonly property bool live: root.service
-                            && root.service.strataVariant === modelData
-                        width: (modelData === "4070ti" ? 52 : 40) * root.s
-                        height: 20 * root.s
-                        radius: Theme.radius
-                        color: live ? (modelData === "off" ? Theme.vermDeep : Theme.accent) : Theme.dim
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: modelData.toUpperCase()
-                            color: Theme.cardBot
-                            font.family: Theme.font
-                            font.pixelSize: 10 * root.s
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: if (root.service && !parent.live)
-                                root.service.switchStrata(modelData)
-                        }
-                    }
-                }
-            }
-        }
-
-        // llama.cpp: one row; single-card chips toggle, BOTH is exclusive.
-        Row {
-            visible: root.llamaVariants.length > 0
-            spacing: 8 * root.s
-
-            Rectangle {
-                anchors.verticalCenter: parent.verticalCenter
-                width: 8 * root.s
-                height: width
-                radius: width / 2
-                color: root.llamaLive.length > 0 ? Theme.accent : Theme.dim
-            }
-
-            Column {
-                width: root.widthBudget - 226 * root.s
-                spacing: 1 * root.s
-                Text {
-                    text: "llama.cpp"
-                    color: Theme.bright
-                    font.family: Theme.font
-                    font.pixelSize: 13 * root.s
-                    elide: Text.ElideRight
-                    width: parent.width
-                }
-                Text {
-                    text: root.llamaLive.length > 0
-                        ? root.llamaLive.map(v => ":" + v.host_port + " " +
-                              (v.state === "starting" ? "starting" : v.health)).join("  ")
-                        : "off"
-                    color: Theme.dim
-                    font.family: Theme.mono
-                    font.pixelSize: 10 * root.s
-                    elide: Text.ElideRight
-                    width: parent.width
-                }
-            }
-
-            Row {
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: 2 * root.s
-                Repeater {
-                    model: ["off"].concat(root.llamaVariants.map(v => v.variant))
-                    delegate: Rectangle {
-                        required property var modelData
-                        readonly property bool live: modelData === "off"
-                            ? root.llamaLive.length === 0
-                            : root.llamaLive.some(v => v.variant === modelData)
-                        width: (modelData === "4070ti" ? 52 : 40) * root.s
-                        height: 20 * root.s
-                        radius: Theme.radius
-                        color: live ? (modelData === "off" ? Theme.vermDeep : Theme.accent) : Theme.dim
-
-                        Text {
-                            anchors.centerIn: parent
-                            text: modelData.toUpperCase()
-                            color: Theme.cardBot
-                            font.family: Theme.font
-                            font.pixelSize: 10 * root.s
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            // OFF only acts when something runs; a lit card
-                            // chip stops that server, an unlit one starts it.
-                            onClicked: if (root.service && !(modelData === "off" && parent.live))
-                                root.service.toggleLlama(modelData)
-                        }
-                    }
-                }
-            }
-        }
-
-        Repeater {
-            model: root.services
-
-            delegate: Row {
-                required property var modelData
-                spacing: 8 * root.s
-
-                // State dot: accent when running, dim when stopped.
-                Rectangle {
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 8 * root.s
-                    height: width
-                    radius: width / 2
-                    color: modelData.state === "running" ? Theme.accent : Theme.dim
-                }
-
-                Column {
-                    width: root.widthBudget - 170 * root.s
-                    spacing: 1 * root.s
-                    Text {
-                        text: modelData.name
-                        color: Theme.bright
-                        font.family: Theme.font
-                        font.pixelSize: 13 * root.s
-                        elide: Text.ElideRight
-                        width: parent.width
-                        // Click the name to open the service in the browser.
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: if (root.service)
-                                root.service.launchNamed(modelData.name)
-                        }
+            // Status: what runs where, one line per instance.
+            Repeater {
+                model: [
+                    { dot: root.strataLive !== null, show: true,
+                      text: root.strataLive !== null
+                          ? ("main   " + (root.strataCard === "5090" ? "5090 · " + root.ctxLabel(root.strataVariant)
+                                         : root.strataCard === "both" ? "both cards" : "4070 Ti")
+                             + "   :" + root.strataLive.host_port + "   " + root.stateText(root.strataLive))
+                          : "main   off" },
+                    { dot: root.coderLive, show: root.coder !== null,
+                      text: root.coderLive && root.coder
+                          ? ("coder  4070 Ti   :" + root.coder.host_port + "   " + root.stateText(root.coder))
+                          : "coder  off" }
+                ]
+                delegate: Row {
+                    id: statusRow
+                    required property var modelData
+                    visible: modelData.show
+                    spacing: 6 * root.s
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 6 * root.s; height: width; radius: width / 2
+                        color: statusRow.modelData.dot ? Theme.accent : Theme.hair
                     }
                     Text {
-                        text: modelData.bind + ":" + modelData.host_port +
-                              "  " + modelData.health +
-                              (modelData.card ? "  · " + modelData.card : "")
-                        color: Theme.dim
+                        text: statusRow.modelData.text
+                        color: statusRow.modelData.dot ? Theme.bright : Theme.dim
                         font.family: Theme.mono
                         font.pixelSize: 10 * root.s
+                        width: col.width - 12 * root.s
                         elide: Text.ElideRight
-                        width: parent.width
                     }
                 }
+            }
 
-                // Launch: open the service URL in the default browser.
-                Rectangle {
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 56 * root.s
-                    height: 20 * root.s
-                    radius: Theme.radius
-                    color: modelData.state === "running" ? Theme.accent : Theme.dim
+            Item { width: 1; height: 2 * root.s }
 
-                    Text {
-                        anchors.centerIn: parent
-                        text: "LAUNCH"
-                        color: Theme.cardBot
-                        font.family: Theme.font
-                        font.pixelSize: 10 * root.s
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: if (root.service)
-                            root.service.launchNamed(modelData.name)
-                    }
+            Segmented {
+                width: col.width
+                s: root.s
+                label: "CARD"
+                labelWidth: root.labelW
+                options: [{ key: "off", label: "OFF", on: root.strataCard === "off" }]
+                    .concat(["5090", "4070ti", "both"].filter(v => root.has(v)).map(v => ({
+                        key: v,
+                        label: v === "4070ti" ? "4070 TI" : v.toUpperCase(),
+                        on: root.strataCard === v
+                    })))
+                onPicked: (key) => {
+                    if (!root.service || key === root.strataCard) return;
+                    root.service.switchStrata(key);   // 5090 -> its 256K variant
                 }
+                onHovered: (key) => root.hover(key === "" ? "" : "strata:" + key,
+                                               key === "" || key === root.strataCard ? null : ["strata", key])
+            }
 
-                // Start/stop switch.
-                Rectangle {
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: 46 * root.s
-                    height: 20 * root.s
-                    radius: Theme.radius
-                    color: modelData.state === "running" ? Theme.vermDeep : Theme.accent
+            Segmented {
+                visible: root.has("5090-524k") || root.has("5090-1m")
+                width: col.width
+                s: root.s
+                label: "CONTEXT"
+                labelWidth: root.labelW
+                options: ["5090", "5090-524k", "5090-1m"].filter(v => root.has(v)).map(v => ({
+                    key: v, label: root.ctxLabel(v), on: root.strataVariant === v
+                }))
+                onPicked: (key) => { if (root.service && key !== root.strataVariant) root.service.switchStrata(key) }
+                onHovered: (key) => root.hover(key === "" ? "" : "strata:" + key,
+                                               key === "" || key === root.strataVariant ? null : ["strata", key])
+            }
 
-                    Text {
-                        anchors.centerIn: parent
-                        text: modelData.state === "running" ? "STOP" : "START"
-                        color: Theme.cardBot
-                        font.family: Theme.font
-                        font.pixelSize: 10 * root.s
-                    }
+            Segmented {
+                visible: root.coder !== null
+                width: col.width
+                s: root.s
+                label: "CODER"
+                labelWidth: root.labelW
+                options: [
+                    { key: "off", label: "OFF", on: !root.coderLive },
+                    { key: "on", label: "ON · 4070 TI", on: root.coderLive }
+                ]
+                onPicked: (key) => {
+                    if (root.service && (key === "on") !== root.coderLive)
+                        root.service.toggleNamed("strata-coder");
+                }
+                onHovered: (key) => root.hover(key === "" ? "" : "strata:coder-" + key,
+                                               key === "" || (key === "on") === root.coderLive ? null
+                                                   : [key === "on" ? "start" : "stop", "strata-coder"])
+            }
 
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: if (root.service)
-                            root.service.toggleNamed(modelData.name)
-                    }
+            // Consequence preview: fixed height so the panel does not jump.
+            Text {
+                width: col.width
+                height: 14 * root.s
+                leftPadding: root.labelW * root.s
+                text: root.previewKey.startsWith("strata:") && root.previewText !== "" ? "→ " + root.previewText : ""
+                color: Theme.gold
+                font.family: Theme.mono
+                font.pixelSize: 10 * root.s
+                elide: Text.ElideRight
+            }
+        }
+
+        // ---- GPU SERVICES -----------------------------------------------------
+        MicroLabel { label: "GPU SERVICES"; s: root.s; visible: root.llamaVariants.length > 0 || root.gpuRows.length > 0 }
+
+        Column {
+            width: col.width
+            spacing: 4 * root.s
+
+            Segmented {
+                visible: root.llamaVariants.length > 0
+                width: col.width
+                s: root.s
+                label: "LLAMA"
+                labelWidth: root.labelW
+                options: [{ key: "off", label: "OFF", on: root.llamaLive.length === 0 }]
+                    .concat(root.llamaVariants.map(v => ({
+                        key: v.variant,
+                        label: v.variant === "4070ti" ? "4070 TI" : v.variant.toUpperCase(),
+                        on: root.llamaLive.some(l => l.variant === v.variant)
+                    })))
+                onPicked: (key) => {
+                    if (!root.service || (key === "off" && root.llamaLive.length === 0)) return;
+                    root.service.toggleLlama(key);
+                }
+                onHovered: (key) => root.hover(key === "" ? "" : "llama:" + key,
+                                               key === "" || (key === "off" && root.llamaLive.length === 0) ? null
+                                                   : key === "off" ? ["stop", "llama-cpp"]
+                                                   : ["toggle", "llama-cpp-" + key])
+            }
+            // llama status, or the preview while a llama chip is hovered.
+            Text {
+                visible: root.llamaVariants.length > 0
+                width: col.width
+                height: 14 * root.s
+                leftPadding: root.labelW * root.s
+                readonly property bool previewing: root.previewKey.startsWith("llama:") && root.previewText !== ""
+                text: previewing ? "→ " + root.previewText
+                    : root.llamaLive.map(v => (v.variant === "4070ti" ? "4070 Ti" : v.variant)
+                                             + " :" + v.host_port + " " + root.stateText(v)).join("    ")
+                color: previewing ? Theme.gold : Theme.dim
+                font.family: Theme.mono
+                font.pixelSize: 10 * root.s
+                elide: Text.ElideRight
+            }
+
+            Repeater {
+                model: root.gpuRows
+                delegate: ServiceRow {
+                    required property var modelData
+                    width: col.width
+                    s: root.s
+                    row: modelData
+                    service: root.service
+                }
+            }
+        }
+
+        // ---- APPS -------------------------------------------------------------
+        MicroLabel { label: "APPS"; s: root.s; visible: root.appRows.length > 0 }
+
+        Column {
+            width: col.width
+            spacing: 4 * root.s
+            Repeater {
+                model: root.appRows
+                delegate: ServiceRow {
+                    required property var modelData
+                    width: col.width
+                    s: root.s
+                    row: modelData
+                    service: root.service
                 }
             }
         }
 
         Text {
-            visible: service && service.lastError !== ""
-            text: service ? service.lastError : ""
-            color: Theme.vermDeep
+            visible: root.service !== null && root.service.lastError !== ""
+            text: root.service ? root.service.lastError : ""
+            color: Theme.vermLit
             font.family: Theme.mono
             font.pixelSize: 10 * root.s
             wrapMode: Text.WordWrap

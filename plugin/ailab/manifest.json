@@ -1,9 +1,9 @@
 {
   "id": "ailab",
   "name": "AI Lab",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": "dark5un <dark5un@users.noreply.github.com>",
-  "description": "Start/stop the ai-lab-quadlets stack from the bar; Strata and llama.cpp each get one row with a GPU selector (OFF / 5090 / 4070 Ti / BOTH).",
+  "description": "Start/stop the ai-lab-quadlets stack from the bar; Strata gets a card selector (OFF / 5090 / 4070 Ti / BOTH), 5090 context chips (256K / 524K / 1M) and a CODER chip for the Coder beside it; llama.cpp gets one row with GPU chips.",
   "license": "MIT",
   "official": false,
   "hosts": [
@@ -15,11 +15,13 @@
     "panel": "content/Panel.qml"
   },
   "panel": {
-    "width": 360
+    "width": 380
   },
   "files": [
     "bin/ai-lab",
-    "assets/preview-widget.png"
+    "assets/preview-widget.png",
+    "content/Segmented.qml",
+    "content/ServiceRow.qml"
   ],
   "capabilities": {
     "densities": [
