@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # install-strata.sh — build the Strata image and install the strata GPU
-# variants (strata-5090 at 256K / 524K / 1M context, strata-4070ti,
-# strata-both: one at a time) and strata-coder (Coder IQ1_M on the 4070 Ti,
-# can run beside a 5090 variant) as user quadlets.
+# variants (strata-5090 and strata-4070ti at 256K / 524K / 1M context,
+# strata-both at 256K: one at a time) and the coder (Coder IQ1_M on the 4070 Ti
+# at 256K / 524K / 1M, one at a time, can run beside a 5090 variant) as user
+# quadlets.
 #
 #   ./scripts/install-strata.sh            build the image if missing, render units
 #   ./scripts/install-strata.sh --rebuild  rebuild localhost/strata:multi first
 #
 # Nothing is started and nothing is enabled at boot: switch with
-# `scripts/ai-lab strata 5090|5090-524k|5090-1m|4070ti|both|duo|off` or the
+# `scripts/ai-lab strata <variant>|duo|off`, `scripts/ai-lab coder 256k|524k|1m|off` or the
 # AI Lab bar widget.
 set -euo pipefail
 
@@ -16,7 +17,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STRATA_REPO="${STRATA_REPO:-${HOME}/workspace/github.com/Niko1221/Strata}"
 IMAGE="localhost/strata:multi"
 CUDA_ARCHS="120;89"   # RTX 5090 = sm_120, RTX 4070 Ti = sm_89
-VARIANTS=(5090 5090-524k 5090-1m 4070ti both coder)
+VARIANTS=(5090 5090-524k 5090-1m 4070ti 4070ti-524k 4070ti-1m both coder coder-524k coder-1m)
 QUADLET_DIR="${HOME}/.config/containers/systemd"
 CONFIG_DIR="${HOME}/.config/containers/config/strata"
 DATA_DIR="${HOME}/.local/share/strata"
@@ -97,7 +98,8 @@ fi
 
 # --- Units -------------------------------------------------------------------------
 # GPU UUIDs are filled in by name from nvidia-smi (never by index).
-"$ROOT/scripts/render-units.sh" ai strata-5090 strata-5090-524k strata-5090-1m strata-4070ti strata-both strata-coder
+"$ROOT/scripts/render-units.sh" ai strata-5090 strata-5090-524k strata-5090-1m strata-4070ti strata-4070ti-524k \
+    strata-4070ti-1m strata-both strata-coder strata-coder-524k strata-coder-1m
 
 # --- strata-coder's setup config ------------------------------------------------------
 # The coder runs pinned to the last 8 CPUs, so its --pool-workers must be 7
@@ -141,6 +143,39 @@ PYEOF
     chmod 600 "$CODER_CFG"
     printf '  strata-coder: --pool-workers %s\n' "$CODER_WORKERS"
 fi
+# --- Context variants: derive 524K / 1M configs from the 256K ones ----------------
+# Strata's setup bakes the context into the config: --max-context plus YaRN
+# rope scaling past the trained 262,144 (factor 2 at 524,288, 4 at 1,048,576),
+# nothing else (compared on config-5090 vs -524k/-1m). Deriving keeps the
+# model choice and the coder's --pool-workers, and saves a setup run per
+# variant. An existing derived config is left alone (delete it to re-derive).
+derive_ctx() {  # derive_ctx <src-dir> <dst-dir> <context> <yarn-factor>
+    local src="$1" dst="$2" ctx="$3" f="$4" j
+    for j in "$src"/strata-*.json; do
+        [ -f "$j" ] || continue
+        [ -f "$dst/$(basename "$j")" ] && continue
+        python3 - "$j" "$dst/$(basename "$j")" "$ctx" "$f" <<'PYEOF'
+import json, sys
+src, dst, ctx, f = sys.argv[1:]
+cfg = json.load(open(src))
+a = cfg["args"]
+for flag in ("--rope-scaling", "--rope-scale"):   # drop any old rope args
+    while flag in a:
+        i = a.index(flag); del a[i:i + 2]
+i = a.index("--max-context")
+a[i + 1] = ctx
+a[i + 2:i + 2] = ["--rope-scaling", "yarn", "--rope-scale", f]
+json.dump(cfg, open(dst, "w"), indent=1)
+PYEOF
+        chmod 600 "$dst/$(basename "$j")"
+        printf '  %s: %s derived (context %s, YaRN x%s)\n' "$(basename "$dst")" "$(basename "$j")" "$ctx" "$f"
+    done
+}
+for card in 4070ti coder; do
+    derive_ctx "$DATA_DIR/config-$card" "$DATA_DIR/config-$card-524k" 524288 2
+    derive_ctx "$DATA_DIR/config-$card" "$DATA_DIR/config-$card-1m" 1048576 4
+done
+
 # Retire the single-GPU unit of earlier installs.
 if [[ -f "$QUADLET_DIR/strata.container" ]]; then
     systemctl --user stop strata.service 2>/dev/null || true
@@ -156,7 +191,8 @@ systemctl --user mask podman-user-wait-network-online.service >/dev/null 2>&1 ||
 [ "${AI_LAB_NO_RELOAD:-0}" = 1 ] || systemctl --user daemon-reload
 
 printf '\nStrata variants installed (none started, none at boot):\n'
-printf 'Switch:   %s/scripts/ai-lab strata 5090|5090-524k|5090-1m|4070ti|both|duo|off\n' "$ROOT"
+printf 'Switch:   %s/scripts/ai-lab strata 5090[-524k|-1m]|4070ti[-524k|-1m]|both|duo|off\n' "$ROOT"
+printf 'Coder:    %s/scripts/ai-lab coder 256k|524k|1m|off\n' "$ROOT"
 printf 'API:      http://<host>:11434/v1, coder http://<host>:11439/v1 (API key in %s)\n' "$SERVICE_ENV"
 printf 'Clients:  http://systemd-strata:8080/v1 on the systemd-ai network\n'
 printf 'A variant whose config-<v>/ is empty runs Strata setup on its first start.\n'

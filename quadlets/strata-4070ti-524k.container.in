@@ -1,4 +1,4 @@
-# Strata variant: RTX 4070 Ti 12 GB.
+# Strata variant: RTX 4070 Ti 12 GB, 512K (524,288) context.
 # Rendered by scripts/install-strata.sh (GPU UUIDs filled in from nvidia-smi).
 # One strata variant (strata-5090, -5090-524k, -5090-1m, -4070ti, -4070ti-524k,
 # -4070ti-1m, -both) runs at
@@ -9,14 +9,14 @@
 # scripts/gpu-arbiter.py moves strata or ComfyUI to the other card. Conflicts=
 # below is only the backstop for a bare `systemctl start`, which STOPS the
 # other side instead of moving it (Conflicts= works in both directions).
-# No [Install]: nothing starts at boot; switch with `ai-lab strata 4070ti` or the
+# No [Install]: nothing starts at boot; switch with `ai-lab strata 4070ti-524k` or the
 # AI Lab bar widget.
 
 [Unit]
-Description=Strata Qwen model server (RTX 4070 Ti 12 GB)
+Description=Strata Qwen model server (RTX 4070 Ti 12 GB, 512K (524,288) context)
 Wants=ai-network.service
 After=ai-network.service
-Conflicts=strata-5090.service strata-5090-524k.service strata-5090-1m.service strata-both.service llama-cpp-4070ti.service rizzo.service comfyui-4070ti.service llama-cpp-both.service strata-coder.service strata-4070ti-524k.service strata-4070ti-1m.service strata-coder-524k.service strata-coder-1m.service
+Conflicts=strata-5090.service strata-5090-524k.service strata-5090-1m.service strata-both.service llama-cpp-4070ti.service rizzo.service comfyui-4070ti.service llama-cpp-both.service strata-coder.service strata-4070ti.service strata-4070ti-1m.service strata-coder-524k.service strata-coder-1m.service
 StartLimitIntervalSec=20min
 StartLimitBurst=2
 
@@ -31,19 +31,22 @@ SecurityLabelDisable=true
 # Shared settings + API key (FAMILY, MODEL, VISION, LOW_RAM, API_KEY).
 EnvironmentFile=%h/.config/containers/config/strata/service.env
 # Per-variant settings. CONTEXT/KV only matter at the first setup, which
-# writes config-4070ti/strata-<quant>.json; delete that json to re-run setup.
+# writes config-4070ti-524k/strata-<quant>.json; install-strata.sh derives it
+# from config-4070ti's 256K json (same model; context + YaRN args only).
 # MODEL overrides service.env (--env wins over --env-file): IQ3_XXS here,
 # picked from the 2026-10-08 quant bench (vs IQ3_S: +28% decode, +16% prefill,
 # task avg 92.57 vs 93.26). The 5090 variants stay on IQ3_S.
 Environment=MODEL=IQ3_XXS
 Environment=GPU=0
-Environment=CONTEXT=262144
+Environment=CONTEXT=524288
+# Past the trained 262,144 setup adds YaRN rope scaling (factor 2),
+# fixed for the whole run: a separate variant, not a per-request option.
 Environment=KV=int8
 # Model data is shared by all variants; the setup config is per variant.
 Volume=%h/.local/share/strata/models:/data/models:z
 Volume=%h/.local/share/strata/mtp:/data/mtp:z
 Volume=%h/.local/share/strata/packs:/data/packs:z
-Volume=%h/.local/share/strata/config-4070ti:/data/config:Z
+Volume=%h/.local/share/strata/config-4070ti-524k:/data/config:Z
 PublishPort=0.0.0.0:11434:8080/tcp
 
 [Service]

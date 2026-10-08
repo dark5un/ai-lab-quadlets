@@ -1,6 +1,7 @@
 # Strata variant: RTX 5090 32 GB, 1M (1,048,576) context.
 # Rendered by scripts/install-strata.sh (GPU UUIDs filled in from nvidia-smi).
-# One strata variant (strata-5090, -5090-524k, -5090-1m, -4070ti, -both) runs at
+# One strata variant (strata-5090, -5090-524k, -5090-1m, -4070ti, -4070ti-524k,
+# -4070ti-1m, -both) runs at
 # a time: they share the container name (clients use http://systemd-strata:8080)
 # and host port 11434, and Conflicts= makes systemd stop the running one first.
 # strata-coder (4070 Ti, :11439) may run beside a 5090 variant ("duo").
@@ -15,7 +16,7 @@
 Description=Strata Qwen model server (RTX 5090 32 GB, 1M (1,048,576) context)
 Wants=ai-network.service
 After=ai-network.service
-Conflicts=strata-5090.service strata-5090-524k.service strata-4070ti.service strata-both.service llama-cpp-5090.service comfyui-5090.service llama-cpp-both.service
+Conflicts=strata-5090.service strata-5090-524k.service strata-4070ti.service strata-both.service llama-cpp-5090.service comfyui-5090.service llama-cpp-both.service strata-4070ti-524k.service strata-4070ti-1m.service
 StartLimitIntervalSec=20min
 StartLimitBurst=2
 

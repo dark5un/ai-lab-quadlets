@@ -77,8 +77,16 @@ cases = [
     # 5090 context variants: one strata at a time, they swap like any variant
     ("256k -> 1m", ["strata-5090"], "start", "strata-5090-1m",
         ["stop strata-5090", "start strata-5090-1m"]),
-    ("1m moves for llama-5090", ["strata-5090-1m"], "start", "llama-cpp-5090",
-        ["stop strata-5090-1m", "start strata-4070ti", "start llama-cpp-5090"]),
+    # X1: a moved strata keeps its context on the other card
+    ("1m moves for llama-5090, keeps 1M", ["strata-5090-1m"], "start", "llama-cpp-5090",
+        ["stop strata-5090-1m", "start strata-4070ti-1m", "start llama-cpp-5090"]),
+    ("4070ti-524k moves for rizzo, keeps 524K", ["strata-4070ti-524k"], "start", "rizzo",
+        ["stop strata-4070ti-524k", "start strata-5090-524k", "start rizzo"]),
+    ("comfy on 5090 moves 5090-1m to 4070ti-1m", ["strata-5090-1m"], "start", "comfyui-5090",
+        ["stop strata-5090-1m", "start strata-4070ti-1m", "start comfyui-5090"]),
+    ("comfy opposite strata-4070ti-1m", ["strata-4070ti-1m"], "start", "comfyui", ["start comfyui-5090"]),
+    ("4070ti context switch", ["strata-4070ti"], "start", "strata-4070ti-1m",
+        ["stop strata-4070ti", "start strata-4070ti-1m"]),
     ("524k swaps comfyui", ["strata-4070ti", "comfyui-5090"], "start", "strata-5090-524k",
         ["stop strata-4070ti", "stop comfyui-5090", "start strata-5090-524k", "start comfyui-4070ti"]),
     # C1: strata-coder owns the 4070 Ti, beside a 5090 strata variant (duo)
@@ -113,6 +121,21 @@ cases = [
     ("coder stops llama-both", ["llama-cpp-both"], "start", "strata-coder",
         ["stop llama-cpp-both", "start strata-coder"]),
     ("strata off keeps coder", ["strata-5090", "strata-coder"], "stop", "strata", ["stop strata-5090"]),
+    # coder group: context variants, one at a time, all card owners
+    ("coder 256k -> 524k", ["strata-5090", "strata-coder"], "start", "strata-coder-524k",
+        ["stop strata-coder", "start strata-coder-524k"]),
+    ("coder-1m beside 5090-1m", ["strata-5090-1m"], "start", "strata-coder-1m", ["start strata-coder-1m"]),
+    ("coder-524k moves strata-4070ti-1m to 5090-1m", ["strata-4070ti-1m"], "start", "strata-coder-524k",
+        ["stop strata-4070ti-1m", "start strata-5090-1m", "start strata-coder-524k"]),
+    ("strata-4070ti-524k stops coder-1m", ["strata-coder-1m"], "start", "strata-4070ti-524k",
+        ["stop strata-coder-1m", "start strata-4070ti-524k"]),
+    ("rizzo stops coder-524k", ["strata-5090", "strata-coder-524k"], "start", "rizzo",
+        ["stop strata-coder-524k", "start rizzo"]),
+    ("llama-5090 in 1m duo: strata keeps 1M on the 4070ti, coder stops", ["strata-5090-1m", "strata-coder-1m"],
+        "start", "llama-cpp-5090",
+        ["stop strata-5090-1m", "stop strata-coder-1m", "start strata-4070ti-1m", "start llama-cpp-5090"]),
+    ("stop coder group", ["strata-5090", "strata-coder-1m"], "stop", "coder", ["stop strata-coder-1m"]),
+    ("toggle coder group off", ["strata-coder-524k"], "toggle", "coder", ["stop strata-coder-524k"]),
 ]
 fail = 0
 for title, running, verb, name, want in cases:
@@ -122,6 +145,10 @@ for title, running, verb, name, want in cases:
         print(f"  FAIL {title}:\n    want {want}\n    got  {got}")
 try:
     arb.plan(reg, set(), "start", "strata"); fail = 1; print("  FAIL bare 'strata' start must ask for a variant")
+except arb.ArbiterError:
+    pass
+try:
+    arb.plan(reg, set(), "start", "coder"); fail = 1; print("  FAIL bare 'coder' start must ask for a variant")
 except arb.ArbiterError:
     pass
 try:

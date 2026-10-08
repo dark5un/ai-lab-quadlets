@@ -1,5 +1,5 @@
 # Strata Coder: Qwen3.8-Flash-Next GSQ-RCO Coder (IQ1_M, half the experts,
-# kept for code / tools / vision) on the RTX 4070 Ti 12 GB, port 11439, 256K context.
+# kept for code / tools / vision) on the RTX 4070 Ti 12 GB, port 11439, 512K (524,288) context.
 # One coder variant at a time (strata-coder 256K, -524k, -1m): same container
 # name and port, Conflicts= between them.
 # Rendered by scripts/install-strata.sh (GPU UUID and CPU list filled in).
@@ -13,10 +13,10 @@
 # No [Install]: nothing starts at boot.
 
 [Unit]
-Description=Strata Coder model server (RTX 4070 Ti 12 GB)
+Description=Strata Coder model server (RTX 4070 Ti 12 GB, 512K (524,288) context)
 Wants=ai-network.service
 After=ai-network.service
-Conflicts=strata-4070ti.service strata-both.service llama-cpp-4070ti.service rizzo.service comfyui-4070ti.service llama-cpp-both.service strata-4070ti-524k.service strata-4070ti-1m.service strata-coder-524k.service strata-coder-1m.service
+Conflicts=strata-4070ti.service strata-both.service llama-cpp-4070ti.service rizzo.service comfyui-4070ti.service llama-cpp-both.service strata-4070ti-524k.service strata-4070ti-1m.service strata-coder.service strata-coder-1m.service
 StartLimitIntervalSec=20min
 StartLimitBurst=2
 
@@ -37,12 +37,14 @@ EnvironmentFile=%h/.config/containers/config/strata/service.env
 Environment=FAMILY=coder
 Environment=MODEL=IQ1_M
 Environment=GPU=0
-Environment=CONTEXT=262144
+Environment=CONTEXT=524288
+# Past the trained 262,144 setup adds YaRN rope scaling (factor 2),
+# fixed for the whole run: a separate variant, not a per-request option.
 Environment=KV=int8
 Volume=%h/.local/share/strata/models:/data/models:z
 Volume=%h/.local/share/strata/mtp:/data/mtp:z
 Volume=%h/.local/share/strata/packs:/data/packs:z
-Volume=%h/.local/share/strata/config-coder:/data/config:Z
+Volume=%h/.local/share/strata/config-coder-524k:/data/config:Z
 PublishPort=0.0.0.0:11439:8080/tcp
 
 [Service]

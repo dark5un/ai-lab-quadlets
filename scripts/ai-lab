@@ -10,8 +10,11 @@
 #   ai-lab toggle <name> [--dry-run]  start if stopped, stop if running
 #   ai-lab restart <name>             systemctl --user restart
 #   ai-lab strata [VARIANT]           live strata variant (+coder), or switch:
-#                                     5090|5090-524k|5090-1m|4070ti|both|off
-#   ai-lab strata duo [5090|5090-524k|5090-1m]   a 5090 variant + strata-coder
+#                                     5090|5090-524k|5090-1m|4070ti|4070ti-524k|
+#                                     4070ti-1m|both|off
+#   ai-lab coder [256k|524k|1m|off]   live coder context, or switch the coder
+#                                     (strata-coder on the 4070 Ti, beside a 5090 variant)
+#   ai-lab strata duo [5090-VARIANT] [256k|524k|1m]   a 5090 variant + the coder
 #                                     (Coder on the 4070 Ti, :11439) side by side
 #
 # <name> is a service or a group (strata, comfyui). start/stop/toggle/strata go
@@ -120,19 +123,22 @@ cmd_strata() {  # strata [VARIANT|duo [5090-VARIANT]|off] [--dry-run]
         while IFS=$'\t' read -r name unit variant; do
             [ "$(svc_state "$unit")" = running ] && { live="$variant"; break; }
         done < <(group_members strata)
-        if registry_get strata-coder unit >/dev/null 2>&1 \
-            && [ "$(svc_state "$(registry_get strata-coder unit)")" = running ]; then
-            [ "$live" = off ] && live=coder || live="$live+coder"
+        local c
+        c=$(coder_live)
+        if [ "$c" != off ]; then
+            [ "$live" = off ] && live="$c" || live="$live+$c"
         fi
         echo "$live"
         return
     fi
-    if [ "$want" = duo ]; then  # duo [5090|5090-524k|5090-1m] [--dry-run]
-        local v="5090" dry=""
-        case "${2:-}" in --dry-run) dry=--dry-run ;; "") ;; *) v="$2"; dry="${3:-}" ;; esac
-        case "$v" in 5090*) ;; *) echo "ai-lab: duo runs a 5090 variant beside the coder (5090|5090-524k|5090-1m)" >&2; exit 1 ;; esac
+    if [ "$want" = duo ]; then  # duo [5090-VARIANT] [256k|524k|1m] [--dry-run]
+        local v="5090" cv="256k" dry="" a
+        for a in "${@:2}"; do
+            case "$a" in --dry-run) dry=--dry-run ;; 5090*) v="$a" ;; 256k|524k|1m) cv="$a" ;;
+                *) echo "ai-lab: duo [5090|5090-524k|5090-1m] [256k|524k|1m] [--dry-run]" >&2; exit 1 ;; esac
+        done
         cmd_strata "$v" $dry
-        arbiter start strata-coder $dry
+        cmd_coder "$cv" $dry
         return
     fi
     if [ "$want" = off ]; then
@@ -146,6 +152,36 @@ cmd_strata() {  # strata [VARIANT|duo [5090-VARIANT]|off] [--dry-run]
         fi
     done < <(group_members strata)
     echo "ai-lab: unknown strata variant '$want' ($(group_members strata | cut -f3 | tr '\n' '|')duo|off)" >&2
+    exit 1
+}
+
+coder_live() {  # the live coder variant as "coder" / "coder-524k" / ..., or "off"
+    local name unit variant
+    while IFS=$'\t' read -r name unit variant; do
+        [ "$(svc_state "$unit")" = running ] && { echo "$variant"; return; }
+    done < <(group_members coder)
+    echo off
+}
+
+cmd_coder() {  # coder [256k|524k|1m|off] [--dry-run]
+    local want="${1:-}" name unit variant
+    if [ -z "$want" ]; then
+        local v; v=$(coder_live)
+        case "$v" in off) echo off ;; coder) echo 256k ;; *) echo "${v#coder-}" ;; esac
+        return
+    fi
+    if [ "$want" = off ]; then
+        arbiter stop coder "${2:-}"
+        return
+    fi
+    local target="coder-$want"; [ "$want" = 256k ] && target=coder
+    while IFS=$'\t' read -r name unit variant; do
+        if [ "$variant" = "$target" ]; then
+            arbiter start "$name" "${2:-}"
+            return
+        fi
+    done < <(group_members coder)
+    echo "ai-lab: unknown coder context '$want' (256k|524k|1m|off)" >&2
     exit 1
 }
 
@@ -210,5 +246,6 @@ case "${1:-status}" in
         arbiter "$1" "$2" "${3:-}" ;;
     restart) action restart "$2" ;;
     strata)  shift; cmd_strata "$@" ;;
-    *) echo "usage: ai-lab status [--json] | ports | url <name> | info [name] | start|stop|toggle <name> [--dry-run] | restart <name> | strata [5090|5090-524k|5090-1m|4070ti|both|duo [5090-variant]|off] [--dry-run]" >&2; exit 1 ;;
+    coder)   shift; cmd_coder "$@" ;;
+    *) echo "usage: ai-lab status [--json] | ports | url <name> | info [name] | start|stop|toggle <name> [--dry-run] | restart <name> | strata [5090|5090-524k|5090-1m|4070ti|4070ti-524k|4070ti-1m|both|duo [5090-variant] [256k|524k|1m]|off] [--dry-run] | coder [256k|524k|1m|off] [--dry-run]" >&2; exit 1 ;;
 esac
