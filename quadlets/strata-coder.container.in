@@ -1,0 +1,52 @@
+# Strata Coder: Qwen3.8-Flash-Next GSQ-RCO Coder (IQ1_M, half the experts,
+# kept for code / tools / vision) on the RTX 4070 Ti 12 GB, port 11439.
+# Rendered by scripts/install-strata.sh (GPU UUID and CPU list filled in).
+# Not a member of the strata group: it can run BESIDE a 5090 strata variant
+# ("duo": `ai-lab strata duo [5090|5090-524k|5090-1m]`), with its own container
+# name (clients: http://systemd-strata-coder:8080) and its own setup config.
+# It owns the 4070 Ti like strata does: scripts/gpu-arbiter.py stops the other
+# 4070 Ti services when it starts, and stops it when strata-4070ti /
+# strata-both or another 4070 Ti service starts (it cannot move). Conflicts=
+# is the backstop for a bare `systemctl start`.
+# No [Install]: nothing starts at boot.
+
+[Unit]
+Description=Strata Coder model server (RTX 4070 Ti 12 GB)
+Wants=ai-network.service
+After=ai-network.service
+Conflicts=strata-4070ti.service strata-both.service llama-cpp-4070ti.service rizzo.service comfyui-4070ti.service llama-cpp-both.service
+StartLimitIntervalSec=20min
+StartLimitBurst=2
+
+[Container]
+ContainerName=systemd-strata-coder
+Image=localhost/strata:multi
+Network=ai.network
+AddDevice=nvidia.com/gpu=__GPU_4070TI_UUID__
+SecurityLabelDisable=true
+# Pinned to the last 8 CPUs (E-cores here), disjoint from the 5090 variants:
+# unpinned, two engines side by side drop to a third / half of their speed.
+# The config's --pool-workers is 7 (pinned cores - 1; install-strata.sh's
+# prepare step writes it): workers == cores halves decode.
+Entrypoint=/usr/bin/taskset
+Exec=-c __CPUS_CODER__ ./docker-entrypoint.sh
+# Shared API key etc.; FAMILY/MODEL override service.env (Environment= wins).
+EnvironmentFile=%h/.config/containers/config/strata/service.env
+Environment=FAMILY=coder
+Environment=MODEL=IQ1_M
+Environment=GPU=0
+Environment=CONTEXT=262144
+Environment=KV=int8
+Volume=%h/.local/share/strata/models:/data/models:z
+Volume=%h/.local/share/strata/mtp:/data/mtp:z
+Volume=%h/.local/share/strata/packs:/data/packs:z
+Volume=%h/.local/share/strata/config-coder:/data/config:Z
+PublishPort=0.0.0.0:11439:8080/tcp
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=1800
+TimeoutStopSec=120

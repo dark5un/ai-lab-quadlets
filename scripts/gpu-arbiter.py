@@ -14,10 +14,17 @@ Rules (docs: ~/Documents/plans/strata-gpu-variants-plan.md, README "GPU rules"):
       holds both cards, so strata has nowhere to move.
   R6  Starting any other GPU service (strata included) while an exclusive
       service runs stops the exclusive service first.
-Non-strata, non-exclusive services may share a card with each other.
+  C1  A card owner (registry "owns_card": true, e.g. strata-coder on the 4070
+      Ti) holds its card like strata but runs beside it ("duo"): starting it
+      moves strata off that card (to the 5090 variant), stops the other
+      services there; ComfyUI moves to the free card or stops.
+  C2  Strata placed on an owner's card (strata-4070ti, strata-both) stops it.
+  C3  Any other service that needs an owner's card stops the owner (it cannot
+      move); ComfyUI picks a card no owner holds when it can.
+Non-strata, non-exclusive, non-owner services may share a card with each other.
 
 services.json fields used: name, unit, gpu (5090 | 4070ti | both), group,
-variant, exclusive. A group name (strata, comfyui) is accepted where a service is.
+variant, exclusive, owns_card. A group name (strata, comfyui) is accepted where a service is.
 
   gpu-arbiter.py [--registry F] [--dry-run] start|stop|toggle <name>
 
@@ -72,6 +79,21 @@ class Planner:
         n = self.live("strata")
         return cards(self.svcs[n]) if n else set()
 
+    def owners(self):
+        return [n for n in sorted(self.state) if self.svcs.get(n, {}).get("owns_card")]
+
+    def owner_cards(self):
+        out = set()
+        for n in self.owners():
+            out |= cards(self.svcs[n])
+        return out
+
+    def stop_owners_on(self, want, keep=None):
+        """C2/C3: an owner cannot move, so it stops when its card is needed."""
+        for n in self.owners():
+            if n != keep and cards(self.svcs[n]) & want:
+                self.stop(n)
+
     # --- primitive ops ----------------------------------------------------------
     def stop(self, name):
         if name in self.state:
@@ -101,7 +123,7 @@ class Planner:
                 comfy_moves = True
             self.stop(name)
         self.start(target)
-        if comfy_moves:
+        if comfy_moves and OTHER[next(iter(want))] not in self.owner_cards():
             self.start(self.member("comfyui", OTHER[next(iter(want))]))
 
     def start_comfyui(self, variant=None):
@@ -110,9 +132,13 @@ class Planner:
             if held == set(CARDS):
                 self.place_strata("5090")          # R4: strata-both drops to the 5090
                 held = {"5090"}
-            variant = OTHER[next(iter(held))] if held else COMFY_DEFAULT
+            if held:
+                variant = OTHER[next(iter(held))]
+            else:                                  # C3: prefer a card no owner holds
+                variant = COMFY_DEFAULT if COMFY_DEFAULT not in self.owner_cards() else OTHER[COMFY_DEFAULT]
         elif variant in held:
             self.place_strata(OTHER[variant])      # R1
+        self.stop_owners_on({variant})             # C3
         for s in self.group("comfyui"):
             if s["variant"] != variant:
                 self.stop(s["name"])
@@ -141,11 +167,35 @@ class Planner:
         if s.get("exclusive"):
             self.start_exclusive(name)
             return
+        if s.get("owns_card"):
+            self.start_owner(name)
+            return
+        self.stop_owners_on(cards(s))              # C3
         held = self.strata_cards()
         for card in sorted(cards(s) & held):
             # R1: strata leaves this card (both -> the other card; one -> swap).
             self.place_strata(OTHER[card])
             held = self.strata_cards()
+        self.start(name)
+
+    def start_owner(self, name):
+        """C1: like strata on its card, but beside strata, never instead of it."""
+        if name in self.state:
+            return
+        want = cards(self.svcs[name])
+        if self.strata_cards() & want:
+            self.place_strata("5090" if "5090" not in want else "4070ti")
+        for other in sorted(self.state):
+            o = self.svcs.get(other, {})
+            if other == name or o.get("group") == "strata" or not (cards(o) & want):
+                continue
+            if o.get("group") == "comfyui" and len(want) == 1:
+                free = OTHER[next(iter(want))]
+                self.stop(other)
+                if free not in self.strata_cards() | self.owner_cards():
+                    self.start(self.member("comfyui", free))
+                continue
+            self.stop(other)
         self.start(name)
 
     # --- verbs -------------------------------------------------------------------

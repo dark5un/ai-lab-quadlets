@@ -9,7 +9,10 @@
 #   ai-lab stop <name> [--dry-run]    stop
 #   ai-lab toggle <name> [--dry-run]  start if stopped, stop if running
 #   ai-lab restart <name>             systemctl --user restart
-#   ai-lab strata [VARIANT]           live strata variant, or switch: 5090|4070ti|both|off
+#   ai-lab strata [VARIANT]           live strata variant (+coder), or switch:
+#                                     5090|5090-524k|5090-1m|4070ti|both|off
+#   ai-lab strata duo [5090|5090-524k|5090-1m]   a 5090 variant + strata-coder
+#                                     (Coder on the 4070 Ti, :11439) side by side
 #
 # <name> is a service or a group (strata, comfyui). start/stop/toggle/strata go
 # through scripts/gpu-arbiter.py: strata owns its card(s); starting a GPU
@@ -110,13 +113,26 @@ for s in json.load(open(sys.argv[1]))["services"]:
 EOF
 }
 
-cmd_strata() {  # strata [5090|4070ti|both|off] [--dry-run]
+cmd_strata() {  # strata [VARIANT|duo [5090-VARIANT]|off] [--dry-run]
     local want="${1:-}" name unit variant
-    if [ -z "$want" ]; then  # report the live variant
+    if [ -z "$want" ]; then  # report the live variant, "+coder" when it runs too
+        local live=off
         while IFS=$'\t' read -r name unit variant; do
-            [ "$(svc_state "$unit")" = running ] && { echo "$variant"; return; }
+            [ "$(svc_state "$unit")" = running ] && { live="$variant"; break; }
         done < <(group_members strata)
-        echo off
+        if registry_get strata-coder unit >/dev/null 2>&1 \
+            && [ "$(svc_state "$(registry_get strata-coder unit)")" = running ]; then
+            [ "$live" = off ] && live=coder || live="$live+coder"
+        fi
+        echo "$live"
+        return
+    fi
+    if [ "$want" = duo ]; then  # duo [5090|5090-524k|5090-1m] [--dry-run]
+        local v="5090" dry=""
+        case "${2:-}" in --dry-run) dry=--dry-run ;; "") ;; *) v="$2"; dry="${3:-}" ;; esac
+        case "$v" in 5090*) ;; *) echo "ai-lab: duo runs a 5090 variant beside the coder (5090|5090-524k|5090-1m)" >&2; exit 1 ;; esac
+        cmd_strata "$v" $dry
+        arbiter start strata-coder $dry
         return
     fi
     if [ "$want" = off ]; then
@@ -129,7 +145,7 @@ cmd_strata() {  # strata [5090|4070ti|both|off] [--dry-run]
             return
         fi
     done < <(group_members strata)
-    echo "ai-lab: unknown strata variant '$want' (5090|4070ti|both|off)" >&2
+    echo "ai-lab: unknown strata variant '$want' ($(group_members strata | cut -f3 | tr '\n' '|')duo|off)" >&2
     exit 1
 }
 
@@ -194,5 +210,5 @@ case "${1:-status}" in
         arbiter "$1" "$2" "${3:-}" ;;
     restart) action restart "$2" ;;
     strata)  shift; cmd_strata "$@" ;;
-    *) echo "usage: ai-lab status [--json] | ports | url <name> | info [name] | start|stop|toggle <name> [--dry-run] | restart <name> | strata [5090|4070ti|both|off] [--dry-run]" >&2; exit 1 ;;
+    *) echo "usage: ai-lab status [--json] | ports | url <name> | info [name] | start|stop|toggle <name> [--dry-run] | restart <name> | strata [5090|5090-524k|5090-1m|4070ti|both|duo [5090-variant]|off] [--dry-run]" >&2; exit 1 ;;
 esac

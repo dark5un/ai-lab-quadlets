@@ -1,21 +1,21 @@
-# Strata variant: RTX 4070 Ti 12 GB.
+# Strata variant: RTX 5090 32 GB, 512K (524,288) context.
 # Rendered by scripts/install-strata.sh (GPU UUIDs filled in from nvidia-smi).
 # One strata variant (strata-5090, -5090-524k, -5090-1m, -4070ti, -both) runs at
 # a time: they share the container name (clients use http://systemd-strata:8080)
 # and host port 11434, and Conflicts= makes systemd stop the running one first.
-# This variant also stops strata-coder (it needs the 4070 Ti).
+# strata-coder (4070 Ti, :11439) may run beside a 5090 variant ("duo").
 # Strata owns its card(s). Use `ai-lab` / the bar widget to start GPU services:
 # scripts/gpu-arbiter.py moves strata or ComfyUI to the other card. Conflicts=
 # below is only the backstop for a bare `systemctl start`, which STOPS the
 # other side instead of moving it (Conflicts= works in both directions).
-# No [Install]: nothing starts at boot; switch with `ai-lab strata 4070ti` or the
+# No [Install]: nothing starts at boot; switch with `ai-lab strata 5090-524k` or the
 # AI Lab bar widget.
 
 [Unit]
-Description=Strata Qwen model server (RTX 4070 Ti 12 GB)
+Description=Strata Qwen model server (RTX 5090 32 GB, 512K (524,288) context)
 Wants=ai-network.service
 After=ai-network.service
-Conflicts=strata-5090.service strata-5090-524k.service strata-5090-1m.service strata-both.service llama-cpp-4070ti.service rizzo.service comfyui-4070ti.service llama-cpp-both.service strata-coder.service
+Conflicts=strata-5090.service strata-5090-1m.service strata-4070ti.service strata-both.service llama-cpp-5090.service comfyui-5090.service llama-cpp-both.service
 StartLimitIntervalSec=20min
 StartLimitBurst=2
 
@@ -25,20 +25,27 @@ Image=localhost/strata:multi
 Network=ai.network
 # The container sees only the card(s) below, so nvidia-smi and CUDA agree on
 # the numbering inside it; GPU=0 is that card.
-AddDevice=nvidia.com/gpu=__GPU_4070TI_UUID__
+AddDevice=nvidia.com/gpu=__GPU_5090_UUID__
 SecurityLabelDisable=true
+# Pinned to the CPUs left free for strata-coder (render-units.sh fills them in:
+# all but the last 8). Setup's --pool-workers (15 here) must stay below the
+# pinned core count: workers == cores halves decode (spin-waiting workers).
+Entrypoint=/usr/bin/taskset
+Exec=-c __CPUS_MAIN__ ./docker-entrypoint.sh
 # Shared settings + API key (FAMILY, MODEL, VISION, LOW_RAM, API_KEY).
 EnvironmentFile=%h/.config/containers/config/strata/service.env
 # Per-variant settings. CONTEXT/KV only matter at the first setup, which
-# writes config-4070ti/strata-iq3_s.json; delete that json to re-run setup.
+# writes config-5090-524k/strata-iq3_s.json; delete that json to re-run setup.
 Environment=GPU=0
-Environment=CONTEXT=262144
+Environment=CONTEXT=524288
 Environment=KV=int8
+# Past the trained 262,144 setup adds YaRN rope scaling (factor 2),
+# fixed for the whole run: a separate variant, not a per-request option.
 # Model data is shared by all variants; the setup config is per variant.
 Volume=%h/.local/share/strata/models:/data/models:z
 Volume=%h/.local/share/strata/mtp:/data/mtp:z
 Volume=%h/.local/share/strata/packs:/data/packs:z
-Volume=%h/.local/share/strata/config-4070ti:/data/config:Z
+Volume=%h/.local/share/strata/config-5090-524k:/data/config:Z
 PublishPort=0.0.0.0:11434:8080/tcp
 
 [Service]

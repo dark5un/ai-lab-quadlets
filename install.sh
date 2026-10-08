@@ -99,7 +99,7 @@ copy_examples() {  # copy_examples <svc>
 }
 for svc in llama-cpp-5090 llama-cpp-4070ti llama-cpp-both sketchlab; do copy_examples "$svc"; done
 
-# Strata: image (if missing) + its three units + its service.env with the key.
+# Strata: image (if missing) + its units (5 variants + coder) + service.env with the key.
 say "3/6 strata (scripts/install-strata.sh)"
 AI_LAB_NO_RELOAD=1 "$ROOT/scripts/install-strata.sh" | sed 's/^/  /'
 
@@ -134,10 +134,10 @@ HOST_LOCAL="$(hostnamectl --static).local"
 OW="$CONF/open-webui/service.env"
 set_kv "$OW" WEBUI_URL "http://${HOST_LOCAL}:3100"
 set_kv "$OW" CORS_ALLOW_ORIGIN "http://${HOST_LOCAL}:3100"
-set_kv "$OW" OPENAI_API_BASE_URLS "http://systemd-strata:8080/v1;http://systemd-llama-cpp-5090:8080/v1;http://systemd-llama-cpp-4070ti:8080/v1;http://systemd-llama-cpp-both:8080/v1"
-set_kv "$OW" OPENAI_API_KEYS "${STRATA_KEY};${LLAMA_KEY};${LLAMA_KEY};${LLAMA_KEY}"
+set_kv "$OW" OPENAI_API_BASE_URLS "http://systemd-strata:8080/v1;http://systemd-strata-coder:8080/v1;http://systemd-llama-cpp-5090:8080/v1;http://systemd-llama-cpp-4070ti:8080/v1;http://systemd-llama-cpp-both:8080/v1"
+set_kv "$OW" OPENAI_API_KEYS "${STRATA_KEY};${STRATA_KEY};${LLAMA_KEY};${LLAMA_KEY};${LLAMA_KEY}"
 set_kv "$OW" ENABLE_PERSISTENT_CONFIG false
-echo "  open-webui: 4 backends (strata, llama-cpp-5090/4070ti/both), URL http://${HOST_LOCAL}:3100"
+echo "  open-webui: 5 backends (strata, strata-coder, llama-cpp-5090/4070ti/both), URL http://${HOST_LOCAL}:3100"
 set_kv "$CONF/sketchlab/service.env" STRATA_API_KEY "$STRATA_KEY"
 echo "  sketchlab: /v1 proxy key = strata key"
 DSH="$CONF/deepseek-harness/service.env"
@@ -222,7 +222,7 @@ EOF
 cat <<EOF
 
 Start/stop on demand (GPU rules applied by scripts/gpu-arbiter.py):
-  ai-lab start <name>   |  ai-lab strata 5090|4070ti|both|off  |  ai-lab status
+  ai-lab start <name>   |  ai-lab strata 5090|5090-524k|5090-1m|4070ti|both|duo|off  |  ai-lab status
   or the AI Lab bar widget (plugin/ailab).
 Models for llama.cpp: hf-download <repo> <quant> --card 5090|4070ti|both
 EOF

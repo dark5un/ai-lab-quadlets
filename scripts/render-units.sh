@@ -5,7 +5,8 @@
 #
 #   scripts/render-units.sh NAME...      e.g. strata-5090 llama-cpp-4070ti sketchlab
 #
-# Placeholders: __GPU_5090_UUID__, __GPU_4070TI_UUID__. Does not daemon-reload,
+# Placeholders: __GPU_5090_UUID__, __GPU_4070TI_UUID__, __CPUS_MAIN__,
+# __CPUS_CODER__. Does not daemon-reload,
 # start or enable anything; the caller reloads once at the end.
 set -euo pipefail
 
@@ -20,6 +21,11 @@ gpu_uuid() {  # gpu_uuid <name regex>
 }
 UUID_5090="$(gpu_uuid 'RTX 5090')"
 UUID_4070TI="$(gpu_uuid 'RTX 4070 Ti')"
+# CPU pinning for the strata duo: strata-coder gets the last 8 logical CPUs
+# (E-cores on this Core Ultra), the 5090 variants everything before them.
+NCPU="$(nproc --all)"
+CPUS_MAIN="0-$((NCPU - 9))"
+CPUS_CODER="$((NCPU - 8))-$((NCPU - 1))"
 
 mkdir -p "$QUADLET_DIR"
 for name in "$@"; do
@@ -32,7 +38,8 @@ for name in "$@"; do
             echo "render-units: $name needs the RTX 4070 Ti, which nvidia-smi does not list" >&2; exit 1
         fi
         tmp="$(mktemp "$QUADLET_DIR/.$name.XXXXXX")"
-        sed -e "s/__GPU_5090_UUID__/${UUID_5090}/g" -e "s/__GPU_4070TI_UUID__/${UUID_4070TI}/g" "$src" > "$tmp"
+        sed -e "s/__GPU_5090_UUID__/${UUID_5090}/g" -e "s/__GPU_4070TI_UUID__/${UUID_4070TI}/g" \
+            -e "s/__CPUS_MAIN__/${CPUS_MAIN}/g" -e "s/__CPUS_CODER__/${CPUS_CODER}/g" "$src" > "$tmp"
         install -m 0644 "$tmp" "$QUADLET_DIR/$name.container"
         rm -f "$tmp"
     elif [ -f "$ROOT/quadlets/$name.container" ]; then

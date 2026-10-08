@@ -8,7 +8,7 @@
 #   - every non-strata GPU service pins with AddDevice=nvidia.com/gpu=all +
 #     CUDA_VISIBLE_DEVICES matching its registry card(s); services without a
 #     card get no GPU at all
-# (strata variants are covered by test-strata-variants.sh)
+# (strata variants and strata-coder are covered by test-strata-variants.sh)
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 fail=0
@@ -38,7 +38,7 @@ for s in json.load(open(f"{root}/services.json"))["services"]:
     name = s["name"]
     if s["boot"] is not False:
         print(f"  FAIL: {name}: registry boot must be false"); bad = 1
-    if s.get("group") == "strata":
+    if s.get("group") == "strata" or s["name"] == "strata-coder":
         continue
     path = next((p for p in (f"{root}/quadlets/{name}.container.in", f"{root}/quadlets/{name}.container")
                  if os.path.exists(p)), None)

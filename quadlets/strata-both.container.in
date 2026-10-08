@@ -1,8 +1,9 @@
 # Strata variant: RTX 5090 + RTX 4070 Ti, layer split.
 # Rendered by scripts/install-strata.sh (GPU UUIDs filled in from nvidia-smi).
-# One of strata-5090 / strata-4070ti / strata-both runs at a time: they share
-# the container name (clients use http://systemd-strata:8080) and host port
-# 11434, and Conflicts= makes systemd stop the running one first.
+# One strata variant (strata-5090, -5090-524k, -5090-1m, -4070ti, -both) runs at
+# a time: they share the container name (clients use http://systemd-strata:8080)
+# and host port 11434, and Conflicts= makes systemd stop the running one first.
+# This variant also stops strata-coder (it needs the 4070 Ti).
 # Strata owns its card(s). Use `ai-lab` / the bar widget to start GPU services:
 # scripts/gpu-arbiter.py moves strata or ComfyUI to the other card. Conflicts=
 # below is only the backstop for a bare `systemctl start`, which STOPS the
@@ -14,7 +15,7 @@
 Description=Strata Qwen model server (RTX 5090 + RTX 4070 Ti, layer split)
 Wants=ai-network.service
 After=ai-network.service
-Conflicts=strata-5090.service strata-4070ti.service llama-cpp-5090.service llama-cpp-4070ti.service rizzo.service comfyui-5090.service comfyui-4070ti.service llama-cpp-both.service
+Conflicts=strata-5090.service strata-5090-524k.service strata-5090-1m.service strata-4070ti.service llama-cpp-5090.service llama-cpp-4070ti.service rizzo.service comfyui-5090.service comfyui-4070ti.service llama-cpp-both.service strata-coder.service
 StartLimitIntervalSec=20min
 StartLimitBurst=2
 

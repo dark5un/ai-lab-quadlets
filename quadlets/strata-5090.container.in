@@ -1,8 +1,9 @@
-# Strata variant: RTX 5090 32 GB.
+# Strata variant: RTX 5090 32 GB, 256K context.
 # Rendered by scripts/install-strata.sh (GPU UUIDs filled in from nvidia-smi).
-# One of strata-5090 / strata-4070ti / strata-both runs at a time: they share
-# the container name (clients use http://systemd-strata:8080) and host port
-# 11434, and Conflicts= makes systemd stop the running one first.
+# One strata variant (strata-5090, -5090-524k, -5090-1m, -4070ti, -both) runs at
+# a time: they share the container name (clients use http://systemd-strata:8080)
+# and host port 11434, and Conflicts= makes systemd stop the running one first.
+# strata-coder (4070 Ti, :11439) may run beside a 5090 variant ("duo").
 # Strata owns its card(s). Use `ai-lab` / the bar widget to start GPU services:
 # scripts/gpu-arbiter.py moves strata or ComfyUI to the other card. Conflicts=
 # below is only the backstop for a bare `systemctl start`, which STOPS the
@@ -11,10 +12,10 @@
 # AI Lab bar widget.
 
 [Unit]
-Description=Strata Qwen model server (RTX 5090 32 GB)
+Description=Strata Qwen model server (RTX 5090 32 GB, 256K context)
 Wants=ai-network.service
 After=ai-network.service
-Conflicts=strata-4070ti.service strata-both.service llama-cpp-5090.service comfyui-5090.service llama-cpp-both.service
+Conflicts=strata-5090-524k.service strata-5090-1m.service strata-4070ti.service strata-both.service llama-cpp-5090.service comfyui-5090.service llama-cpp-both.service
 StartLimitIntervalSec=20min
 StartLimitBurst=2
 
@@ -26,6 +27,11 @@ Network=ai.network
 # the numbering inside it; GPU=0 is that card.
 AddDevice=nvidia.com/gpu=__GPU_5090_UUID__
 SecurityLabelDisable=true
+# Pinned to the CPUs left free for strata-coder (render-units.sh fills them in:
+# all but the last 8). Setup's --pool-workers (15 here) must stay below the
+# pinned core count: workers == cores halves decode (spin-waiting workers).
+Entrypoint=/usr/bin/taskset
+Exec=-c __CPUS_MAIN__ ./docker-entrypoint.sh
 # Shared settings + API key (FAMILY, MODEL, VISION, LOW_RAM, API_KEY).
 EnvironmentFile=%h/.config/containers/config/strata/service.env
 # Per-variant settings. CONTEXT/KV only matter at the first setup, which
