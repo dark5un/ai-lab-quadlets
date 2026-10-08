@@ -17,6 +17,8 @@ Conflicts=comfyui-4070ti.service
 ContainerName=systemd-comfyui
 # Custom build - see containers/comfyui/Containerfile.
 Image=localhost/comfyui:v0.34.0-cu130
+# The app runs as PID 1 and ignores SIGTERM; catatonit forwards it.
+RunInit=true
 Network=ai.network
 PublishPort=0.0.0.0:3101:8188/tcp
 Volume=%h/.local/share/comfyui:/data:Z
@@ -29,6 +31,8 @@ Environment=CUDA_VISIBLE_DEVICES=__GPU_5090_UUID__
 SecurityLabelDisable=true
 
 [Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
 Restart=on-failure
 RestartSec=10
 TimeoutStartSec=900

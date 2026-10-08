@@ -41,6 +41,8 @@ Volume=%h/.local/share/strata/config-5090:/data/config:Z
 PublishPort=0.0.0.0:11434:8080/tcp
 
 [Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
 Restart=on-failure
 RestartSec=30
 TimeoutStartSec=1800

@@ -29,6 +29,8 @@ PublishPort=0.0.0.0:11437:8017
 Volume=%h/.local/share/rizzo:/data:Z
 
 [Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
 Restart=on-failure
 RestartSec=10
 TimeoutStartSec=600

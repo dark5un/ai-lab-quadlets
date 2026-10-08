@@ -10,6 +10,8 @@ ContainerName=systemd-hyperframes
 #   podman build -f packages/gcp-cloud-run/Dockerfile \
 #     -t localhost/hyperframes:latest .
 Image=localhost/hyperframes:latest
+# The app runs as PID 1 and ignores SIGTERM; catatonit forwards it.
+RunInit=true
 Network=ai.network
 PublishPort=0.0.0.0:3103:8080/tcp
 # Mount compositions from host for rendering
@@ -20,6 +22,8 @@ Environment=PORT=8080
 # If GPU acceleration desired, add: AddDevice=nvidia.com/gpu=all
 
 [Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
 Restart=on-failure
 RestartSec=10
 TimeoutStartSec=900

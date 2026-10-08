@@ -4,6 +4,7 @@
 #   - no network-online.target dependency (podman's waiter hangs on Arch)
 #   - units on ai.network Want + start After ai-network.service
 #   - no hardcoded GPU UUID (templates carry placeholders only)
+#   - SuccessExitStatus=143 everywhere (a stop must not leave a failed unit)
 #   - every non-strata GPU service pins with AddDevice=nvidia.com/gpu=all +
 #     CUDA_VISIBLE_DEVICES matching its registry card(s); services without a
 #     card get no GPU at all
@@ -18,6 +19,9 @@ for f in "$ROOT"/quadlets/*.container "$ROOT"/quadlets/*.container.in; do
     grep -q '^\[Install\]' "$f" && err "$n has an [Install] section"
     grep -q 'network-online.target' "$f" && err "$n depends on network-online.target"
     grep -Eq 'GPU-[0-9a-f]{8}-' "$f" && err "$n hardcodes a GPU UUID (use __GPU_*_UUID__)"
+    # A SIGTERM-killed container exits 143; without this every stop of such
+    # an app leaves the unit "failed".
+    grep -qx 'SuccessExitStatus=143' "$f" || err "$n lacks SuccessExitStatus=143"
     if grep -qx 'Network=ai.network' "$f"; then
         grep -qx 'Wants=ai-network.service' "$f" || err "$n lacks Wants=ai-network.service"
         grep -qx 'After=ai-network.service' "$f" || err "$n lacks After=ai-network.service"

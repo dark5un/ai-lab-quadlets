@@ -191,7 +191,7 @@
       "host_port": 3103,
       "container_port": 8080,
       "bind": "0.0.0.0",
-      "health": "/",
+      "health": "/healthz",
       "tier": "video",
       "image": "localhost/hyperframes:latest",
       "boot": false,

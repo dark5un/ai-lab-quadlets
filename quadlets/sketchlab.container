@@ -13,6 +13,8 @@ UserNS=keep-id
 Volume=%h/.local/share/sketchlab:/data:Z
 
 [Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
 Restart=on-failure
 RestartSec=10
 TimeoutStartSec=900

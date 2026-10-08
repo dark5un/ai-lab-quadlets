@@ -36,6 +36,8 @@ Volume=%h/.config/containers/config/llama-cpp-4070ti/presets.ini:/etc/llama-cpp/
 Volume=%h/.config/containers/config/llama-cpp/keys.txt:/etc/llama-cpp/keys.txt:ro
 
 [Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
 Restart=on-failure
 RestartSec=10
 TimeoutStartSec=1800
