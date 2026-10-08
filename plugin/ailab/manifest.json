@@ -1,7 +1,7 @@
 {
   "id": "ailab",
   "name": "AI Lab",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "author": "dark5un <dark5un@users.noreply.github.com>",
   "description": "Start/stop the ai-lab-quadlets stack from the bar; Strata gets a card selector (OFF / 5090 / 4070 Ti / BOTH), 5090 context chips (256K / 524K / 1M) and a CODER chip for the Coder beside it; llama.cpp gets one row with GPU chips.",
   "license": "MIT",
