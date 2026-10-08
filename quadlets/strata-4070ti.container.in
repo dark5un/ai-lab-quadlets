@@ -30,7 +30,11 @@ SecurityLabelDisable=true
 # Shared settings + API key (FAMILY, MODEL, VISION, LOW_RAM, API_KEY).
 EnvironmentFile=%h/.config/containers/config/strata/service.env
 # Per-variant settings. CONTEXT/KV only matter at the first setup, which
-# writes config-4070ti/strata-iq3_s.json; delete that json to re-run setup.
+# writes config-4070ti/strata-<quant>.json; delete that json to re-run setup.
+# MODEL overrides service.env (--env wins over --env-file): IQ3_XXS here,
+# picked from the 2026-10-08 quant bench (vs IQ3_S: +28% decode, +16% prefill,
+# task avg 92.57 vs 93.26). The 5090 variants stay on IQ3_S.
+Environment=MODEL=IQ3_XXS
 Environment=GPU=0
 Environment=CONTEXT=262144
 Environment=KV=int8
