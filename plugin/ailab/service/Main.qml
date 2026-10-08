@@ -9,6 +9,9 @@ import Quickshell.Io
 // scripts/ai-lab, which reads services.json) and exposes the parsed service
 // list to the widget and the panel. Toggling a service shells out to
 // `ai-lab toggle <name>`, which drives `systemctl --user` on the quadlet unit.
+// Strata's three GPU variants (registry group "strata") are one row with a
+// selector: `ai-lab strata 5090|4070ti|both|off` (Conflicts= in the units
+// stops the running variant, and rizzo when the 4070 Ti is taken).
 Item {
     id: svc
 
@@ -17,17 +20,50 @@ Item {
     readonly property var settings: pluginApi ? pluginApi.pluginSettings : null
 
     // Parsed rows from `ai-lab status --json`:
-    // { name, unit, host_port, bind, tier, boot, state, health }
+    // { name, unit, host_port, bind, tier, boot, group, variant, installed,
+    //   state, health }
     property var services: []
     property string lastError: ""
     property string pendingToggle: ""
+    property string pendingVariant: ""
+
+    // Rows for the plain START/STOP list: services deployed on this host
+    // (registry entries whose quadlet is not installed are hidden), plus one
+    // synthesized row for ComfyUI, whose card the arbiter picks (the variant
+    // is shown as `card`). Strata has its own selector row.
+    readonly property var plainServices: {
+        const rows = services.filter(s => s.installed && !s.group);
+        const comfy = services.filter(s => s.installed && s.group === "comfyui");
+        if (comfy.length > 0) {
+            const live = comfy.find(s => s.state === "running" || s.state === "starting");
+            const base = live || comfy[0];
+            rows.push(Object.assign({}, base, {
+                name: "comfyui",
+                card: live ? live.variant : "",
+                state: live ? live.state : "stopped",
+                health: live ? live.health : "-"
+            }));
+        }
+        return rows;
+    }
+
+    // The strata group: its deployed variants and the live one ("off" if none).
+    readonly property var strataVariants:
+        services.filter(s => s.installed && s.group === "strata")
+    readonly property var strataLive: {
+        for (const s of strataVariants)
+            if (s.state === "running" || s.state === "starting") return s;
+        return null;
+    }
+    readonly property string strataVariant: strataLive ? strataLive.variant : "off"
 
     readonly property int runningCount: {
-        let n = 0;
-        for (const s of services) if (s.state === "running") n += 1;
+        let n = strataLive ? 1 : 0;
+        for (const s of plainServices) if (s.state === "running") n += 1;
         return n;
     }
-    readonly property int totalCount: services.length
+    readonly property int totalCount:
+        plainServices.length + (strataVariants.length > 0 ? 1 : 0)
 
     readonly property int pollMs: {
         const sec = svc.settings ? (svc.settings.pollSec ?? 10) : 10;
@@ -51,6 +87,33 @@ Item {
                     health: s.state === "running" ? "down" : "up"
                 })
                 : s);
+    }
+
+    // Switch strata to a variant (5090 | 4070ti | both) or "off". The start
+    // blocks until the old variant has stopped, so it runs in its own process;
+    // the poll shows the new state.
+    function switchStrata(variant) {
+        if (strataProc.running) return;
+        svc.pendingVariant = variant;
+        strataProc.running = true;
+        // Optimistic: mark the chosen variant starting, the others stopped.
+        svc.services = svc.services.map(s =>
+            s.group === "strata"
+                ? Object.assign({}, s, {
+                    state: s.variant === variant ? "starting" : "stopped",
+                    health: "-"
+                })
+                : s);
+    }
+
+    Process {
+        id: strataProc
+        command: [(svc.pluginApi ? svc.pluginApi.pluginDir : "") + "/bin/ai-lab",
+                  "strata", svc.pendingVariant]
+        onExited: (code) => {
+            if (code !== 0) svc.lastError = "strata " + svc.pendingVariant + " failed (exit " + code + ")";
+            svc.refresh();
+        }
     }
 
     // Open a service's web surface in the default browser, then close the

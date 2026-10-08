@@ -1,9 +1,9 @@
 {
   "id": "ailab",
   "name": "AI Lab",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "dark5un <dark5un@users.noreply.github.com>",
-  "description": "Start/stop the ai-lab-quadlets stack (llama.cpp, Open WebUI, ComfyUI, Sketchlab, HyperFrames, Strata) from the bar.",
+  "description": "Start/stop the ai-lab-quadlets stack from the bar, and switch Strata between its GPU variants (5090 / 4070 Ti / both / off).",
   "license": "MIT",
   "official": false,
   "hosts": [

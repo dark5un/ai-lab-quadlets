@@ -14,7 +14,8 @@
       "boot": true,
       "auth": "none",
       "image_digest": "ghcr.io/ggml-org/llama.cpp@sha256:e8318a7b3988f9ca57b28c03486569e60def08f2b7b060550ebfa046e175e6cb",
-      "note": "open mode: no --api-key enforced (keys.txt is mounted but unused)"
+      "note": "open mode: no --api-key enforced (keys.txt is mounted but unused)",
+      "gpu": "5090"
     },
     {
       "name": "llama-cpp-research",
@@ -29,21 +30,59 @@
       "boot": false,
       "auth": "none",
       "image_digest": "ghcr.io/ggml-org/llama.cpp@sha256:e8318a7b3988f9ca57b28c03486569e60def08f2b7b060550ebfa046e175e6cb",
-      "note": "open mode: no --api-key enforced (keys.txt is mounted but unused)"
+      "note": "open mode: no --api-key enforced (keys.txt is mounted but unused)",
+      "gpu": "4070ti"
     },
     {
-      "name": "strata",
-      "unit": "strata.service",
+      "name": "strata-5090",
+      "unit": "strata-5090.service",
       "container": "systemd-strata",
       "host_port": 11434,
       "container_port": 8080,
       "bind": "0.0.0.0",
       "health": "/health",
       "tier": "optional",
-      "image": "localhost/strata:rtx5090",
-      "boot": true,
+      "image": "localhost/strata:multi",
+      "boot": false,
       "auth": "api-key",
-      "note": "port 11434 (Ollama-default slot), LAN bind (every request requires the API key); built from ~/workspace/github.com/Niko1221/Strata"
+      "group": "strata",
+      "variant": "5090",
+      "note": "RTX 5090; one strata variant at a time (same port + container name); strata owns its card(s): scripts/gpu-arbiter.py moves/stops other GPU services; LAN bind, every request requires the API key; built from ~/workspace/github.com/Niko1221/Strata",
+      "gpu": "5090"
+    },
+    {
+      "name": "strata-4070ti",
+      "unit": "strata-4070ti.service",
+      "container": "systemd-strata",
+      "host_port": 11434,
+      "container_port": 8080,
+      "bind": "0.0.0.0",
+      "health": "/health",
+      "tier": "optional",
+      "image": "localhost/strata:multi",
+      "boot": false,
+      "auth": "api-key",
+      "group": "strata",
+      "variant": "4070ti",
+      "note": "RTX 4070 Ti; one strata variant at a time (same port + container name); strata owns its card(s): scripts/gpu-arbiter.py moves/stops other GPU services; LAN bind, every request requires the API key; built from ~/workspace/github.com/Niko1221/Strata",
+      "gpu": "4070ti"
+    },
+    {
+      "name": "strata-both",
+      "unit": "strata-both.service",
+      "container": "systemd-strata",
+      "host_port": 11434,
+      "container_port": 8080,
+      "bind": "0.0.0.0",
+      "health": "/health",
+      "tier": "optional",
+      "image": "localhost/strata:multi",
+      "boot": false,
+      "auth": "api-key",
+      "group": "strata",
+      "variant": "both",
+      "note": "RTX 5090 + RTX 4070 Ti (layer split); one strata variant at a time (same port + container name); strata owns its card(s): scripts/gpu-arbiter.py moves/stops other GPU services; LAN bind, every request requires the API key; built from ~/workspace/github.com/Niko1221/Strata",
+      "gpu": "both"
     },
     {
       "name": "rizzo",
@@ -57,7 +96,8 @@
       "image": "localhost/rizzo-flow:4b-q8_0",
       "boot": true,
       "auth": "none",
-      "note": "Rizzo Flow local Jev-compatible System One decisions (POST /v1/systemone); llama.cpp CUDA on 4070 Ti; built from containers/rizzo-flow/"
+      "note": "Rizzo Flow local Jev-compatible System One decisions (POST /v1/systemone); llama.cpp CUDA on 4070 Ti; built from containers/rizzo-flow/",
+      "gpu": "4070ti"
     },
     {
       "name": "open-webui",
@@ -74,8 +114,8 @@
       "image_digest": "ghcr.io/open-webui/open-webui@sha256:41daa0cf2561a5d4c8d1ff31ee2a98d93ab4d3ac2605cac69366ff6a3374a933"
     },
     {
-      "name": "comfyui",
-      "unit": "comfyui.service",
+      "name": "comfyui-5090",
+      "unit": "comfyui-5090.service",
       "container": "systemd-comfyui",
       "host_port": 3101,
       "container_port": 8188,
@@ -83,8 +123,29 @@
       "health": "/",
       "tier": "image",
       "image": "localhost/comfyui:v0.34.0-cu130",
-      "boot": true,
-      "auth": "none"
+      "boot": false,
+      "auth": "none",
+      "gpu": "5090",
+      "group": "comfyui",
+      "variant": "5090",
+      "note": "RTX 5090; runs on the card strata is not on (scripts/gpu-arbiter.py moves it); one variant at a time, same port + container name"
+    },
+    {
+      "name": "comfyui-4070ti",
+      "unit": "comfyui-4070ti.service",
+      "container": "systemd-comfyui",
+      "host_port": 3101,
+      "container_port": 8188,
+      "bind": "0.0.0.0",
+      "health": "/",
+      "tier": "image",
+      "image": "localhost/comfyui:v0.34.0-cu130",
+      "boot": false,
+      "auth": "none",
+      "gpu": "4070ti",
+      "group": "comfyui",
+      "variant": "4070ti",
+      "note": "RTX 4070 Ti; runs on the card strata is not on (scripts/gpu-arbiter.py moves it); one variant at a time, same port + container name"
     },
     {
       "name": "sketchlab",

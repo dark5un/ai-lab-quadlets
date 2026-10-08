@@ -1,0 +1,35 @@
+# ComfyUI on the RTX 4070 Ti.
+# ComfyUI runs on the card strata is NOT on: scripts/gpu-arbiter.py (via
+# `ai-lab start comfyui` or the AI Lab bar widget) picks this variant or
+# comfyui-5090, and moves it when strata moves. Strata off -> the 4070 Ti.
+# Both variants share the container name and port 3101; Conflicts= keeps one.
+# No [Install]: nothing starts at boot.
+# GPU: pinned by UUID at the CUDA layer (CUDA_VISIBLE_DEVICES), the stack's
+# convention for non-strata services. Placeholders are filled in at install.
+
+[Unit]
+Description=ComfyUI (RTX 4070 Ti)
+Wants=ai-network.service
+After=ai-network.service
+Conflicts=comfyui-5090.service
+
+[Container]
+ContainerName=systemd-comfyui
+# Custom build - see containers/comfyui/Containerfile.
+Image=localhost/comfyui:v0.34.0-cu130
+Network=ai.network
+PublishPort=0.0.0.0:3101:8188/tcp
+Volume=%h/.local/share/comfyui:/data:Z
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=XDG_CACHE_HOME=/data/user/.cache
+Environment=HF_HOME=/data/user/.cache/huggingface
+AddDevice=nvidia.com/gpu=all
+Environment=CUDA_VISIBLE_DEVICES=__GPU_4070TI_UUID__
+SecurityLabelDisable=true
+
+[Service]
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=900
+TimeoutStopSec=120

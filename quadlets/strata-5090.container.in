@@ -1,0 +1,47 @@
+# Strata variant: RTX 5090 32 GB.
+# Rendered by scripts/install-strata.sh (GPU UUIDs filled in from nvidia-smi).
+# One of strata-5090 / strata-4070ti / strata-both runs at a time: they share
+# the container name (clients use http://systemd-strata:8080) and host port
+# 11434, and Conflicts= makes systemd stop the running one first.
+# Strata owns its card(s). Use `ai-lab` / the bar widget to start GPU services:
+# scripts/gpu-arbiter.py moves strata or ComfyUI to the other card. Conflicts=
+# below is only the backstop for a bare `systemctl start`, which STOPS the
+# other side instead of moving it (Conflicts= works in both directions).
+# No [Install]: nothing starts at boot; switch with `ai-lab strata 5090` or the
+# AI Lab bar widget.
+
+[Unit]
+Description=Strata Qwen model server (RTX 5090 32 GB)
+Wants=ai-network.service
+After=ai-network.service
+Conflicts=strata-4070ti.service strata-both.service llama-cpp-main.service comfyui-5090.service
+StartLimitIntervalSec=20min
+StartLimitBurst=2
+
+[Container]
+ContainerName=systemd-strata
+Image=localhost/strata:multi
+Network=ai.network
+# The container sees only the card(s) below, so nvidia-smi and CUDA agree on
+# the numbering inside it; GPU=0 is that card.
+AddDevice=nvidia.com/gpu=__GPU_5090_UUID__
+SecurityLabelDisable=true
+# Shared settings + API key (FAMILY, MODEL, VISION, LOW_RAM, API_KEY).
+EnvironmentFile=%h/.config/containers/config/strata/service.env
+# Per-variant settings. CONTEXT/KV only matter at the first setup, which
+# writes config-5090/strata-iq3_s.json; delete that json to re-run setup.
+Environment=GPU=0
+Environment=CONTEXT=262144
+Environment=KV=int8
+# Model data is shared by all variants; the setup config is per variant.
+Volume=%h/.local/share/strata/models:/data/models:z
+Volume=%h/.local/share/strata/mtp:/data/mtp:z
+Volume=%h/.local/share/strata/packs:/data/packs:z
+Volume=%h/.local/share/strata/config-5090:/data/config:Z
+PublishPort=0.0.0.0:11434:8080/tcp
+
+[Service]
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=1800
+TimeoutStopSec=120

@@ -41,7 +41,7 @@ reboots, and can be rehydrated on a fresh machine with one command.
 | **systemd-sketchlab** | diagram | `3102` | Diagramming SPA with local LLM support |
 | **systemd-deepseek-harness** | optional | `127.0.0.1:3105` | Agent runtime; host-loopback only, explicit opt-in |
 | **systemd-hermes** | optional | `3104` | Containerized Hermes gateway (explicit opt-in; separate from host Hermes Agent) |
-| **systemd-strata** | optional | `0.0.0.0:11434` | Strata OpenAI-compatible API, pinned to the RTX 5090, LAN bind, API key required |
+| **systemd-strata** | optional | `0.0.0.0:11434` | Strata OpenAI-compatible API; variants strata-5090 / strata-4070ti / strata-both (one at a time), LAN bind, API key required |
 | **systemd-hyperframes** | video | `3103` | HTML-to-video render API (headless) |
 
 > **Container naming:** All containers are prefixed with `systemd-` to avoid conflicts
@@ -107,24 +107,67 @@ These options run the full installer; the service-only Quadlet templates remain
 in `quadlets/` for manual deployment too. This containerized Hermes service is not
 the host Hermes Agent used to manage this machine.
 
-### Strata on the RTX 5090
+### Strata: three GPU variants
 
-Strata is an explicit opt-in. Its installer builds the local checkout in
-`~/workspace/github.com/Niko1221/Strata` for CUDA architecture 120, writes a
-Quadlet pinned to the RTX 5090, generates a protected API key, and joins the
-existing `systemd-ai` network. It does not start Strata or download its model:
+Strata runs in one of three variants, one at a time, all on port 11434 with
+the same container name (`systemd-strata`) and API key:
+
+| variant | GPU(s) | notes |
+|---|---|---|
+| `strata-5090` | RTX 5090 32 GB | |
+| `strata-4070ti` | RTX 4070 Ti 12 GB | |
+| `strata-both` | 5090 + 4070 Ti | Strata's layer split (`GPUS=0,1`, 5090 = main card) |
+
+`./scripts/install-strata.sh` builds `localhost/strata:multi` from
+`~/workspace/github.com/Niko1221/Strata` for CUDA 120 + 89 (if missing;
+`--rebuild` forces it), renders the three units with the GPU UUIDs, and
+reloads systemd. Nothing starts at boot (no `[Install]`); switch with the AI
+Lab bar widget or:
 
 ```bash
-./scripts/install-strata.sh
-./scripts/ai-lab status strata
-# When ready for the first ~84 GB IQ3_S model download:
-systemctl --user start strata.service
+./scripts/ai-lab strata 5090      # or 4070ti | both | off; add --dry-run to preview
+./scripts/ai-lab strata           # prints the live variant
 ```
 
-The service is a systemd-generated Quadlet unit; the installer never starts it
-and the first start downloads roughly 84 GB of IQ3_S model data. Once the model
-is on disk, the unit is wired into `default.target` (boot=true in
-`services.json`) so it comes back after every login.
+Data: the model files (`~/.local/share/strata/{models,mtp,packs}`, ~86 GB) are
+shared; each variant keeps its own setup in `config-<variant>/strata-iq3_s.json`
+(KV/context ladder, card choice AND the API key, which wins over the env
+`API_KEY`). A variant with an empty config dir runs Strata's setup on its
+first start from the unit's `CONTEXT`/`KV`/`GPU(S)` env; delete the json to
+re-run it. Shared settings and the key live in
+`~/.config/containers/config/strata/service.env` (mode 600).
+
+GPU pinning: the strata units add the CDI device by UUID
+(`AddDevice=nvidia.com/gpu=GPU-…`) so nvidia-smi (which Strata's setup reads)
+and CUDA see the same cards in the same order. This is safe here because the
+CDI spec is `/var/run/cdi/nvidia.yaml`, regenerated every boot by
+`nvidia-cdi-refresh`; a static `/etc/cdi/nvidia.yaml` can go stale when
+/dev/nvidiaN minors reshuffle, which is why the other services pin with
+`CUDA_VISIBLE_DEVICES=<uuid>` instead.
+
+### GPU rules
+
+Strata has priority: it is the only service that owns a card. `ai-lab
+start|stop|toggle|strata` and the bar widget go through
+`scripts/gpu-arbiter.py`, which applies:
+
+| service | card |
+|---|---|
+| strata-5090 / -4070ti / -both | 5090 / 4070 Ti / both |
+| llama-cpp-main | 5090 |
+| llama-cpp-research, rizzo | 4070 Ti |
+| comfyui (`comfyui-5090` / `comfyui-4070ti`) | the card strata is NOT on (strata off: 4070 Ti) |
+
+1. Starting a GPU service on the card strata occupies moves strata to the
+   other card (strata-both drops to the other card). Strata off stays off.
+2. Starting a single-card strata variant stops every other service on that
+   card, except ComfyUI, which moves to the other card.
+3. Starting strata-both stops every GPU service.
+4. Other GPU services may share a card with each other.
+
+`ai-lab start <name> --dry-run` prints the plan. The strata units' `Conflicts=`
+is only a backstop: a bare `systemctl --user start` of a conflicting unit
+stops the other side instead of moving it.
 
 Host API: `http://<host-LAN-IP>:11434/v1` (the unit publishes on `0.0.0.0`;
 every request must carry the API key — from the host itself use

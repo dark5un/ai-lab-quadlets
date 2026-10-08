@@ -5,10 +5,16 @@
 # Usage:
 #   ai-lab status [--json]        live state of every registered service
 #   ai-lab info [name]            registry metadata (one service or all)
-#   ai-lab start <name>           systemctl --user start
-#   ai-lab stop <name>            systemctl --user stop
-#   ai-lab restart <name>         systemctl --user restart
-#   ai-lab toggle <name>          start if stopped, stop if running
+#   ai-lab start <name> [--dry-run]   start, applying the GPU rules
+#   ai-lab stop <name> [--dry-run]    stop
+#   ai-lab toggle <name> [--dry-run]  start if stopped, stop if running
+#   ai-lab restart <name>             systemctl --user restart
+#   ai-lab strata [VARIANT]           live strata variant, or switch: 5090|4070ti|both|off
+#
+# <name> is a service or a group (strata, comfyui). start/stop/toggle/strata go
+# through scripts/gpu-arbiter.py: strata owns its card(s); starting a GPU
+# service on strata's card moves strata to the other card; ComfyUI runs on the
+# card strata is not on. --dry-run prints the plan.
 #   ai-lab url <name>             browser launch URL (token-aware for dsh)
 #   ai-lab ports                  name -> host port table
 set -euo pipefail
@@ -20,8 +26,10 @@ registry_get() {  # registry_get <name> <field>
     python3 - "$REGISTRY" "$1" "$2" <<'EOF'
 import json, sys
 reg = json.load(open(sys.argv[1]))
+# A group name (strata, comfyui) resolves to its first member: the members
+# share port, health path and container name.
 for s in reg["services"]:
-    if s["name"] == sys.argv[2]:
+    if sys.argv[2] in (s["name"], s.get("group")):
         print(s[sys.argv[3]]); sys.exit(0)
 sys.exit(1)
 EOF
@@ -35,51 +43,94 @@ check_name() {
     registry_get "$1" name >/dev/null 2>&1 || { echo "ai-lab: unknown service '$1' (known: $(registry_names | tr '\n' ' '))" >&2; exit 1; }
 }
 
+ARBITER="$(dirname "$REGISTRY")/scripts/gpu-arbiter.py"
+arbiter() {  # arbiter start|stop|toggle <name> [--dry-run]
+    python3 "$ARBITER" --registry "$REGISTRY" ${3:+"$3"} "$1" "$2"
+}
+
 svc_state() {  # running | stopped | unknown
     local st
     st=$(systemctl --user is-active "$1" 2>/dev/null || true)
     case "$st" in active) echo running;; inactive|failed) echo stopped;; *) echo unknown;; esac
 }
 
-svc_health() {  # any HTTP response counts as up (some APIs 404 on /)
-    local port=$1 path=$2 code
-    code=$(curl -s -m 3 -o /dev/null -w '%{http_code}' "http://127.0.0.1:${port}${path}" 2>/dev/null)
-    case "$code" in 000|"") echo down ;; *) echo "up ($code)" ;; esac
-}
-
-cmd_status() {
-    local json=0
-    [ "${1:-}" = "--json" ] && json=1
-    if [ "$json" = 1 ]; then
-        python3 - "$REGISTRY" <<'EOF'
+cmd_status() {  # status [--json]
+    # One systemctl call for every unit; health is probed only for active
+    # units (a group's members share a port, and stopped units have nothing
+    # to probe). installed=false: the quadlet is not deployed on this host.
+    python3 - "$REGISTRY" "${1:-}" <<'EOF'
 import json, subprocess, sys
 reg = json.load(open(sys.argv[1]))
+as_json = sys.argv[2] == "--json"
+units = [s["unit"] for s in reg["services"]]
+show = subprocess.run(["systemctl", "--user", "show", "-p", "Id,LoadState,ActiveState", *units],
+                      capture_output=True, text=True).stdout
+props, cur = {}, {}
+for line in show.splitlines() + [""]:
+    if not line:
+        if cur.get("Id"):
+            props[cur["Id"]] = cur
+        cur = {}
+        continue
+    k, _, v = line.partition("=")
+    cur[k] = v
+STATE = {"active": "running", "activating": "starting", "deactivating": "stopping",
+         "reloading": "running", "failed": "failed"}
 out = []
 for s in reg["services"]:
-    state = subprocess.run(["systemctl","--user","is-active",s["unit"]],
-                           capture_output=True, text=True).stdout.strip() or "unknown"
-    try:
-        code = subprocess.run(["curl","-s","-m","3","-o","/dev/null","-w","%{http_code}",
+    p = props.get(s["unit"], {})
+    active = p.get("ActiveState", "inactive")
+    health = "-"
+    if active == "active":
+        code = subprocess.run(["curl", "-s", "-m", "3", "-o", "/dev/null", "-w", "%{http_code}",
                                f"http://127.0.0.1:{s['host_port']}{s['health']}"],
                               capture_output=True, text=True).stdout.strip()
-    except Exception:
-        code = "000"
-    out.append({**{k: s[k] for k in ("name","unit","host_port","bind","tier","boot")},
-                "state": "running" if state == "active" else "stopped",
-                "health": "down" if code in ("000", "") else f"up ({code})"})
-print(json.dumps(out, indent=1))
+        health = "down" if code in ("000", "") else f"up ({code})"
+    out.append({**{k: s[k] for k in ("name", "unit", "host_port", "bind", "tier", "boot")},
+                "group": s.get("group", ""), "variant": s.get("variant", ""),
+                "installed": p.get("LoadState") == "loaded",
+                "state": STATE.get(active, "stopped"), "health": health})
+if as_json:
+    print(json.dumps(out, indent=1))
+else:
+    print(f"{'SERVICE':<18} {'STATE':<9} {'TIER':<9} {'PORT':<6} HEALTH")
+    for r in out:
+        state = r["state"] if r["installed"] else "-"
+        health = r["health"] if r["installed"] else "not installed"
+        print(f"{r['name']:<18} {state:<9} {r['tier']:<9} {r['host_port']:<6} {health}")
 EOF
-    else
-        printf '%-18s %-9s %-6s %-10s %s\n' SERVICE STATE TIER PORT HEALTH
-        while IFS=$'\t' read -r name unit port bind tier boot; do
-            state=$(svc_state "$unit")
-            health=$(svc_health "$port" "$(registry_get "$name" health)")
-            printf '%-18s %-9s %-6s %-10s %s\n' "$name" "$state" "$tier" "$port" "$health"
-        done < <(python3 -c "
-import json
-for s in json.load(open('$REGISTRY'))['services']:
-    print('\t'.join(str(s[k]) for k in ('name','unit','host_port','bind','tier','boot')))")
+}
+
+group_members() {  # group_members <group> -> "name<TAB>unit<TAB>variant" lines
+    python3 - "$REGISTRY" "$1" <<'EOF'
+import json, sys
+for s in json.load(open(sys.argv[1]))["services"]:
+    if s.get("group") == sys.argv[2]:
+        print(f"{s['name']}\t{s['unit']}\t{s.get('variant', '')}")
+EOF
+}
+
+cmd_strata() {  # strata [5090|4070ti|both|off] [--dry-run]
+    local want="${1:-}" name unit variant
+    if [ -z "$want" ]; then  # report the live variant
+        while IFS=$'\t' read -r name unit variant; do
+            [ "$(svc_state "$unit")" = running ] && { echo "$variant"; return; }
+        done < <(group_members strata)
+        echo off
+        return
     fi
+    if [ "$want" = off ]; then
+        arbiter stop strata "${2:-}"
+        return
+    fi
+    while IFS=$'\t' read -r name unit variant; do
+        if [ "$variant" = "$want" ]; then
+            arbiter start "$name" "${2:-}"
+            return
+        fi
+    done < <(group_members strata)
+    echo "ai-lab: unknown strata variant '$want' (5090|4070ti|both|off)" >&2
+    exit 1
 }
 
 cmd_ports() {
@@ -123,8 +174,11 @@ cmd_url() {  # print the browser launch URL for a service
     echo "http://${host}:${port}/"
 }
 
-action() {  # start|stop|restart <name>
+action() {  # restart <name> (a single service; a group has no single unit)
     check_name "$2"
+    if [ "$(registry_get "$2" name)" != "$2" ]; then
+        echo "ai-lab: '$2' is a group; restart one of its members" >&2; exit 1
+    fi
     systemctl --user "$1" "$(registry_get "$2" unit)"
     echo "  $1: $2"
 }
@@ -134,15 +188,11 @@ case "${1:-status}" in
     ports)   cmd_ports ;;
     url)     shift; cmd_url "$@" ;;
     info)    shift; cmd_info "$@" ;;
-    start)   action start "$2" ;;
-    stop)    action stop "$2" ;;
-    restart) action restart "$2" ;;
-    toggle)
+    start|stop|toggle)
+        [ -n "${2:-}" ] || { echo "usage: ai-lab $1 <name> [--dry-run]" >&2; exit 1; }
         check_name "$2"
-        if [ "$(svc_state "$(registry_get "$2" unit)")" = running ]; then
-            action stop "$2"
-        else
-            action start "$2"
-        fi ;;
-    *) echo "usage: ai-lab status [--json] | ports | url <name> | info [name] | start|stop|restart|toggle <name>" >&2; exit 1 ;;
+        arbiter "$1" "$2" "${3:-}" ;;
+    restart) action restart "$2" ;;
+    strata)  shift; cmd_strata "$@" ;;
+    *) echo "usage: ai-lab status [--json] | ports | url <name> | info [name] | start|stop|toggle <name> [--dry-run] | restart <name> | strata [5090|4070ti|both|off] [--dry-run]" >&2; exit 1 ;;
 esac

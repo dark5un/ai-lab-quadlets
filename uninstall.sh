@@ -50,7 +50,8 @@ echo ""
 # ─── Remove quadlet files ─────────────────────────────────────────────────
 echo "[2/3] Removing quadlet files..."
 for f in ai.network caddy.container comfyui.container hermes.container \
-         deepseek-harness.container strata.container llama-cpp-cpu.container \
+         deepseek-harness.container strata.container strata-*.container \
+         comfyui-*.container llama-cpp-cpu.container \
          llama-cpp-main.container llama-cpp-research.container \
          llama-cpp-extra-*.container open-webui.container sketchlab.container \
          hyperframes.container; do
