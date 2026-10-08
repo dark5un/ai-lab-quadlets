@@ -1,126 +1,103 @@
 #!/usr/bin/env bash
-# hf-download — Download a GGUF model from HuggingFace with a specific
-# quantization, place it where llama.cpp expects, and register it in presets.ini.
+# hf-download — fetch a GGUF into the Hugging Face cache (one copy) and make it
+# available to one or more llama.cpp servers by HARDLINKING it into their
+# per-card model dirs. A model on two cards costs disk once.
 #
-# Usage:
-#   hf-download <repo> [filter]
+#   hf-download <repo> [quant-or-glob] --card 5090|4070ti|both[,...] [--name NAME]
+#   hf-download --remove NAME --card 5090|4070ti|both[,...]
+#   hf-download --list
 #
 # Examples:
-#   hf-download unsloth/Qwen3.8-27B-GGUF UD-IQ1_M
-#   hf-download bartowski/Llama-3.2-3B-Instruct-GGUF IQ4_XS
-#   hf-download unsloth/Qwen3.8-27B-GGUF            (downloads all *.gguf)
+#   hf-download unsloth/Qwen3.8-27B-GGUF UD-Q4_K_XL --card 5090
+#   hf-download bartowski/Llama-3.2-3B-Instruct-GGUF IQ4_XS --card 5090,4070ti
+#   hf-download --remove Llama-3.2-3B-Instruct-IQ4_XS --card 4070ti
 #
-# Downloads to: ~/.local/share/llama.cpp/models/ (shared by both cards)
-# Updates:      ~/.config/containers/config/llama-cpp-<card>/presets.ini
-#               (LLAMA_CARD=5090 default, or 4070ti: sizes ctx for that card)
-#
-# Requires the `hf` CLI (huggingface_hub).
-
+# Library:  ~/.cache/huggingface/hub (hf CLI default cache)
+# Per card: ~/.local/share/llama.cpp/cards/<card>/<name>/<file(s)>.gguf
+#           the router's model id is <name>; default <name> = file name minus
+#           .gguf and minus the -0000N-of-0000M split suffix.
+# Then:     refresh-presets.py --card <card> --write (hardware-fitted ctx per
+#           model) and a restart of llama-cpp-<card> if it is running (the
+#           router scans its dir at startup only).
+# Set HF_DOWNLOAD_NO_REFRESH=1 to skip the refresh + restart (batch use).
 set -euo pipefail
 
-MODELS_DIR="${HOME}/.local/share/llama.cpp/models"
-CARD="${LLAMA_CARD:-5090}"
-case "$CARD" in 5090) PORT=11435 ;; 4070ti) PORT=11436 ;;
-    *) echo "LLAMA_CARD must be 5090 or 4070ti" >&2; exit 2 ;; esac
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+MODELS="${SCRIPT_DIR}/llama-models.py"
+REFRESH="${SCRIPT_DIR}/refresh-presets.py"
 
-usage() {
-    echo "Usage: hf-download <repo> [quantization-or-filter]"
-    echo ""
-    echo "Examples:"
-    echo "  hf-download unsloth/Qwen3.8-27B-GGUF UD-IQ1_M"
-    echo "  hf-download bartowski/Llama-3.2-3B-Instruct-GGUF IQ4_XS"
-    echo "  hf-download unsloth/Qwen3.8-27B-GGUF"
-    exit 0
+usage() { sed -n '2,22p' "$(readlink -f "${BASH_SOURCE[0]}")" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+
+REPO="" FILTER="" CARDS="" NAME="" REMOVE="" LIST=0
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -h|--help) usage ;;
+        --card) CARDS="${2:?--card needs a value}"; shift 2 ;;
+        --card=*) CARDS="${1#*=}"; shift ;;
+        --name) NAME="${2:?--name needs a value}"; shift 2 ;;
+        --remove) REMOVE="${2:?--remove needs a model name}"; shift 2 ;;
+        --list) LIST=1; shift ;;
+        -*) echo "hf-download: unknown option $1" >&2; usage 2 ;;
+        *) if [ -z "$REPO" ]; then REPO="$1"; elif [ -z "$FILTER" ]; then FILTER="$1";
+           else echo "hf-download: unexpected argument $1" >&2; usage 2; fi; shift ;;
+    esac
+done
+
+if [ "$LIST" = 1 ]; then exec python3 "$MODELS" list; fi
+
+refresh_and_restart() {  # refresh_and_restart <card>...
+    if [ "${HF_DOWNLOAD_NO_REFRESH:-0}" = 1 ]; then
+        echo "  (HF_DOWNLOAD_NO_REFRESH=1: presets + restart deferred)"; return 0
+    fi
+    local card presets
+    for card in "$@"; do
+        presets="${HOME}/.config/containers/config/llama-cpp-${card}/presets.ini"
+        if [ -f "$presets" ]; then
+            if python3 "$REFRESH" --card "$card" --write >/dev/null; then
+                echo "  presets refreshed: $presets"
+            else
+                echo "  ! refresh-presets.py --card $card failed (run it by hand to see why)"
+            fi
+        else
+            echo "  ~ no $presets yet (run install.sh); presets not refreshed"
+        fi
+        if systemctl --user is-active --quiet "llama-cpp-${card}.service"; then
+            echo "  restarting llama-cpp-${card} (the router scans its models dir at startup)"
+            systemctl --user restart "llama-cpp-${card}.service" || true
+        fi
+    done
 }
 
-[ $# -lt 1 ] && usage
-[[ "$1" == "-h" || "$1" == "--help" ]] && usage
-
-REPO="$1"
-FILTER="${2:-*.gguf}"
-
-# Allow bare quant like "UD-IQ1_M" → "*UD-IQ1_M*.gguf" pattern
-case "$FILTER" in
-    *\.gguf) ;;                    # already a filename pattern
-    *\**) ;;                       # already a glob
-    *) FILTER="*${FILTER}*.gguf" ;; # bare quant → glob
-esac
-
-# ─── Prerequisites ────────────────────────────────────────────────────────
-if ! command -v hf &>/dev/null; then
-    echo "Error: Hugging Face CLI (hf) not found."
-    echo "Install one of:"
-    echo "  brew install hf"
-    echo "  pip install huggingface_hub"
-    echo "  curl -LsSf https://hf.co/cli/install.sh | bash"
-    exit 1
-fi
-
-# ─── Target directory ─────────────────────────────────────────────────────
-REPO_SLUG=$(basename "$REPO")
-TARGET_DIR="${MODELS_DIR}/${REPO_SLUG}"
-mkdir -p "$TARGET_DIR"
-
-echo "=== hf-download ==="
-echo "  Repo:   $REPO"
-echo "  Filter: $FILTER"
-echo "  Target: $TARGET_DIR"
-echo ""
-
-# ─── Download ─────────────────────────────────────────────────────────────
-echo "Downloading (this may take a while)..."
-hf download "$REPO" --include "$FILTER" --local-dir "$TARGET_DIR" \
-    || { echo "Download failed (filter may match nothing)."; exit 1; }
-echo ""
-
-# ─── Find what we got ─────────────────────────────────────────────────────
-GGUF_FILES=()
-while IFS= read -r f; do
-    GGUF_FILES+=("$f")
-done < <(find "$TARGET_DIR" -maxdepth 1 -name "*.gguf" 2>/dev/null | sort)
-
-if [ ${#GGUF_FILES[@]} -eq 0 ]; then
-    echo "No .gguf files matched '$FILTER' in $REPO."
-    exit 1
-fi
-
-echo "Downloaded ${#GGUF_FILES[@]} file(s):"
-for f in "${GGUF_FILES[@]}"; do
-    echo "  • $(basename "$f")  ($(du -h "$f" | cut -f1))"
+[ -n "$CARDS" ] || { echo "hf-download: --card 5090|4070ti|both[,...] is required" >&2; usage 2; }
+IFS=, read -r -a CARD_LIST <<<"$CARDS"
+for c in "${CARD_LIST[@]}"; do
+    case "$c" in 5090|4070ti|both) ;;
+        *) echo "hf-download: unknown card '$c' (5090 | 4070ti | both)" >&2; exit 2 ;; esac
 done
-echo ""
 
-# ─── Register in presets.ini via the hardware calculator ────────────────
-# Delegate to refresh-presets.py so the value is computed from the real GGUF
-# (train-capped native ctx), not hardcoded, and sections use the directory
-# name that matches the llama.cpp router model id. Avoids the filename-vs-
-# directory convention clash and the router-stripped `m =` key.
-#
-# Set HF_DOWNLOAD_NO_REFRESH=1 to skip refresh AND restart — used by
-# download-gguf-series.sh which defers both until every model has landed.
-if [ "${HF_DOWNLOAD_NO_REFRESH:-0}" = "1" ]; then
-    echo "  (HF_DOWNLOAD_NO_REFRESH=1 — deferring preset refresh + restart)"
-    echo ""
-    echo "Done. Verify with: curl -H \"Authorization: Bearer <key>\" http://127.0.0.1:${PORT}/v1/models"
+if [ -n "$REMOVE" ]; then
+    python3 "$MODELS" unlink "$REMOVE" --card "$CARDS"
+    refresh_and_restart "${CARD_LIST[@]}"
     exit 0
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REFRESH="${SCRIPT_DIR}/refresh-presets.py"
-if [ ! -f "$REFRESH" ]; then
-    echo "  ! refresh-presets.py not found next to hf-download (${REFRESH})"
-    echo "    Downloaded but NOT registered. Run it manually after configuring models."
-else
-    echo "  → Refreshing per-model presets with hardware-fitted ctx..."
-    python3 "$REFRESH" --card "$CARD" --write || echo "  ! refresh-presets.py failed (see above)"
-fi
+[ -n "$REPO" ] || usage 2
+FILTER="${FILTER:-*.gguf}"
+case "$FILTER" in
+    *.gguf|*\**) ;;                   # already a file name or glob
+    *) FILTER="*${FILTER}*.gguf" ;;   # bare quant, e.g. IQ4_XS
+esac
 
-# ─── Restart llama.cpp ────────────────────────────────────────────────────
-if systemctl --user is-active "llama-cpp-${CARD}.service" &>/dev/null; then
-    echo ""
-    echo "Restarting llama-cpp-${CARD}.service to pick up new model..."
-    systemctl --user restart "llama-cpp-${CARD}.service" || true
-fi
+command -v hf >/dev/null 2>&1 || {
+    echo "hf-download: the Hugging Face CLI 'hf' is not installed:" >&2
+    echo "  sudo pacman -S python-huggingface-hub" >&2
+    exit 1
+}
 
-echo ""
-echo "Done. Verify with: curl -H \"Authorization: Bearer <key>\" http://127.0.0.1:${PORT}/v1/models"
+echo "=== hf-download: $REPO  [$FILTER] -> cards: $CARDS"
+# Match the pattern at the repo root and in subfolders (some repos keep each
+# quant's split parts in a folder of its own).
+hf download "$REPO" --include "$FILTER" --include "*/$FILTER" >/dev/null
+python3 "$MODELS" link "$REPO" "$FILTER" --card "$CARDS" ${NAME:+--name "$NAME"}
+refresh_and_restart "${CARD_LIST[@]}"
+echo "Done. Models per card: hf-download --list"

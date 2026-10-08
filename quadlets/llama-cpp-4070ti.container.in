@@ -26,8 +26,9 @@ UserNS=keep-id
 # Containers on systemd-ai: http://systemd-llama-cpp-4070ti:8080/v1
 PublishPort=0.0.0.0:11436:8080
 
-# Shared read-only model library (both cards serve from it).
-Volume=%h/.local/share/llama.cpp/models:/models:ro,Z
+# Models linked for this card only (hardlinks into the HF cache; see
+# scripts/hf-download.sh --card). One subdir per model; id = dir name.
+Volume=%h/.local/share/llama.cpp/cards/4070ti:/models:ro,Z
 # Per-card router settings and presets.
 EnvironmentFile=%h/.config/containers/config/llama-cpp-4070ti/service.env
 Volume=%h/.config/containers/config/llama-cpp-4070ti/presets.ini:/etc/llama-cpp/presets.ini:ro,Z

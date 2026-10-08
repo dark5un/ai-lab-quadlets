@@ -1,101 +1,64 @@
 #!/usr/bin/env bash
-# download-gguf-series.sh — Download a LIST of GGUF models in series via
-# hf-download.sh, then refresh per-model presets once at the end.
+# download-gguf-series.sh — run hf-download for a LIST of models in series,
+# then refresh presets and restart the affected llama.cpp servers once.
 #
-# The model list is external data so this script never goes stale: edit the
-# list, not the script. One entry per line:
-#
-#     repo|filename-or-filter
-#
-#   repo                 HuggingFace repo, e.g. unsloth/Qwen3.8-27B-GGUF
-#   filename-or-filter   exact .gguf filename (preferred — globs are
-#                        case-sensitive, e.g. Q4_K_M != q4_k_m) or a glob/substr
-#
-# Blank lines and lines starting with # are ignored.
-#
-# Usage:
 #   download-gguf-series.sh [list-file]
-#   # default list: ~/.config/llama.cpp/gguf-download-list.txt
-#   # see scripts/gguf-download-list.example for the format
-
+#   default list: ~/.config/llama.cpp/gguf-download-list.txt
+#   format (see scripts/gguf-download-list.example), one entry per line:
+#       repo|filename-or-filter|cards
+#   cards = 5090 | 4070ti | both, or a comma list (e.g. 5090,4070ti).
+#   Blank lines and lines starting with # are ignored.
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 HF_DL="${SCRIPT_DIR}/hf-download.sh"
 REFRESH="${SCRIPT_DIR}/refresh-presets.py"
-
 LIST="${1:-${HOME}/.config/llama.cpp/gguf-download-list.txt}"
-CARD="${LLAMA_CARD:-5090}"   # presets/restart target: 5090 or 4070ti
-case "$CARD" in 5090) PORT=11435 ;; 4070ti) PORT=11436 ;;
-    *) echo "LLAMA_CARD must be 5090 or 4070ti" >&2; exit 2 ;; esac
 
 if [ ! -f "$LIST" ]; then
     echo "No list file: $LIST"
-    echo "Copy scripts/gguf-download-list.example there and edit it, or pass a path:"
-    echo "  download-gguf-series.sh /path/to/list.txt"
+    echo "Copy scripts/gguf-download-list.example there and edit it, or pass a path."
     exit 1
 fi
 
-command -v hf >/dev/null 2>&1 || { echo "Error: 'hf' CLI not found."; exit 1; }
-
-# Parse entries (skip blanks/comments)
 ENTRIES=()
 while IFS= read -r line; do
-    line="${line%$'\r'}"                       # strip CR (Windows-edited lists)
-    case "$line" in
-        ''|\#*) continue ;;
-    esac
+    line="${line%$'\r'}"
+    case "$line" in ''|\#*) continue ;; esac
     ENTRIES+=("$line")
 done < "$LIST"
+[ ${#ENTRIES[@]} -gt 0 ] || { echo "List $LIST has no entries."; exit 1; }
 
-if [ ${#ENTRIES[@]} -eq 0 ]; then
-    echo "List $LIST has no entries."
-    exit 1
-fi
-
-echo "=== download-gguf-series ==="
-echo "  List:     $LIST"
-echo "  Entries:  ${#ENTRIES[@]}"
-echo ""
-
-fail=0
-i=0
+echo "=== download-gguf-series: ${#ENTRIES[@]} entries from $LIST"
+fail=0 i=0
+declare -A TOUCHED=()
 for entry in "${ENTRIES[@]}"; do
     i=$((i+1))
-    repo="${entry%%|*}"
-    filter="${entry#*|}"
-    if [ "$repo" = "$entry" ]; then
-        echo "──────────────── $i/${#ENTRIES[@]} : MALFORMED (no '|'): $entry"
-        fail=1
-        continue
+    IFS='|' read -r repo filter cards extra <<<"$entry"
+    if [ -z "${repo:-}" ] || [ -z "${filter:-}" ] || [ -z "${cards:-}" ] || [ -n "${extra:-}" ]; then
+        echo "── $i/${#ENTRIES[@]}: MALFORMED (want repo|filter|cards): $entry"
+        fail=1; continue
     fi
-    echo "──────────────── $i/${#ENTRIES[@]} : $repo  [$filter]"
-    # Defer preset refresh + restart until all downloads finish
-    if ! HF_DOWNLOAD_NO_REFRESH=1 "$HF_DL" "$repo" "$filter"; then
-        echo "  ✗ failed: $repo"
-        fail=1
+    echo "── $i/${#ENTRIES[@]}: $repo [$filter] -> $cards"
+    if HF_DOWNLOAD_NO_REFRESH=1 "$HF_DL" "$repo" "$filter" --card "$cards"; then
+        IFS=, read -r -a cl <<<"$cards"
+        for c in "${cl[@]}"; do TOUCHED[$c]=1; done
+    else
+        echo "  ✗ failed: $repo"; fail=1
     fi
-    echo ""
 done
 
-# ─── Refresh presets + restart once ───────────────────────────────────────
-echo "════════ refreshing presets for all models ════════"
-if [ -f "$REFRESH" ]; then
-    python3 "$REFRESH" --card "$CARD" --write || { echo "! refresh-presets.py failed"; fail=1; }
-else
-    echo "! refresh-presets.py not found next to this script"
-    fail=1
-fi
+for card in "${!TOUCHED[@]}"; do
+    presets="${HOME}/.config/containers/config/llama-cpp-${card}/presets.ini"
+    if [ -f "$presets" ]; then
+        python3 "$REFRESH" --card "$card" --write >/dev/null \
+            && echo "presets refreshed: $presets" || { echo "! refresh-presets.py --card $card failed"; fail=1; }
+    fi
+    if systemctl --user is-active --quiet "llama-cpp-${card}.service"; then
+        echo "restarting llama-cpp-${card}"
+        systemctl --user restart "llama-cpp-${card}.service" || true
+    fi
+done
 
-if systemctl --user is-active "llama-cpp-${CARD}.service" &>/dev/null; then
-    echo ""
-    echo "Restarting llama-cpp-${CARD}.service..."
-    systemctl --user restart "llama-cpp-${CARD}.service" || true
-fi
-
-echo ""
-if [ "$fail" -ne 0 ]; then
-    echo "Finished WITH ERRORS (see above)."
-    exit 1
-fi
-echo "Done. Verify with: curl -H \"Authorization: Bearer <key>\" http://127.0.0.1:${PORT}/v1/models"
+[ "$fail" = 0 ] || { echo "Finished WITH ERRORS (see above)."; exit 1; }
+echo "Done. Models per card: hf-download --list"

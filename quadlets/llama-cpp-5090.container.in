@@ -26,8 +26,9 @@ UserNS=keep-id
 # Containers on systemd-ai: http://systemd-llama-cpp-5090:8080/v1
 PublishPort=0.0.0.0:11435:8080
 
-# Shared read-only model library (both cards serve from it).
-Volume=%h/.local/share/llama.cpp/models:/models:ro,Z
+# Models linked for this card only (hardlinks into the HF cache; see
+# scripts/hf-download.sh --card). One subdir per model; id = dir name.
+Volume=%h/.local/share/llama.cpp/cards/5090:/models:ro,Z
 # Per-card router settings and presets.
 EnvironmentFile=%h/.config/containers/config/llama-cpp-5090/service.env
 Volume=%h/.config/containers/config/llama-cpp-5090/presets.ini:/etc/llama-cpp/presets.ini:ro,Z

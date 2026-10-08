@@ -74,7 +74,7 @@ Recommended models:
 
 **"No models available"**
 - Verify the endpoint is running: `curl http://127.0.0.1:11435/v1/models`
-- Check the model directory: `ls ~/.local/share/llama.cpp/models/`
+- Check the model directory: `hf-download --list` (models per llama.cpp server)
 
 **"Connection refused"**
 The service may not be running: `systemctl --user status llama-cpp-5090.service`

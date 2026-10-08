@@ -1,6 +1,8 @@
 # gguf-download-list — models for download-gguf-series.sh
 #
-# One entry per line:   repo|filename-or-filter
+# One entry per line:   repo|filename-or-filter|cards
+# cards: 5090 | 4070ti | both, or a comma list (5090,4070ti); the model is
+# downloaded once and hardlinked into each card's models dir.
 # Blank lines and '#' comments are ignored.
 #
 # Prefer the EXACT .gguf filename: hf's --include is case-sensitive, so a
@@ -8,5 +10,5 @@
 # (This is the bug that shipped in the old model-specific script.)
 #
 # Verified 262,144-context llama.cpp GGUF coder models (example entries):
-Terathox-Coder/Qwen3.8-27B-MTP-GGUF|Qwen3.8-27B-Q4_K_M-MTP.gguf
-Jab1718/qwen3.8-flash-coder-26gb-gguf|qwen3.8-flash-coder-26gb-q4_k_m.gguf
+Terathox-Coder/Qwen3.8-27B-MTP-GGUF|Qwen3.8-27B-Q4_K_M-MTP.gguf|5090
+Jab1718/qwen3.8-flash-coder-26gb-gguf|qwen3.8-flash-coder-26gb-q4_k_m.gguf|5090

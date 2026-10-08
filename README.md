@@ -260,7 +260,7 @@ them outside a trusted network.
 If services fail to start, create missing directories:
 
 ```bash
-mkdir -p ~/.local/share/llama.cpp/models ~/.local/share/sketchlab \
+mkdir -p ~/.local/share/llama.cpp/cards/{5090,4070ti,both} ~/.local/share/sketchlab \
          ~/.local/share/comfyui
 # Strata (optional): ~/.local/share/strata
 # Hermes/DeepSeek Harness data dirs are only needed when those services are opted in.
@@ -291,7 +291,7 @@ Preset model connections (strata, 262k context) ship as
 commented out in the template: a hand-declared provider must list at least one
 model or dsh refuses the entire `llm-pi-ai` settings section at boot, and the
 router serves no models until GGUFs are placed in
-`~/.local/share/llama.cpp/models`. Uncomment the block and list the served
+`~/.local/share/llama.cpp/cards/<card>` (hf-download --card). Uncomment the block and list the served
 model id(s) once the router has models.
 
 The web UI's "Open configuration file" button does not work in this container
@@ -412,40 +412,48 @@ they run on, and `quadlets/*.container.in` templates carry the placeholders
 fills them from `nvidia-smi` (cards matched by name, never by index) into
 `~/.config/containers/systemd/`. See `docs/gpu-assignment.md`.
 
-| llama.cpp | port | context | KV | batch / ubatch | config |
-|---|---|---|---|---|---|
-| llama-cpp-5090 | 11435 | 262,144 | q4_0 | 1024 / 256 | `config/llama-cpp-5090/` |
-| llama-cpp-4070ti | 11436 | 65,536 | q4_0 | 512 / 128 | `config/llama-cpp-4070ti/` |
+| llama.cpp | port | cards | context | KV | batch / ubatch | config |
+|---|---|---|---|---|---|---|
+| llama-cpp-5090 | 11435 | 5090 | 262,144 | q4_0 | 1024 / 256 | `config/llama-cpp-5090/` |
+| llama-cpp-4070ti | 11436 | 4070 Ti | 65,536 | q4_0 | 512 / 128 | `config/llama-cpp-4070ti/` |
+| llama-cpp-both | 11438 | 5090 + 4070 Ti, layer split (exclusive) | 262,144 | q4_0 | 1024 / 256 | `config/llama-cpp-both/` |
 
-Both serve the same model library (`~/.local/share/llama.cpp/models`) and
-share one key file (`~/.config/containers/config/llama-cpp/keys.txt`).
+All three share one key file (`~/.config/containers/config/llama-cpp/keys.txt`);
+each serves only the models linked for it (next section).
 
-## Downloading models (hf-download)
+## Models (hf-download)
 
-The installer does not download GGUF model weights. The API may be healthy but
-show zero available models and perform no inference until a model is downloaded
-and registered below.
+The installer downloads no weights: a llama.cpp server is healthy but lists no
+models until you link some.
 
-The installer puts `hf-download` in `~/.local/bin/` — a simple wrapper around
-the HuggingFace CLI that downloads a model and registers it with llama.cpp:
+- **Library**: the Hugging Face cache, `~/.cache/huggingface/hub` (one copy
+  of every file, downloaded with `hf download`).
+- **Per server**: `~/.local/share/llama.cpp/cards/<card>/<name>/<file(s)>.gguf`,
+  HARDLINKS to the library files (same btrfs subvolume, so a model on two
+  servers costs disk once). Each `llama-cpp-<card>` unit mounts only its own
+  `cards/<card>` dir read-only at `/models`, so a server never advertises a
+  model linked for another card.
+- The router lists one model per subdir; the model id is the subdir name.
+  Split models (`-00001-of-0000N`) keep every part side by side in that one
+  subdir. The default name is the file name minus `.gguf` and the split suffix.
 
 ```bash
-hf-download unsloth/Qwen3.8-27B-GGUF UD-IQ1_M
+hf-download unsloth/Qwen3.8-27B-GGUF UD-Q4_K_XL --card 5090
+hf-download bartowski/Llama-3.2-3B-Instruct-GGUF IQ4_XS --card 5090,4070ti
+hf-download Qwen/Qwen2.5-3B-Instruct-GGUF 'qwen2.5-3b-instruct-fp16-*' --card both --name qwen2.5-3b-fp16
+hf-download --remove Llama-3.2-3B-Instruct-IQ4_XS --card 4070ti   # unlink; the library keeps the file
+hf-download --list                                                # models per server + library
 ```
 
-- arg1 — HuggingFace repo ID (e.g. `unsloth/Qwen3.8-27B-GGUF`)
-- arg2 (optional) — quantization or filename filter (e.g. `UD-IQ1_M`, `*IQ4_XS.gguf`)
-
-`LLAMA_CARD=5090` (default) or `LLAMA_CARD=4070ti` picks the server the model
-is registered for: `refresh-presets.py --card <card>` writes per-model
-overrides capped by the model's trained context and that card's VRAM.
-Downloads go to `~/.local/share/llama.cpp/models/` (shared) and are registered
-in `~/.config/containers/config/llama-cpp-<card>/presets.ini`; that server
-restarts if it is running. Requires `hf` (the installer tries brew, then pip,
-then standalone installer, and tells you what's missing).
-
-To place files manually instead, drop GGUF files in
-`~/.local/share/llama.cpp/models/` and add a section to the presets.ini.
+After linking, `refresh-presets.py --card <card> --write` writes per-model
+`ctx-size` overrides (the model's trained context, capped by that server's VRAM;
+`both` sums the two cards) into `~/.config/containers/config/llama-cpp-<card>/presets.ini`,
+and a running `llama-cpp-<card>` restarts (the router scans its dir only at
+startup). `scripts/download-gguf-series.sh` does the same for a list
+(`repo|filter|cards` per line, see `scripts/gguf-download-list.example`).
+To delete a file from the library for good: unlink it from every card, then
+`hf cache rm model/<org>/<repo>`.
+Requires `hf`: `sudo pacman -S python-huggingface-hub`.
 
 ## Sketch Lab local models
 

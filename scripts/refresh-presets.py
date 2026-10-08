@@ -17,8 +17,11 @@ Usage:
                      [--presets FILE] [--write]
   (default: dry-run, prints proposed config)
 
-Model files are grouped by their directory; the largest-Q best quant in each
-directory supplies the numbers (or a file given by --model PATH targets one).
+Models live one per subdir of ~/.local/share/llama.cpp/cards/<card>/ (hardlinks
+made by hf-download); the subdir name is the router's model id and the preset
+section name. The largest file in a subdir supplies the numbers (or a file
+given by --model PATH targets one). --card both sizes for the layer split over
+both cards: VRAM = the sum of both cards, --reserve held back on each.
 """
 
 import argparse
@@ -138,7 +141,7 @@ def round_down(ctx):
 
 
 def card_index(card):
-    """nvidia-smi index of the card a llama.cpp server is pinned to (matched by name)."""
+    """nvidia-smi index of a card (matched by name, never by position)."""
     want = {"5090": "RTX 5090", "4070ti": "RTX 4070 Ti"}[card]
     out = subprocess.run(["nvidia-smi", "--query-gpu=index,name", "--format=csv,noheader"],
                          capture_output=True, text=True, check=False).stdout
@@ -174,11 +177,10 @@ def gpu_vram(idx=0):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument(
-        "--models-dir", default=os.path.expanduser("~/.local/share/llama.cpp/models")
-    )
-    ap.add_argument("--card", choices=("5090", "4070ti"), default=os.environ.get("LLAMA_CARD", "5090"),
-                    help="llama.cpp server to size for: llama-cpp-5090 or llama-cpp-4070ti")
+    ap.add_argument("--models-dir", default=None,
+                    help="default: ~/.local/share/llama.cpp/cards/<card>")
+    ap.add_argument("--card", choices=("5090", "4070ti", "both"), default=os.environ.get("LLAMA_CARD", "5090"),
+                    help="llama.cpp server to size for: llama-cpp-5090, -4070ti or -both")
     ap.add_argument("--gpu", type=int, default=None,
                     help="nvidia-smi index (default: the --card's card, found by name)")
     ap.add_argument("--cache", default="q4_0", choices=sorted(CACHE_BPE))
@@ -201,31 +203,46 @@ def main():
     if args.presets is None:
         args.presets = os.path.expanduser(
             f"~/.config/containers/config/llama-cpp-{args.card}/presets.ini")
-    if args.gpu is None:
-        args.gpu = card_index(args.card)
-
-    vram = gpu_vram(args.gpu)
-    gname = gpu_label(args.gpu)
+    if args.models_dir is None:
+        args.models_dir = os.path.expanduser(f"~/.local/share/llama.cpp/cards/{args.card}")
+    if args.card == "both" and args.gpu is None:
+        idxs = [card_index("5090"), card_index("4070ti")]
+        vram = sum(gpu_vram(i) for i in idxs)
+        args.reserve *= len(idxs)
+        gname = " + ".join(gpu_label(i) for i in idxs)
+    else:
+        if args.gpu is None:
+            args.gpu = card_index(args.card)
+        vram = gpu_vram(args.gpu)
+        gname = gpu_label(args.gpu)
     if args.model:
         files = [args.model]
     else:
         files = sorted(glob.glob(os.path.join(args.models_dir, "*", "*.gguf")))
+        # mmproj projectors ride along with a model; they are not models.
+        files = [f for f in files if not os.path.basename(f).lower().startswith("mmproj")]
     if not files:
-        sys.exit(f"no .gguf under {args.models_dir}")
+        print(f"no models under {args.models_dir}: per-model sections cleared")
 
-    # group by directory, keep best-quant (largest file) per dir as representative
+    # One model per directory. A split model's metadata lives in its first
+    # part (-00001-of-N); its weight bytes are the sum of every part.
     by_dir = {}
     for p in files:
-        d = os.path.dirname(p)
-        by_dir.setdefault(d, []).append((os.path.getsize(p), p))
-    picks = [max(v)[1] for v in by_dir.values()]
+        by_dir.setdefault(os.path.dirname(p), []).append(p)
+    picks = []
+    for d, ps in sorted(by_dir.items()):
+        firsts = [p for p in ps if "-00001-of-" in os.path.basename(p)]
+        rep = sorted(firsts)[0] if firsts else max(ps, key=os.path.getsize)
+        weight = sum(os.path.getsize(p) for p in ps) if firsts else os.path.getsize(rep)
+        picks.append((rep, weight))
 
     entries = []
     print(
         f"{gname}  VRAM={vram}MiB reserve={args.reserve}MiB margin={int(args.margin * 100)}%"
     )
-    for p in picks:
+    for p, weight in picks:
         mi = ModelInfo(p)
+        mi.bytes = weight
         hard = mi.max_ctx(args.cache, vram, args.reserve)
         if mi.n_ctx_train and mi.n_ctx_train <= hard:
             ctx = round_down(mi.n_ctx_train)  # train-bound: model's native context

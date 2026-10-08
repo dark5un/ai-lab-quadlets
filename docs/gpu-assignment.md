@@ -47,3 +47,10 @@ a bare `systemctl start`, which stops the other side instead of moving it.
 
 Update the name match in `scripts/render-units.sh` (and the placeholders if
 the card model changes), re-render the units, `systemctl --user daemon-reload`.
+
+## llama.cpp model dirs
+
+Each llama.cpp unit mounts only `~/.local/share/llama.cpp/cards/<card>` at
+`/models` (`5090`, `4070ti`, `both`). The files there are hardlinks into the
+Hugging Face cache made by `hf-download --card`, one subdir per model, so a
+server lists exactly the models linked for its card(s). See README "Models".

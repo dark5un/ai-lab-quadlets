@@ -14,7 +14,7 @@
       "boot": true,
       "auth": "api-key",
       "image_digest": "ghcr.io/ggml-org/llama.cpp@sha256:e8318a7b3988f9ca57b28c03486569e60def08f2b7b060550ebfa046e175e6cb",
-      "note": "RTX 5090 (fixed card); router over ~/.local/share/llama.cpp/models; every request needs a key from config/llama-cpp/keys.txt",
+      "note": "RTX 5090 (fixed card); router over ~/.local/share/llama.cpp/cards/5090; every request needs a key from config/llama-cpp/keys.txt",
       "gpu": "5090"
     },
     {
@@ -30,7 +30,7 @@
       "boot": false,
       "auth": "api-key",
       "image_digest": "ghcr.io/ggml-org/llama.cpp@sha256:e8318a7b3988f9ca57b28c03486569e60def08f2b7b060550ebfa046e175e6cb",
-      "note": "RTX 4070 Ti (fixed card); router over ~/.local/share/llama.cpp/models; every request needs a key from config/llama-cpp/keys.txt",
+      "note": "RTX 4070 Ti (fixed card); router over ~/.local/share/llama.cpp/cards/4070ti; every request needs a key from config/llama-cpp/keys.txt",
       "gpu": "4070ti"
     },
     {
