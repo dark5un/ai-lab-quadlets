@@ -52,7 +52,7 @@
   {
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "fieldConfig": {
     "defaults": {
@@ -136,7 +136,7 @@
     {
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "disableTextWrap": false,
      "editorMode": "code",
@@ -183,7 +183,7 @@
   {
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "fieldConfig": {
     "defaults": {
@@ -267,7 +267,7 @@
     {
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "editorMode": "code",
      "expr": "sum by (name) (\n    podman_container_info{instance=~\"$instance\", name=~\"$name\"}\n  * on (id) group_right (name)\n    (podman_container_mem_usage_bytes / 1024 / 1024)\n)",
@@ -310,7 +310,7 @@
   {
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "fieldConfig": {
     "defaults": {
@@ -394,7 +394,7 @@
     {
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "editorMode": "code",
      "expr": "sum by(name) (podman_container_info{instance=~\"$instance\", name=~\"$name\"} * on(id) group_right(name) rate(podman_container_net_input_total[1m]) / 1024)",
@@ -407,7 +407,7 @@
     {
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "sum(rate(podman_container_blkio_device_write_bytes_total{instance=~\"$host\",name=~\"$container\"}[5m])) by (name)",
      "hide": false,
@@ -422,7 +422,7 @@
   {
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "fieldConfig": {
     "defaults": {
@@ -506,7 +506,7 @@
     {
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "editorMode": "code",
      "expr": "sum by(name) (podman_container_info{instance=~\"$instance\", name=~\"$name\"} * on(id) group_right(name) rate(podman_container_net_output_total[1m]) / 1024)",
@@ -519,7 +519,7 @@
     {
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "sum(rate(podman_container_blkio_device_write_bytes_total{instance=~\"$host\",name=~\"$container\"}[5m])) by (name)",
      "hide": false,
@@ -534,7 +534,7 @@
   {
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "description": "",
    "fieldConfig": {
@@ -814,7 +814,7 @@
     {
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "editorMode": "code",
      "exemplar": false,
@@ -829,7 +829,7 @@
     {
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "editorMode": "code",
      "exemplar": false,
@@ -844,7 +844,7 @@
     {
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "editorMode": "code",
      "exemplar": false,
@@ -859,7 +859,7 @@
     {
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "editorMode": "code",
      "exemplar": false,
@@ -874,7 +874,7 @@
     {
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "editorMode": "code",
      "exemplar": false,
@@ -889,7 +889,7 @@
     {
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "editorMode": "code",
      "exemplar": false,
@@ -904,7 +904,7 @@
     {
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "editorMode": "code",
      "exemplar": false,
@@ -1004,7 +1004,7 @@
     "current": {},
     "datasource": {
      "type": "prometheus",
-     "uid": "${DS_PROMETHEUS}"
+     "uid": "prometheus"
     },
     "definition": "label_values(podman_container_info{instance=~\"$instance\"},instance)",
     "hide": 0,
@@ -1029,7 +1029,7 @@
     "current": {},
     "datasource": {
      "type": "prometheus",
-     "uid": "${DS_PROMETHEUS}"
+     "uid": "prometheus"
     },
     "definition": "label_values(podman_container_info{name=~\"$name\", instance=~\"$instance\"},name)",
     "hide": 0,

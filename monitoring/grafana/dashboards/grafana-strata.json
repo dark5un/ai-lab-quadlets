@@ -23,7 +23,7 @@
     "type": "query",
     "datasource": {
      "type": "prometheus",
-     "uid": "${DS_PROMETHEUS}"
+     "uid": "prometheus"
     },
     "refresh": 2,
     "includeAll": true,
@@ -51,7 +51,7 @@
     "type": "query",
     "datasource": {
      "type": "prometheus",
-     "uid": "${DS_PROMETHEUS}"
+     "uid": "prometheus"
     },
     "refresh": 2,
     "includeAll": true,
@@ -96,7 +96,7 @@
    "description": "",
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "gridPos": {
     "h": 7,
@@ -109,7 +109,7 @@
      "refId": "A",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "sum by (model_name) (vllm:num_requests_running{model_name=~\"$model\",instance=~\"$instance\"})",
      "legendFormat": "{{model_name}} running"
@@ -118,7 +118,7 @@
      "refId": "B",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "sum by (model_name) (vllm:num_requests_waiting{model_name=~\"$model\",instance=~\"$instance\"})",
      "legendFormat": "{{model_name}} waiting"
@@ -151,7 +151,7 @@
    "description": "",
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "gridPos": {
     "h": 7,
@@ -164,7 +164,7 @@
      "refId": "A",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "sum by (model_name) (rate(vllm:generation_tokens_total{model_name=~\"$model\",instance=~\"$instance\"}[1m]))",
      "legendFormat": "{{model_name}} generated"
@@ -173,7 +173,7 @@
      "refId": "B",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "sum by (model_name) (rate(vllm:prompt_tokens_total{model_name=~\"$model\",instance=~\"$instance\"}[1m]))",
      "legendFormat": "{{model_name}} prompt"
@@ -206,7 +206,7 @@
    "description": "",
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "gridPos": {
     "h": 7,
@@ -219,7 +219,7 @@
      "refId": "A",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "histogram_quantile(0.95, sum by (le, model_name) (rate(vllm:time_to_first_token_seconds_bucket{model_name=~\"$model\",instance=~\"$instance\"}[5m])))",
      "legendFormat": "{{model_name}} p95"
@@ -228,7 +228,7 @@
      "refId": "B",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "histogram_quantile(0.5, sum by (le, model_name) (rate(vllm:time_to_first_token_seconds_bucket{model_name=~\"$model\",instance=~\"$instance\"}[5m])))",
      "legendFormat": "{{model_name}} p50"
@@ -261,7 +261,7 @@
    "description": "Strata observes the mean gap of each request (the engine reports its decode time, not each token's).",
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "gridPos": {
     "h": 7,
@@ -274,7 +274,7 @@
      "refId": "A",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "histogram_quantile(0.95, sum by (le, model_name) (rate(vllm:inter_token_latency_seconds_bucket{model_name=~\"$model\",instance=~\"$instance\"}[5m])))",
      "legendFormat": "{{model_name}} p95"
@@ -283,7 +283,7 @@
      "refId": "B",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "histogram_quantile(0.5, sum by (le, model_name) (rate(vllm:inter_token_latency_seconds_bucket{model_name=~\"$model\",instance=~\"$instance\"}[5m])))",
      "legendFormat": "{{model_name}} p50"
@@ -316,7 +316,7 @@
    "description": "",
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "gridPos": {
     "h": 7,
@@ -329,7 +329,7 @@
      "refId": "A",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "histogram_quantile(0.95, sum by (le, model_name) (rate(vllm:e2e_request_latency_seconds_bucket{model_name=~\"$model\",instance=~\"$instance\"}[5m])))",
      "legendFormat": "{{model_name}} p95"
@@ -338,7 +338,7 @@
      "refId": "B",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "histogram_quantile(0.5, sum by (le, model_name) (rate(vllm:e2e_request_latency_seconds_bucket{model_name=~\"$model\",instance=~\"$instance\"}[5m])))",
      "legendFormat": "{{model_name}} p50"
@@ -371,7 +371,7 @@
    "description": "1 / the mean time between tokens: what one user sees, against the total above.",
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "gridPos": {
     "h": 7,
@@ -384,7 +384,7 @@
      "refId": "A",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "sum by (model_name) (rate(vllm:inter_token_latency_seconds_count{model_name=~\"$model\",instance=~\"$instance\"}[5m])) / sum by (model_name) (rate(vllm:inter_token_latency_seconds_sum{model_name=~\"$model\",instance=~\"$instance\"}[5m]))",
      "legendFormat": "{{model_name}}"
@@ -417,7 +417,7 @@
    "description": "Strata: the prompt cache and parked conversations; vLLM: its prefix-cache blocks.",
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "gridPos": {
     "h": 7,
@@ -430,7 +430,7 @@
      "refId": "A",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "sum by (model_name) (rate(vllm:prefix_cache_hits_total{model_name=~\"$model\",instance=~\"$instance\"}[15m])) / sum by (model_name) (rate(vllm:prefix_cache_queries_total{model_name=~\"$model\",instance=~\"$instance\"}[15m]))",
      "legendFormat": "{{model_name}}"
@@ -463,7 +463,7 @@
    "description": "",
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "gridPos": {
     "h": 7,
@@ -476,7 +476,7 @@
      "refId": "A",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "sum by (model_name) (rate(vllm:spec_decode_num_accepted_tokens_total{model_name=~\"$model\",instance=~\"$instance\"}[15m])) / sum by (model_name) (rate(vllm:spec_decode_num_draft_tokens_total{model_name=~\"$model\",instance=~\"$instance\"}[15m]))",
      "legendFormat": "{{model_name}}"
@@ -509,7 +509,7 @@
    "description": "",
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "gridPos": {
     "h": 7,
@@ -522,7 +522,7 @@
      "refId": "A",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "sum by (model_name) (rate(vllm:request_success_total{model_name=~\"$model\",instance=~\"$instance\"}[5m])) * 60",
      "legendFormat": "{{model_name}}"
@@ -555,7 +555,7 @@
    "description": "",
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "gridPos": {
     "h": 7,
@@ -568,7 +568,7 @@
      "refId": "A",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "max by (model_name) (vllm:kv_cache_usage_perc{model_name=~\"$model\",instance=~\"$instance\"})",
      "legendFormat": "{{model_name}}"
@@ -614,7 +614,7 @@
    "description": "",
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "gridPos": {
     "h": 7,
@@ -627,7 +627,7 @@
      "refId": "A",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "max by (state) (strata:live_state{model_name=~\"$model\",instance=~\"$instance\"}) > 0",
      "legendFormat": "{{state}}"
@@ -663,7 +663,7 @@
    "description": "\"parallel\": N / --batch only.",
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "gridPos": {
     "h": 7,
@@ -676,7 +676,7 @@
      "refId": "A",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "sum by (state) (strata:live_slots{model_name=~\"$model\",instance=~\"$instance\"})",
      "legendFormat": "{{state}}"
@@ -712,7 +712,7 @@
    "description": "",
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "gridPos": {
     "h": 7,
@@ -725,7 +725,7 @@
      "refId": "A",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "max(strata:live_tok_s{model_name=~\"$model\",instance=~\"$instance\"})",
      "legendFormat": "decode tok/s"
@@ -734,7 +734,7 @@
      "refId": "B",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "max(strata:live_prefill_tok_s_mean{model_name=~\"$model\",instance=~\"$instance\"})",
      "legendFormat": "prompt tok/s"
@@ -767,7 +767,7 @@
    "description": "Experts found in VRAM. Below ~90 % the CPU and the PCIe link compute the rest and decode slows down.",
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "gridPos": {
     "h": 7,
@@ -780,7 +780,7 @@
      "refId": "A",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "max(strata:last_hit_rate{model_name=~\"$model\",instance=~\"$instance\"})",
      "legendFormat": "hit rate"
@@ -813,7 +813,7 @@
    "description": "Seconds of work per second: 1 = busy all the time (more with requests running together).",
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "gridPos": {
     "h": 7,
@@ -826,7 +826,7 @@
      "refId": "A",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "sum(rate(strata:totals_prompt_seconds_total{model_name=~\"$model\",instance=~\"$instance\"}[5m]))",
      "legendFormat": "reading prompts"
@@ -835,7 +835,7 @@
      "refId": "B",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "sum(rate(strata:totals_decode_seconds_total{model_name=~\"$model\",instance=~\"$instance\"}[5m]))",
      "legendFormat": "decoding"
@@ -871,7 +871,7 @@
    "description": "",
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "gridPos": {
     "h": 7,
@@ -884,7 +884,7 @@
      "refId": "A",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "max by (gpu) (strata:gpu_util{model_name=~\"$model\",instance=~\"$instance\"})",
      "legendFormat": "GPU {{gpu}}"
@@ -917,7 +917,7 @@
    "description": "",
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "gridPos": {
     "h": 7,
@@ -930,7 +930,7 @@
      "refId": "A",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "max by (gpu) (strata:gpu_mem_used_bytes{model_name=~\"$model\",instance=~\"$instance\"})",
      "legendFormat": "GPU {{gpu}} used"
@@ -939,7 +939,7 @@
      "refId": "B",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "max by (gpu) (strata:gpu_mem_total_bytes{model_name=~\"$model\",instance=~\"$instance\"})",
      "legendFormat": "GPU {{gpu}} total"
@@ -972,7 +972,7 @@
    "description": "",
    "datasource": {
     "type": "prometheus",
-    "uid": "${DS_PROMETHEUS}"
+    "uid": "prometheus"
    },
    "gridPos": {
     "h": 7,
@@ -985,7 +985,7 @@
      "refId": "A",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "max(strata:ram_used_bytes{model_name=~\"$model\",instance=~\"$instance\"})",
      "legendFormat": "used"
@@ -994,7 +994,7 @@
      "refId": "B",
      "datasource": {
       "type": "prometheus",
-      "uid": "${DS_PROMETHEUS}"
+      "uid": "prometheus"
      },
      "expr": "max(strata:ram_total_bytes{model_name=~\"$model\",instance=~\"$instance\"})",
      "legendFormat": "total"
