@@ -1,7 +1,7 @@
 [Unit]
 Description=Caddy HTTPS reverse proxy
-After=systemd-open-webui.service
-Wants=systemd-open-webui.service
+Wants=ai-network.service
+After=ai-network.service
 
 [Container]
 ContainerName=systemd-caddy
@@ -21,6 +21,3 @@ Volume=caddy-config:/config
 Restart=on-failure
 RestartSec=10
 TimeoutStartSec=900
-
-[Install]
-WantedBy=default.target

@@ -1,7 +1,7 @@
 [Unit]
 Description=Hermes Agent web and Telegram service
-After=llama-cpp-5090.service
-Wants=llama-cpp-5090.service
+Wants=ai-network.service
+After=ai-network.service
 
 [Container]
 ContainerName=systemd-hermes-gateway
@@ -22,6 +22,3 @@ TimeoutStartSec=900
 TimeoutStopSec=120
 MemoryMax=4G
 CPUQuota=200%
-
-[Install]
-WantedBy=default.target

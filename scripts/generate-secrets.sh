@@ -1,91 +1,73 @@
 #!/usr/bin/env bash
-# generate-secrets.sh — Generate random secrets for service .env files
+# generate-secrets.sh — create the stack's secret-bearing env files from the
+# repo's .example templates, straight into the runtime config dir. Existing
+# files are kept (their secrets are live); --force regenerates them.
 #
-# Creates production-ready .env files from the .example templates,
-# filling in random hex strings for secrets that need them.
-#
-# Usage:
 #   ./scripts/generate-secrets.sh [--force] [--with-hermes]
-
+#
+# Writes (dirs 700, files 600) under $AI_LAB_CONFIG_DIR
+# (default ~/.config/containers/config):
+#   open-webui/service.env       WEBUI_SECRET_KEY
+#   llama-cpp/keys.txt           API key shared by every llama.cpp server
+#   hermes-service/service.env   only with --with-hermes (opt-in container)
+# Strata's API key is created by install-strata.sh.
 set -euo pipefail
 umask 077
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-
-FORCE=false
-WITH_HERMES=false
+ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+CONF="${AI_LAB_CONFIG_DIR:-${HOME}/.config/containers/config}"
+FORCE=0 WITH_HERMES=0
 for arg in "$@"; do
     case "$arg" in
-        --force) FORCE=true ;;
-        --with-hermes) WITH_HERMES=true ;;
+        --force) FORCE=1 ;;
+        --with-hermes) WITH_HERMES=1 ;;
         *) printf 'Unknown option: %s (supported: --force --with-hermes)\n' "$arg" >&2; exit 2 ;;
     esac
 done
 
-# Generate a random hex string of given byte length
-rand_hex() {
-    local bytes="${1:-32}"
-    openssl rand -hex "$bytes"
+rand_hex() { openssl rand -hex "${1:-32}"; }
+
+want() {  # want <dst>: true when the file must be (re)generated
+    [ ! -f "$1" ] || [ "$FORCE" = 1 ]
 }
 
-echo "=== Generating secrets for AI Lab Quadlets ==="
-echo ""
+mkdir -p "$CONF"
+chmod 700 "$CONF"
 
-# ─── Open WebUI ───────────────────────────────────────────────────────────
-SRC="${PROJECT_DIR}/config/open-webui/service.env.example"
-DST="${PROJECT_DIR}/config/open-webui/service.env"
-if [ ! -f "$DST" ] || [ "$FORCE" = true ]; then
-    if [ -f "$SRC" ]; then
-        sed "s/change-me-to-a-random-hex-string/$(rand_hex 32)/" "$SRC" > "$DST"
-        echo "  Created: $DST"
+# Open WebUI session secret.
+dst="$CONF/open-webui/service.env"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    sed "s/change-me-to-a-random-hex-string/$(rand_hex 32)/" \
+        "$ROOT/config/open-webui/service.env.example" > "$dst"
+    echo "  created $dst"
+else
+    echo "  kept    $dst"
+fi
+chmod 600 "$dst"
+
+# llama.cpp API key (LLAMA_ARG_API_KEY_FILE of every llama.cpp server).
+dst="$CONF/llama-cpp/keys.txt"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    rand_hex 16 > "$dst"
+    echo "  created $dst"
+else
+    echo "  kept    $dst"
+fi
+chmod 600 "$dst"
+
+# Containerized Hermes gateway (opt-in; this host runs Hermes natively).
+if [ "$WITH_HERMES" = 1 ]; then
+    dst="$CONF/hermes-service/service.env"
+    mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+    if want "$dst"; then
+        sed -e "s/change-me-to-a-random-hex-string/$(rand_hex 16)/" \
+            -e "s/change-me-to-another-random-hex-string/$(rand_hex 32)/" \
+            "$ROOT/config/hermes-service/service.env.example" > "$dst"
+        echo "  created $dst (dashboard password stored in this file)"
     else
-        echo "  SKIP: $SRC not found"
+        echo "  kept    $dst"
     fi
-else
-    echo "  EXISTS: $DST (use --force to regenerate)"
+    chmod 600 "$dst"
 fi
-[ ! -f "$DST" ] || chmod 600 "$DST"
-
-# ─── Containerized Hermes gateway (opt-in; not the host Hermes Agent) ──────
-if [ "$WITH_HERMES" = true ]; then
-    SRC="${PROJECT_DIR}/config/hermes-service/service.env.example"
-    DST="${PROJECT_DIR}/config/hermes-service/service.env"
-    if [ ! -f "$DST" ] || [ "$FORCE" = true ]; then
-        if [ -f "$SRC" ]; then
-            PASSWORD=$(rand_hex 16)
-            SECRET=$(rand_hex 32)
-            sed \
-                -e "s/change-me-to-a-random-hex-string/$PASSWORD/" \
-                -e "s/change-me-to-another-random-hex-string/$SECRET/" \
-                "$SRC" > "$DST"
-            chmod 600 "$DST"
-            unset PASSWORD SECRET
-            echo "  Created: $DST (dashboard password stored in this file)"
-        else
-            echo "  SKIP: $SRC not found"
-        fi
-    else
-        echo "  EXISTS: $DST (use --force to regenerate)"
-    fi
-    [ ! -f "$DST" ] || chmod 600 "$DST"
-else
-    echo "  SKIP: containerized Hermes gateway (use --with-hermes to generate its config)"
-fi
-
-# ─── llama.cpp API key ────────────────────────────────────────────────────
-DST="${PROJECT_DIR}/config/llama-cpp/keys.txt"
-mkdir -p "$(dirname "$DST")"
-if [ ! -f "$DST" ] || [ "$FORCE" = true ]; then
-    echo "$(rand_hex 16)" > "$DST"
-    echo "  Created: $DST"
-else
-    echo "  EXISTS: $DST (use --force to regenerate)"
-fi
-[ ! -f "$DST" ] || chmod 600 "$DST"
-
-echo ""
-echo "=== Secret generation complete ==="
-echo "Run the following to copy configs to their runtime location:"
-echo "  mkdir -p ~/.config/containers/config"
-echo "  cp -r config/* ~/.config/containers/config/"

@@ -5,7 +5,7 @@
 #
 # Rotates:
 #   - open-webui WEBUI_SECRET_KEY   (config/open-webui/service.env)
-#   - llama.cpp API keys            (config/llama-cpp/keys.txt)
+#   - llama.cpp API keys            (config/llama-cpp/keys.txt, all 3 servers)
 #   - strata API_KEY                (config/strata/service.env + every
 #                                    ~/.local/share/strata/config-*/strata-*.json)
 # Then restarts the affected services. Existing sessions/cookies tied to the
@@ -69,7 +69,7 @@ EOF
     done
 fi
 
-KEYS="$CONF/llama.cpp/keys.txt"
+KEYS="$CONF/llama-cpp/keys.txt"
 if [ -f "$KEYS" ]; then
     if [ "$APPLY" = 1 ]; then
         tmp=$(mktemp "${KEYS}.XXXXXX")
@@ -81,7 +81,11 @@ if [ -f "$KEYS" ]; then
 fi
 
 if [ "$APPLY" = 1 ]; then
-    for svc in open-webui strata-5090 strata-4070ti strata-both llama-cpp-5090; do
+    # Clients carry copies of the strata/llama keys (open-webui, sketchlab, dsh
+    # managed lines): install.sh rewrites them from the new values.
+    "$ROOT/install.sh" --no-images >/dev/null && echo "  ✓ client env files updated (install.sh --no-images)"
+    for svc in open-webui sketchlab deepseek-harness strata-5090 strata-4070ti strata-both \
+               llama-cpp-5090 llama-cpp-4070ti llama-cpp-both; do
         systemctl --user is-active "${svc}.service" &>/dev/null || continue
         systemctl --user restart "${svc}.service" && echo "  ✓ restarted $svc"
     done

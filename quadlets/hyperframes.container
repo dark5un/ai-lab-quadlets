@@ -1,7 +1,7 @@
 [Unit]
 Description=HyperFrames Render Server
-After=ai-network.service
 Wants=ai-network.service
+After=ai-network.service
 
 [Container]
 ContainerName=systemd-hyperframes
@@ -24,6 +24,3 @@ Restart=on-failure
 RestartSec=10
 TimeoutStartSec=900
 TimeoutStopSec=60
-
-[Install]
-WantedBy=default.target

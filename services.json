@@ -11,9 +11,9 @@
       "health": "/health",
       "tier": "core",
       "image": "ghcr.io/ggml-org/llama.cpp:server-cuda",
-      "boot": true,
+      "boot": false,
       "auth": "api-key",
-      "image_digest": "ghcr.io/ggml-org/llama.cpp@sha256:e8318a7b3988f9ca57b28c03486569e60def08f2b7b060550ebfa046e175e6cb",
+      "image_digest": "ghcr.io/ggml-org/llama.cpp@sha256:185d70a45b05b10c005d1f66b79646fad988bb70278d620dcf5edac2a4a025d4",
       "note": "RTX 5090 (fixed card); router over ~/.local/share/llama.cpp/cards/5090; every request needs a key from config/llama-cpp/keys.txt",
       "gpu": "5090"
     },
@@ -29,7 +29,7 @@
       "image": "ghcr.io/ggml-org/llama.cpp:server-cuda",
       "boot": false,
       "auth": "api-key",
-      "image_digest": "ghcr.io/ggml-org/llama.cpp@sha256:e8318a7b3988f9ca57b28c03486569e60def08f2b7b060550ebfa046e175e6cb",
+      "image_digest": "ghcr.io/ggml-org/llama.cpp@sha256:185d70a45b05b10c005d1f66b79646fad988bb70278d620dcf5edac2a4a025d4",
       "note": "RTX 4070 Ti (fixed card); router over ~/.local/share/llama.cpp/cards/4070ti; every request needs a key from config/llama-cpp/keys.txt",
       "gpu": "4070ti"
     },
@@ -45,7 +45,7 @@
       "image": "ghcr.io/ggml-org/llama.cpp:server-cuda",
       "boot": false,
       "auth": "api-key",
-      "image_digest": "ghcr.io/ggml-org/llama.cpp@sha256:e8318a7b3988f9ca57b28c03486569e60def08f2b7b060550ebfa046e175e6cb",
+      "image_digest": "ghcr.io/ggml-org/llama.cpp@sha256:185d70a45b05b10c005d1f66b79646fad988bb70278d620dcf5edac2a4a025d4",
       "note": "RTX 5090 + RTX 4070 Ti layer split (5090 main); exclusive: starting it stops every other GPU service incl. strata, and any GPU start stops it; router over ~/.local/share/llama.cpp/cards/both; every request needs a key from config/llama-cpp/keys.txt",
       "gpu": "both",
       "exclusive": true
@@ -111,7 +111,7 @@
       "health": "/health",
       "tier": "optional",
       "image": "localhost/rizzo-flow:4b-q8_0",
-      "boot": true,
+      "boot": false,
       "auth": "none",
       "note": "Rizzo Flow local Jev-compatible System One decisions (POST /v1/systemone); llama.cpp CUDA on 4070 Ti; built from containers/rizzo-flow/",
       "gpu": "4070ti"
@@ -126,7 +126,7 @@
       "health": "/health",
       "tier": "web",
       "image": "ghcr.io/open-webui/open-webui:v0.11.3",
-      "boot": true,
+      "boot": false,
       "auth": "account",
       "image_digest": "ghcr.io/open-webui/open-webui@sha256:41daa0cf2561a5d4c8d1ff31ee2a98d93ab4d3ac2605cac69366ff6a3374a933"
     },
@@ -174,7 +174,7 @@
       "health": "/",
       "tier": "web",
       "image": "localhost/sketchlab:v0.6.1",
-      "boot": true,
+      "boot": false,
       "auth": "none",
       "note": "same-origin /v1 AI proxy -> strata (key injected by nginx from config/sketchlab/service.env); proxy shares sketchlab's LAN exposure"
     },
@@ -188,14 +188,14 @@
       "health": "/",
       "tier": "video",
       "image": "localhost/hyperframes:latest",
-      "boot": true,
+      "boot": false,
       "auth": "none",
       "note": "built locally from ~/workspace/github.com/heygen-com/hyperframes at upstream commit f70dce7"
     },
     {
       "name": "hermes",
       "unit": "hermes.service",
-      "container": "systemd-hermes",
+      "container": "systemd-hermes-gateway",
       "host_port": 3104,
       "container_port": 9119,
       "bind": "0.0.0.0",
@@ -204,7 +204,8 @@
       "image": "docker.io/nousresearch/hermes-agent:latest",
       "boot": false,
       "auth": "account",
-      "image_digest": "docker.io/nousresearch/hermes-agent@sha256:d4da4a40cd7a28aba983775d9fd31d94cbf153eeb0cb9e844d6d0f612b7c24db"
+      "image_digest": "docker.io/nousresearch/hermes-agent@sha256:d4da4a40cd7a28aba983775d9fd31d94cbf153eeb0cb9e844d6d0f612b7c24db",
+      "note": "opt-in (install.sh --with-hermes); this host runs Hermes natively (hermes-gateway.service), so the container is not deployed by default"
     },
     {
       "name": "deepseek-harness",

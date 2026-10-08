@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
 # uninstall.sh — Remove all AI Lab Quadlet services
 #
-# Stops and disables services, removes quadlet files, preserves data volumes.
-# Does NOT require just/ujust. Works standalone.
+# Stops the services, removes their quadlet files, unmasks the network-online
+# waiter, removes the bar plugin and the ~/.local/bin links. Data and configs
+# are preserved (listed at the end).
 #
-# Usage:
-#   curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/uninstall.sh | bash
-#   # or from a local checkout:
 #   ./uninstall.sh
 
 set -uo pipefail
@@ -26,13 +24,13 @@ fi
 
 # ─── Stop and disable services ────────────────────────────────────────────
 echo "[1/3] Stopping and disabling services..."
-SERVICES="caddy llama-cpp-cpu ai-network"
+SERVICES="caddy llama-cpp-cpu llama-cpp-main llama-cpp-research comfyui comfyui-cpu strata ai-network"
 # Registry-driven list (every unit in services.json), plus legacy names above.
 SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 if [ -f "$SCRIPT_DIR/services.json" ] && command -v python3 >/dev/null 2>&1; then
     SERVICES="$SERVICES $(python3 -c "import json,sys; print(' '.join(s['unit'][:-8] for s in json.load(open(sys.argv[1]))['services']))" "$SCRIPT_DIR/services.json" 2>/dev/null)"
 else
-    SERVICES="$SERVICES strata hermes comfyui sketchlab open-webui deepseek-harness llama-cpp-4070ti llama-cpp-5090 hyperframes"
+    SERVICES="$SERVICES strata-5090 strata-4070ti strata-both hermes comfyui-5090 comfyui-4070ti sketchlab open-webui deepseek-harness llama-cpp-4070ti llama-cpp-5090 llama-cpp-both rizzo hyperframes"
 fi
 for svc in $SERVICES; do
     if systemctl --user is-active "${svc}.service" &>/dev/null; then
@@ -51,10 +49,11 @@ echo ""
 echo "[2/3] Removing quadlet files..."
 for f in ai.network caddy.container comfyui.container hermes.container \
          deepseek-harness.container strata.container strata-*.container \
-         comfyui-*.container llama-cpp-cpu.container \
-         llama-cpp-5090.container llama-cpp-4070ti.container \
+         comfyui-*.container llama-cpp-cpu.container llama-cpp-main.container \
+         llama-cpp-research.container llama-cpp-5090.container \
+         llama-cpp-4070ti.container llama-cpp-both.container \
          llama-cpp-extra-*.container open-webui.container sketchlab.container \
-         hyperframes.container; do
+         hyperframes.container rizzo.container; do
     # shellcheck disable=SC2086
     for file in "$QUADLET_DIR"/$f; do
         [ -f "$file" ] && rm -f "$file" && echo "  ✓ removed $(basename "$file")"
@@ -82,11 +81,13 @@ if command -v ryoku >/dev/null 2>&1 && ryoku plugin list 2>/dev/null | grep -q '
         || echo "  ~ could not remove ailab bar plugin"
 fi
 
-# Remove hf-download tool
-if [ -f "${HOME}/.local/bin/hf-download" ]; then
-    rm -f "${HOME}/.local/bin/hf-download"
-    echo "  ✓ removed hf-download (tool)"
-fi
+# Remove the CLI links install.sh made.
+for tool in ai-lab hf-download; do
+    if [ -L "${HOME}/.local/bin/$tool" ] || [ -f "${HOME}/.local/bin/$tool" ]; then
+        rm -f "${HOME}/.local/bin/$tool"
+        echo "  ✓ removed ~/.local/bin/$tool"
+    fi
+done
 echo ""
 
 # ─── Report what's preserved ──────────────────────────────────────────────
@@ -94,8 +95,9 @@ echo "[3/3] Cleanup complete."
 echo ""
 echo "Preserved (no data deleted):"
 echo "  • ~/.config/containers/config/           (settings, presets, secrets)"
-echo "  • ~/.local/share/llama.cpp/models/       (GGUF model files)"
-echo "  • ~/.local/share/llama.cpp/              (logs, config)"
+echo "  • ~/.local/share/llama.cpp/cards/        (per-card model links)"
+echo "  • ~/.cache/huggingface/hub/              (model library: hf cache rm)"
+echo "  • ~/.local/share/rizzo/                  (rizzo calibration)"
 echo "  • ~/.local/share/comfyui/                (workflows, models, custom nodes)"
 echo "  • ~/.local/share/strata/                 (model files; if installed)"
 echo "  • ~/.local/share/sketchlab/              (diagrams)"

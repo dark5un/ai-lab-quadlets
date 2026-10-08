@@ -103,7 +103,8 @@ fi
 # and blocks the start for minutes. The stack is local-only: mask it.
 # uninstall.sh unmasks it again.
 systemctl --user mask podman-user-wait-network-online.service >/dev/null 2>&1 || true
-systemctl --user daemon-reload
+# install.sh sets AI_LAB_NO_RELOAD=1 and reloads once at its end.
+[ "${AI_LAB_NO_RELOAD:-0}" = 1 ] || systemctl --user daemon-reload
 
 printf '\nStrata variants installed (none started, none at boot):\n'
 printf 'Switch:   %s/scripts/ai-lab strata 5090|4070ti|both|off\n' "$ROOT"

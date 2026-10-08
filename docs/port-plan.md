@@ -19,17 +19,16 @@ strata has since moved to 11434 (model-API family alignment, 2026-10-05).
 
 ## Port scheme (Phase 1)
 
-Model APIs (1143x family, Ollama-adjacent):
+Model APIs (1143x family, Ollama-adjacent). CURRENT (2026-10-08; services.json
+is authoritative, the per-role names and the extra-N formula are gone):
 
-| service              | old  | new   | binding |
-|----------------------|------|-------|---------|
-| llama-cpp-main       | 11435| 11435 | LAN     |
-| llama-cpp-research   | 11436| 11436 | LAN     |
-| strata               | 11437| 11434 | LAN   |
-| llama-cpp-extra-N    | 1N43N| 11438+N | LAN   |
-
-11437 is intentionally unused after strata's move (no gap-filling; the
-extra-GPU formula stays 11438+INDEX).
+| service                          | port  | binding |
+|----------------------------------|-------|---------|
+| strata-5090 / -4070ti / -both    | 11434 | LAN, API key |
+| llama-cpp-5090                   | 11435 | LAN, API key |
+| llama-cpp-4070ti                 | 11436 | LAN, API key |
+| rizzo                            | 11437 | LAN     |
+| llama-cpp-both                   | 11438 | LAN, API key |
 
 Web apps (31xx family, sequential):
 

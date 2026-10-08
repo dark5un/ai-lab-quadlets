@@ -1,7 +1,7 @@
 [Unit]
 Description=Open WebUI
-After=llama-cpp-5090.service
-Wants=llama-cpp-5090.service
+Wants=ai-network.service
+After=ai-network.service
 
 [Container]
 ContainerName=systemd-open-webui
@@ -15,6 +15,3 @@ EnvironmentFile=%h/.config/containers/config/open-webui/service.env
 Restart=on-failure
 RestartSec=10
 TimeoutStartSec=900
-
-[Install]
-WantedBy=default.target

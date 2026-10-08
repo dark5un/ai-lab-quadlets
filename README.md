@@ -1,112 +1,106 @@
 # AI Lab Quadlets
 
-> **Reproducible self-hosted AI services on Arch Linux (Podman + systemd user units).**
-> The quadlet layout is distro-agnostic; install hints below are for Arch.
+> **Self-hosted AI services for ONE host: Arch Linux, RTX 5090 + RTX 4070 Ti,
+> rootless Podman Quadlets.** Every service starts on demand; nothing starts
+> at boot.
 
-This repo packages a full self-hosted AI lab as Podman Quadlets — declarative container
-units managed by systemd. Everything runs rootless, survives
-reboots, and can be rehydrated on a fresh machine with one command.
+This repo packages the AI lab of the `ai` box as Podman Quadlets (declarative
+container units managed by `systemd --user`). `services.json` is the single
+source of truth (ports, cards, auth); `scripts/ai-lab` and the Ryoku bar widget
+(`plugin/ailab`) start and stop services; `scripts/gpu-arbiter.py` keeps the
+GPU rules when they do.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                   Host (Arch Linux)                          │
-│                                                              │
-│  systemd-ai ──── Podman network (container communication)    │
-│       ├── llama.cpp RTX 5090: 0.0.0.0:11435                   │
-│       ├── llama.cpp RTX 4070 Ti: 0.0.0.0:11436                │
-│       ├── Strata API: 0.0.0.0:11434 (optional)                │
-│       ├── Open WebUI: 0.0.0.0:3100                            │
-│       ├── ComfyUI: 0.0.0.0:3101                               │
-│       ├── Sketch Lab: 0.0.0.0:3102                            │
-│       ├── Hermes gateway: 0.0.0.0:3104 (optional)              │
-│       ├── HyperFrames: 0.0.0.0:3103                           │
-│       └── DeepSeek Harness: 127.0.0.1:3105 (optional)          │
-│                                                              │
-│  Caddy configuration is retained, but Caddy is not deployed. │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│ Host "ai" (Arch Linux, desktop on the iGPU)                       │
+│                                                                   │
+│  systemd-ai ── Podman network (containers reach each other by     │
+│                container name)                                    │
+│   model APIs (1143x)                    web apps (31xx)           │
+│   ├── strata         0.0.0.0:11434      ├── open-webui  :3100     │
+│   ├── llama-cpp-5090        :11435      ├── comfyui     :3101     │
+│   ├── llama-cpp-4070ti      :11436      ├── sketchlab   :3102     │
+│   ├── rizzo                 :11437      ├── hyperframes :3103     │
+│   └── llama-cpp-both        :11438      ├── hermes      :3104 (opt-in)
+│                                         └── dsh 127.0.0.1:3105 (opt-in)
+│  RTX 5090 32 GB + RTX 4070 Ti 12 GB, shared by the rules in        │
+│  docs/gpu-assignment.md. Caddy files are kept, not deployed.      │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ## Services
 
-| Service | Status | Port | Description |
-|---|---|---|---|
-| **ai-network** | core | — | Podman network for all container communication |
-| **systemd-llama-cpp-5090** | core | `11435` | llama.cpp router on the RTX 5090 (262K context default), API key required |
-| **systemd-llama-cpp-4070ti** | optional | `11436` | llama.cpp router on the RTX 4070 Ti (65K context default), API key required |
-| **systemd-llama-cpp-both** | optional | `11438` | llama.cpp router split over both cards (exclusive), API key required |
-| **systemd-open-webui** | web | `3100` | AI chat frontend (OpenAI-compatible backend) |
-| **Caddy assets** | retained | — | Caddy Quadlet and config are kept in the repo, not installed or started |
-| **systemd-comfyui** | image | `3101` | Stable Diffusion / AI image generation |
-| **systemd-sketchlab** | diagram | `3102` | Diagramming SPA with local LLM support |
-| **systemd-deepseek-harness** | optional | `127.0.0.1:3105` | Agent runtime; host-loopback only, explicit opt-in |
-| **systemd-hermes** | optional | `3104` | Containerized Hermes gateway (explicit opt-in; separate from host Hermes Agent) |
-| **systemd-strata** | optional | `0.0.0.0:11434` | Strata OpenAI-compatible API; variants strata-5090 / strata-4070ti / strata-both (one at a time), LAN bind, API key required |
-| **systemd-hyperframes** | video | `3103` | HTML-to-video render API (headless) |
+| Service (unit) | Port | Card | Auth | Description |
+|---|---|---|---|---|
+| `strata-5090` / `-4070ti` / `-both` | `11434` | per variant | API key | Strata (Qwen) OpenAI-compatible API, one variant at a time |
+| `llama-cpp-5090` | `11435` | 5090 | API key | llama.cpp router, 262K context default |
+| `llama-cpp-4070ti` | `11436` | 4070 Ti | API key | llama.cpp router, 65K context default |
+| `llama-cpp-both` | `11438` | both (exclusive) | API key | llama.cpp router, layer split over both cards |
+| `rizzo` | `11437` | 4070 Ti | none | Rizzo Flow, Jev-compatible System One decisions |
+| `open-webui` | `3100` | - | account | chat frontend over strata + the three llama.cpp servers |
+| `comfyui-5090` / `-4070ti` | `3101` | the card strata is not on | none | image generation |
+| `sketchlab` | `3102` | - | none | diagramming SPA; same-origin `/v1` proxy to strata (key server-side) |
+| `hyperframes` | `3103` | - | none | HTML-to-video render API |
+| `hermes` (opt-in) | `3104` | - | account | containerized Hermes gateway; this host runs Hermes natively instead |
+| `deepseek-harness` (opt-in) | `127.0.0.1:3105` | - | token | dsh agent runtime, host loopback only |
 
-> **Container naming:** All containers are prefixed with `systemd-` to avoid conflicts
-> with distrobox/toolbox containers that may share short names (e.g. `hermes`).
->
-> **Network naming:** All containers (except DeepSeek Harness, which uses
-> `Network=host`) connect to the Podman network `systemd-ai`, generated by the
-> `quadlets/ai.network` quadlet.
->
-> **Network exposure:** Published app ports bind to `0.0.0.0` (all host interfaces)
-> except DeepSeek Harness, which remains loopback-only. Services use plain HTTP;
-> do not forward these ports to the public Internet.
+Containers are named `systemd-<service>` (both GPU variants of strata and
+ComfyUI share `systemd-strata` / `systemd-comfyui`). Published ports bind
+`0.0.0.0` (plain HTTP; trusted LAN only, never port-forwarded) except dsh.
 
-## Quick Install
+## Install
 
 ```bash
-# One command (requires git):
-curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/install.sh | bash
+git clone git@github.com:dark5un/ai-lab-quadlets.git ~/workspace/github.com/dark5un/ai-lab-quadlets
+cd ~/workspace/github.com/dark5un/ai-lab-quadlets
+./install.sh                 # configs, units, images; nothing started, nothing at boot
+./install.sh --no-images     # configs + units only (fast; re-run after editing a quadlet)
 ```
 
-The installer is **idempotent** — safe to re-run on an already-installed system.
-It installs the app services directly; Caddy's Quadlet and config files remain
-available in the repository but are not deployed. Use each service's LAN IP and
-port over HTTP. Other flags: `--force-rebuild`, `--reset-comfyui`, `--dry-run`, `--backup`,
-`--with-hermes`, and `--with-deepseek-harness`. The containerized Hermes gateway
-is optional and separate from the host Hermes Agent; DeepSeek Harness is also
-opt-in. Both are omitted by default to avoid unnecessary image builds, pulls,
-and service restarts.
+`install.sh` is written for this host (it refuses to run unless `nvidia-smi`
+lists an RTX 5090 and an RTX 4070 Ti) and is idempotent. It:
 
-## Uninstall
+1. checks podman (rootless), nvidia-smi, python3, openssl, and hints at
+   `sudo pacman -S python-huggingface-hub` if `hf` is missing;
+2. writes configs to `~/.config/containers/config` (dirs 700, files 600):
+   secrets via `scripts/generate-secrets.sh`, each `config/<svc>/*.example`
+   copied once, and the managed lines rewritten every run: Open WebUI's four
+   backends + keys and `WEBUI_URL` (`http://$(hostnamectl --static).local:3100`,
+   mDNS by systemd-resolved), sketchlab's strata key, dsh's keys (if opted in);
+3. runs `scripts/install-strata.sh` (strata image if missing + its 3 units);
+4. renders the units (`scripts/render-units.sh`, GPU UUIDs from nvidia-smi),
+   removes legacy units, masks `podman-user-wait-network-online`, reloads once;
+5. creates the data dirs and links `~/.local/bin/ai-lab` + `~/.local/bin/hf-download`;
+6. pulls/builds images one at a time (`scripts/build-images.sh`; `--rebuild`
+   rebuilds the local ones). Sketchlab builds from
+   `~/workspace/github.com/dark5un/sketchlab.app`, HyperFrames from
+   `~/workspace/github.com/heygen-com/hyperframes`.
+
+Opt-ins: `--with-deepseek-harness`, `--with-hermes`. `./uninstall.sh` stops
+everything and removes units, the bar plugin and the `~/.local/bin` links;
+data and configs stay.
+
+## Usage
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/uninstall.sh | bash
+ai-lab status                    # every service: state, port, health
+ai-lab start open-webui          # start (GPU rules applied); --dry-run shows the plan
+ai-lab stop comfyui              # groups work: strata, comfyui
+ai-lab strata 5090               # 5090 | 4070ti | both | off
+ai-lab url sketchlab             # browser URL
 ```
 
-Stops all services, removes quadlet files, preserves data and configs.
+The AI Lab bar widget (`plugin/ailab`, Ryoku QS Bar) does the same with one
+click per service and a strata selector. Never `systemctl --user start` a GPU
+unit directly: that bypasses the arbiter (strata's `Conflicts=` then stops
+strata instead of moving it).
 
-## Workflow
-
-```bash
-git clone https://github.com/dark5un/ai-lab-quadlets.git
-cd ai-lab-quadlets
-
-./install.sh            # Install the default services (Hermes/DSH are opt-in)
-./scripts/ai-lab status # Check what's running
-./uninstall.sh          # Tear it all down
-```
-
-`scripts/ai-lab` is the control-plane CLI: `status`, `info`, `start`, `stop`,
-`restart`, `toggle`, `ports` — all driven by `services.json`.
-
-### Optional services
-
-The containerized Hermes gateway and DeepSeek Harness stay in this repository, but
-are excluded from normal installs. The standalone installer can opt them in:
-
-```bash
-./install.sh --with-hermes
-./install.sh --with-deepseek-harness
-```
-
-These options run the full installer; the service-only Quadlet templates remain
-in `quadlets/` for manual deployment too. This containerized Hermes service is not
-the host Hermes Agent used to manage this machine.
+`scripts/reset-comfyui.sh [--dry-run] [--backup]` wipes ComfyUI's
+settings/DB/caches and keeps models, inputs, outputs and custom nodes.
+`scripts/rotate-secrets.sh [--yes]` rotates the Open WebUI, strata and
+llama.cpp secrets and rewrites every client's copy.
 
 ### Strata: three GPU variants
 
@@ -119,7 +113,7 @@ the same container name (`systemd-strata`) and API key:
 | `strata-4070ti` | RTX 4070 Ti 12 GB | |
 | `strata-both` | 5090 + 4070 Ti | Strata's layer split (`GPUS=0,1`, 5090 = main card) |
 
-`./scripts/install-strata.sh` builds `localhost/strata:multi` from
+`./scripts/install-strata.sh` (run by install.sh) builds `localhost/strata:multi` from
 `~/workspace/github.com/Niko1221/Strata` for CUDA 120 + 89 (if missing;
 `--rebuild` forces it), renders the three units with the GPU UUIDs, and
 reloads systemd. Nothing starts at boot (no `[Install]`); switch with the AI
@@ -204,15 +198,17 @@ Auth status mirrors the `"auth"` field in `services.json`
 | Containerized Hermes Gateway (optional) | `http://<host-LAN-IP>:3104` | account |
 | Sketch Lab | `http://<host-LAN-IP>:3102` | none (proxies Strata on `/v1/`, key server-side) |
 | DeepSeek Harness (optional) | `http://127.0.0.1:3105` (loopback only) | one-time token |
-| llama.cpp API | `http://<host-LAN-IP>:11435/v1` | none (open mode) |
+| llama.cpp APIs | `http://<host-LAN-IP>:11435/v1` (5090), `:11436` (4070 Ti), `:11438` (both) | API key (`~/.config/containers/config/llama-cpp/keys.txt`) |
+| Rizzo | `http://<host-LAN-IP>:11437/v1/systemone` | none |
 | Strata (optional) | `http://<host-LAN-IP>:11434/v1` | API key |
 | HyperFrames API | `http://<host-LAN-IP>:3103` | none |
 
 **LAN exposure decision (deliberate):** this stack runs on a trusted home LAN.
-The unauthenticated endpoints (ComfyUI, Sketch Lab, HyperFrames, llama.cpp in
-open mode) are intentionally reachable from the LAN for convenience; they are
-never port-forwarded to the Internet. Strata (11434) is likewise LAN-bound but
-key-gated: every request must carry the API key from
+The unauthenticated endpoints (ComfyUI, Sketch Lab, HyperFrames, Rizzo) are
+intentionally reachable from the LAN for convenience; they are
+never port-forwarded to the Internet. Strata (11434) and the llama.cpp servers
+are likewise LAN-bound but key-gated (llama.cpp's `/health` answers without a
+key). Strata: every request must carry the API key from
 `~/.config/containers/config/strata/service.env`. If the trust model changes,
 rebind strata to `127.0.0.1` in `services.json` + quadlets and expose it
 per-device via a VPN instead.
@@ -231,21 +227,16 @@ per-service GPU assignment.
 
 ### Firewall
 
-No host firewall is enabled on this machine (firewalld/ufw/nftables all
-inactive); the LAN-exposure decision above is the only boundary. If you enable
-one, allow only the app ports you need from your trusted LAN. For firewalld,
-for example:
+ufw is active on this host and opens only the ports that should be reachable
+from other machines (today: 11434 strata, 3101 ComfyUI); everything else
+answers on the host itself. Open a port per service, explicitly:
 
 ```bash
-sudo firewall-cmd --permanent --add-port=3100-3103/tcp \
-  --add-port=11434-11436/tcp
-sudo firewall-cmd --reload
+sudo ufw allow 3100/tcp                                       # LAN + tailnet
+sudo ufw allow in on tailscale0 to any port 11434 proto tcp   # tailnet only
 ```
 
-DeepSeek Harness intentionally stays bound to loopback and is not
-included above; strata is in the opened range but every request requires
-its API key. The containerized Hermes gateway (3104) is opt-in; open it only
-if you actually deployed it.
+DeepSeek Harness stays on loopback and never needs a rule.
 
 ### Retained Caddy configuration (not installed)
 
@@ -257,14 +248,7 @@ them outside a trusted network.
 
 ### Missing runtime directories
 
-If services fail to start, create missing directories:
-
-```bash
-mkdir -p ~/.local/share/llama.cpp/cards/{5090,4070ti,both} ~/.local/share/sketchlab \
-         ~/.local/share/comfyui
-# Strata (optional): ~/.local/share/strata
-# Hermes/DeepSeek Harness data dirs are only needed when those services are opted in.
-```
+`./install.sh --no-images` recreates every config and data dir.
 
 ### Podman network
 
@@ -299,12 +283,7 @@ The web UI's "Open configuration file" button does not work in this container
 `~/.local/share/deepseek-harness/settings.yaml` on the host instead — dsh
 hot-reloads it.
 
-To force a rebuild:
-
-```bash
-podman rmi -f localhost/deepseek-harness:0.1.2-rc.1
-curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/install.sh | bash -s -- --force-rebuild
-```
+To force a rebuild: `./scripts/build-images.sh --rebuild deepseek-harness`.
 
 #### Loopback-only access
 
@@ -331,78 +310,20 @@ Then open `http://127.0.0.1:3105/?token=<token>` in your browser.
 > anyone with access to your user session can read them. Treat a leaked token
 > like a leaked password — restart the container to mint a new one.
 
-### Hermes Agent gateway
+### Hermes Agent gateway (opt-in, not deployed here)
 
-The containerized Hermes gateway lives in the `hermes` systemd quadlet
-(`quadlets/hermes.container`, image `docker.io/nousresearch/hermes-agent:latest`)
-and is opt-in (`--with-hermes`). It connects to `systemd-llama-cpp-5090` for
-local model serving and the dashboard is reachable at
-`http://<host-LAN-IP>:3104`. This is separate from the host Hermes Agent that
-manages the machine.
-
-Dashboard credentials are read from
-`config/hermes-service/service.env` (generated by `scripts/generate-secrets.sh`).
+`quadlets/hermes.container` (image `docker.io/nousresearch/hermes-agent:latest`)
+is deployed only with `./install.sh --with-hermes`; this host runs Hermes
+natively (`hermes-gateway.service`). Its dashboard (`:3104`) credentials are
+generated into `~/.config/containers/config/hermes-service/service.env`.
 
 ### View logs
 
 ```bash
 journalctl --user -u open-webui.service -n 20 --no-pager
 podman logs systemd-deepseek-harness
-podman logs systemd-hermes
+podman logs systemd-llama-cpp-5090
 ```
-
-## Manual setup
-
-### 1. Prerequisites
-
-- **Arch Linux** (this deployment; the quadlets themselves are distro-agnostic)
-- **Podman** (`pacman -S podman`)
-- **NVIDIA drivers** (`pacman -S nvidia-open` + reboot)
-- **nvidia-container-toolkit** (for GPU support):
-  ```bash
-  sudo pacman -S nvidia-container-toolkit
-  ```
-
-
-### 2. Deploy
-
-```bash
-QUADLET_DIR="${HOME}/.config/containers/systemd"
-CONFIG_DIR="${HOME}/.config/containers/config"
-mkdir -p "$QUADLET_DIR" "$CONFIG_DIR"
-# Copy Quadlets, excluding the retained Caddy asset:
-cp quadlets/*.network "$QUADLET_DIR/"
-for q in quadlets/*.container; do
-  [[ "$(basename "$q")" == caddy.container ]] && continue
-  cp "$q" "$QUADLET_DIR/"
-done
-for item in config/*; do
-  [[ "$(basename "$item")" == caddy ]] && continue
-  cp -rn "$item" "$CONFIG_DIR/" 2>/dev/null || true
-done
-# Metadata service.env files: generate-secrets.sh fills in the env files from
-# their .example templates, and the dsh quadlet additionally needs a service.env
-# (install.sh generates one automatically):
-bash scripts/generate-secrets.sh
-mkdir -p "$CONFIG_DIR/deepseek-harness"
-printf 'DSH_PORT=3105\n' > "$CONFIG_DIR/deepseek-harness/service.env"
-systemctl --user daemon-reload
-# Start in dependency order (generated units are quadlet-managed — use
-# `restart`, not `enable --now`, or systemd reports "transient or generated"):
-systemctl --user restart ai-network.service
-sleep 1
-systemctl --user restart llama-cpp-5090.service
-systemctl --user restart open-webui.service
-systemctl --user restart comfyui.service
-systemctl --user restart sketchlab.service
-systemctl --user restart deepseek-harness.service
-systemctl --user restart hermes.service      # omit if running Hermes natively
-systemctl --user restart hyperframes.service
-```
-
-> Prefer the installer (`./install.sh`) — it
-> handles direct port publication, the dsh/hermes metadata env files, and the
-> start ordering above automatically while retaining Caddy files without deploying them.
 
 ## GPU units (this host: RTX 5090 + RTX 4070 Ti)
 
@@ -466,8 +387,9 @@ To point it at a different OpenAI-compatible endpoint instead:
 
 1. Open Sketch Lab at `http://<host-LAN-IP>:3102`
 2. Click the AI button in the editor
-3. Set endpoint to: `http://<host-LAN-IP>:11435` (llama.cpp, open mode)
-   or any OpenAI-compatible server reachable from the browser
+3. Set the endpoint to any OpenAI-compatible server the browser can reach
+   (e.g. `http://<host-LAN-IP>:11435/v1`, llama.cpp on the 5090, with its key
+   from `~/.config/containers/config/llama-cpp/keys.txt`)
 4. Select a model from the dropdown (populated from `/v1/models`)
 
 Note: the `/v1/` proxy on :3102 is unauthenticated on the LAN like the

@@ -1,17 +1,22 @@
 # Rizzo Flow — local Jev-compatible System One decisions (llama.cpp)
-# Port 11437: the reserved 1143x model-API slot (see docs/cleanup-plan.md port scheme).
-# GPU: pinned to the 4070 Ti by CUDA UUID (never CDI device pinning — minor
-# numbers reshuffle at driver load; see llama-cpp-5090.container comment).
+# Port 11437 (1143x model-API family, docs/port-plan.md).
+# Rendered by scripts/render-units.sh (4070 Ti UUID filled in from nvidia-smi).
+# GPU: fixed to the 4070 Ti, pinned at the CUDA layer (CUDA_VISIBLE_DEVICES),
+# the stack's convention for non-strata services. Start it through `ai-lab
+# start rizzo` or the AI Lab bar widget so scripts/gpu-arbiter.py moves strata
+# off the 4070 Ti first. No [Install]: nothing starts at boot.
 
 [Unit]
 Description=Rizzo Flow System One decision server (4070 Ti)
+Wants=ai-network.service
+After=ai-network.service
 
 [Container]
 ContainerName=systemd-rizzo
 Image=localhost/rizzo-flow:4b-q8_0
 Network=ai.network
 AddDevice=nvidia.com/gpu=all
-Environment=CUDA_VISIBLE_DEVICES=GPU-58e5f98d-a4f4-4cff-a9fc-16df0667d2fd
+Environment=CUDA_VISIBLE_DEVICES=__GPU_4070TI_UUID__
 SecurityLabelDisable=true
 UserNS=keep-id
 
@@ -29,6 +34,3 @@ RestartSec=10
 TimeoutStartSec=600
 TimeoutStopSec=60
 MemoryMax=16G
-
-[Install]
-WantedBy=default.target

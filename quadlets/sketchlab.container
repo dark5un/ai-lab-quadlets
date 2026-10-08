@@ -1,7 +1,7 @@
 [Unit]
 Description=Sketchlab - diagramming SPA with save/load backend
+Wants=ai-network.service
 After=ai-network.service
-
 
 [Container]
 ContainerName=systemd-sketchlab
@@ -17,6 +17,3 @@ Restart=on-failure
 RestartSec=10
 TimeoutStartSec=900
 TimeoutStopSec=120
-
-[Install]
-WantedBy=default.target

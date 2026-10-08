@@ -1,752 +1,222 @@
 #!/usr/bin/env bash
-# install.sh — One-command installer for AI Lab Quadlets
+# install.sh — install the ai-lab-quadlets stack on THIS host (Arch, RTX 5090 +
+# RTX 4070 Ti, rootless podman). Idempotent: re-running changes nothing that
+# is already in place.
 #
-# Detects GPUs, generates configs, copies files, and enables services.
-# Idempotent — safe to re-run on an already-installed system.
+#   ./install.sh [--no-images] [--rebuild] [--with-deepseek-harness] [--with-hermes]
 #
-# Usage:
-#   curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/install.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/dark5un/ai-lab-quadlets/main/install.sh | bash -s -- --force-rebuild
-#   # or from a local checkout:
-#   ./install.sh [--force-rebuild]
+#   --no-images              skip pulling/building images (configs + units only)
+#   --rebuild                rebuild the locally built images
+#   --with-deepseek-harness  also deploy the opt-in DeepSeek Harness (dsh)
+#   --with-hermes            also deploy the opt-in Hermes gateway container
+#                            (this host runs Hermes natively; normally not wanted)
+#
+# Nothing is enabled at boot and nothing is started, stopped or restarted
+# (except obsolete legacy units, which are stopped before removal). Start
+# services on demand: `scripts/ai-lab start <name>` or the AI Lab bar widget.
+set -euo pipefail
 
-set -uo pipefail
+ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+REG="$ROOT/services.json"
+CONF="${HOME}/.config/containers/config"
+QUADLET_DIR="${HOME}/.config/containers/systemd"
+DATA="${HOME}/.local/share"
 
-FORCE_REBUILD=0
-RESET_COMFYUI=0
-DRY_RUN=0
-BACKUP=0
-
-SKIP_HERMES=0
-WITH_HERMES=0
-WITH_DEEPSEEK_HARNESS=0
-# Parse CLI args: ./install.sh [--force-rebuild] [--reset-comfyui] [--dry-run] [--backup]
-#   --force-rebuild   rebuild container images
-#   --reset-comfyui   wipe ComfyUI configuration/runtime (settings, DB, manager state, logs, temp, caches); keeps models/input/output/custom_nodes
-#   --dry-run         with --reset-comfyui, only report what would be removed
-#   --backup          with --reset-comfyui, tar ~/.local/share/comfyui/user before deleting
-
-#   --with-hermes     opt in to the containerized Hermes gateway
-#   --with-deepseek-harness  opt in to DeepSeek Harness (builds and starts it)
-#   --skip-hermes     with --with-hermes, deploy but do not start the gateway.
+NO_IMAGES=0 REBUILD=0 WITH_DSH=0 WITH_HERMES=0
 for arg in "$@"; do
     case "$arg" in
-        --force-rebuild) FORCE_REBUILD=1 ;;
-        --reset-comfyui) RESET_COMFYUI=1 ;;
-        --dry-run) DRY_RUN=1 ;;
-        --backup) BACKUP=1 ;;
-
-        --skip-hermes) SKIP_HERMES=1 ;;
+        --no-images) NO_IMAGES=1 ;;
+        --rebuild) REBUILD=1 ;;
+        --with-deepseek-harness) WITH_DSH=1 ;;
         --with-hermes) WITH_HERMES=1 ;;
-        --with-deepseek-harness) WITH_DEEPSEEK_HARNESS=1 ;;
-        *) echo "Unknown option: $arg (supported: --force-rebuild --reset-comfyui --dry-run --backup --with-hermes --with-deepseek-harness --skip-hermes)"; exit 1 ;;
+        -h|--help) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        *) echo "Unknown option: $arg (see --help)" >&2; exit 2 ;;
     esac
 done
 
-# ─── Config ───────────────────────────────────────────────────────────────
-REPO_URL="https://github.com/dark5un/ai-lab-quadlets"
-QUADLET_DIR="${HOME}/.config/containers/systemd"
-CONFIG_DIR="${HOME}/.config/containers/config"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd 2>/dev/null || pwd)"
-# PROJECT_DIR intentionally omitted — $0 is unreliable under piped stdin (curl | bash).
-# The clone-fallback logic below handles that case.
+say() { printf '\n== %s\n' "$*"; }
 
-echo "============================================="
-echo "  AI Lab Quadlets — Reproducible Deployment  "
-echo "============================================="
-echo ""
-
-# ─── Check prerequisites ──────────────────────────────────────────────────
-echo "[1/6] Checking prerequisites..."
-
-# Podman
-if ! command -v podman &>/dev/null; then
-    echo "ERROR: podman not found."
-    echo "Install it: sudo pacman -S podman (Arch) or your distro's equivalent."
-    exit 1
-fi
-echo "  ✓ podman: $(podman --version)"
-
-# Systemd user services
-SYSTEMD_AVAILABLE=false
-if [ "$(systemctl --user is-system-running 2>/dev/null || true)" = "offline" ]; then
-    echo "  ~ user systemd not available (running in container?)"
-    echo "  ~ quadlets will be installed but not enabled."
-else
-    SYSTEMD_AVAILABLE=true
-    echo "  ✓ systemd --user available"
-fi
-
-# nvidia-container-toolkit (optional — for GPU support)
-NVIDIA_AVAILABLE=false
-if command -v nvidia-smi &>/dev/null; then
-    NVIDIA_AVAILABLE=true
-    echo "  ✓ NVIDIA GPU(s) detected"
-    if ! podman info --format '{{.Host.Security.Rootless}}' 2>/dev/null | grep -q true; then
-        echo "  ~ nvidia-container-toolkit may need rootful installation"
-    fi
-else
-    echo "  ~ No NVIDIA GPUs detected — will use CPU-only llama.cpp"
-fi
-
-# Container images — check which we already have
-echo "  ~ Checking required container images..."
-for img in ghcr.io/open-webui/open-webui:v0.11.3; do
-    if podman image exists "$img" 2>/dev/null; then
-        echo "  ✓ $img"
-    else
-        echo "  ~ Will pull: $img"
-    fi
+# ─── 1. Prerequisites ────────────────────────────────────────────────────────
+say "1/6 prerequisites"
+for cmd in podman nvidia-smi python3 openssl systemctl hostnamectl; do
+    command -v "$cmd" >/dev/null 2>&1 || { echo "  ! missing command: $cmd" >&2; exit 1; }
 done
-if [ "$WITH_HERMES" = 1 ] && podman image exists docker.io/nousresearch/hermes-agent:latest 2>/dev/null; then
-    echo "  ✓ docker.io/nousresearch/hermes-agent:latest"
+[ "$(podman info --format '{{.Host.Security.Rootless}}')" = true ] || { echo "  ! podman is not rootless" >&2; exit 1; }
+GPUS="$(nvidia-smi --query-gpu=name --format=csv,noheader)"
+for card in "RTX 5090" "RTX 4070 Ti"; do
+    grep -q "$card" <<<"$GPUS" || { echo "  ! nvidia-smi does not list the $card; this installer is for the 5090 + 4070 Ti host" >&2; exit 1; }
+done
+echo "  ✓ podman $(podman --version | awk '{print $3}') rootless; GPUs: $(paste -sd, <<<"$GPUS")"
+command -v hf >/dev/null 2>&1 && echo "  ✓ hf (Hugging Face CLI)" \
+    || echo "  ~ hf not installed (needed by hf-download): sudo pacman -S python-huggingface-hub"
+
+# ─── 2. Configs ──────────────────────────────────────────────────────────────
+say "2/6 configs in $CONF"
+umask 077
+mkdir -p "$CONF"; chmod 700 "$CONF"
+
+# Legacy layout: llama.cpp/ + llama.cpp-research/ (generator output). Keep
+# only the API key, under the new name.
+if [ -f "$CONF/llama.cpp/keys.txt" ] && [ ! -f "$CONF/llama-cpp/keys.txt" ]; then
+    mkdir -p "$CONF/llama-cpp"; chmod 700 "$CONF/llama-cpp"
+    mv "$CONF/llama.cpp/keys.txt" "$CONF/llama-cpp/keys.txt"
+    chmod 600 "$CONF/llama-cpp/keys.txt"
+    echo "  moved llama.cpp/keys.txt -> llama-cpp/keys.txt"
 fi
-
-echo ""
-
-# ─── ComfyUI config reset (standalone: ./install.sh --reset-comfyui) ──────
-# Wipes ComfyUI configuration/runtime (settings, DB, manager state, logs, temp,
-# caches) while preserving models/input/output/custom_nodes. Caches live under
-# user/.cache, so wiping user/ covers them. The user/ dir is recreated so the
-# SQLite DB — managed by Alembic and auto-migrated on first start — can open
-# cleanly (ComfyUI issue #11233: the DB fails to open when user/ is missing).
-# --dry-run only reports what would be removed; --backup tars user/ first.
-if [ "$RESET_COMFYUI" = 1 ]; then
-    COMFYUI_DIR="${HOME}/.local/share/comfyui"
-    echo "============================================="
-    echo "  ComfyUI Config Reset                    "
-    echo "============================================="
-    echo ""
-
-    # Stop comfyui so we don't wipe data it is writing to.
-    if [ "$SYSTEMD_AVAILABLE" = true ]; then
-        systemctl --user stop comfyui.service 2>/dev/null || true
-        sleep 1
-    else
-        podman stop systemd-comfyui 2>/dev/null || true
-    fi
-
-    # Optional backup of user/ before deleting.
-    if [ "$BACKUP" = 1 ]; then
-        BACKUP_TAR="${COMFYUI_DIR}/user-backup-$(date +%Y%m%d-%H%M%S).tar.gz"
-        if [ "$DRY_RUN" = 1 ]; then
-            echo "  ~ [dry-run] would back up user/ → ${BACKUP_TAR##*/}"
-        elif tar -czf "$BACKUP_TAR" -C "$COMFYUI_DIR" user 2>/dev/null; then
-            echo "  ✓ backed up user/ → ${BACKUP_TAR##*/}"
-        else
-            echo "  ! backup failed — continuing without it"
-        fi
-    fi
-
-    # Wipe configuration/runtime. Keep models/input/output/custom_nodes.
-    echo "  → Wiping (dry-run: ${DRY_RUN}); keeping models/input/output/custom_nodes..."
-    for target in user temp comfyui.log; do
-        if [ ! -e "${COMFYUI_DIR}/${target}" ]; then
-            echo "  ~ ${target} not present — nothing to remove"
-            continue
-        fi
-        if [ "$DRY_RUN" = 1 ]; then
-            echo "  ~ [dry-run] would remove ${target}"
-        else
-            rm -rf "${COMFYUI_DIR}/${target}" && echo "  ✓ removed ${target}" \
-                || echo "  ! failed to remove ${target}"
-        fi
+if [ -f "$CONF/llama-cpp/keys.txt" ]; then
+    for legacy in llama.cpp llama.cpp-research; do
+        [ -d "$CONF/$legacy" ] || continue
+        rm -rf "${CONF:?}/$legacy"
+        echo "  removed legacy $legacy/ (old generated service.env/presets.ini, no models)"
     done
-
-    # Recreate user/ so the DB can open on next ComfyUI start.
-    if [ "$DRY_RUN" != 1 ]; then
-        mkdir -p "${COMFYUI_DIR}/user" && echo "  → recreated user/"
-    fi
-
-    # Bring comfyui back up on the clean data, if it was deployed.
-    if [ "$DRY_RUN" != 1 ] && [ "$SYSTEMD_AVAILABLE" = true ] \
-        && [ -f "${QUADLET_DIR}/comfyui.container" ]; then
-        echo "  → Restarting comfyui service..."
-        systemctl --user "restart" "comfyui.service" 2>/dev/null \
-            && echo "  ✓ comfyui restarted" \
-            || echo "  ! comfyui failed to restart"
-    elif [ "$DRY_RUN" != 1 ] && [ "$SYSTEMD_AVAILABLE" != true ]; then
-        podman start systemd-comfyui 2>/dev/null || echo "  ! could not start comfyui"
-    fi
-
-    echo ""
-    if [ "$DRY_RUN" = 1 ]; then
-        echo "  Dry-run complete — nothing was actually removed."
-    else
-        echo "  ComfyUI config reset complete."
-    fi
-    echo "============================================="
-    echo ""
-    exit 0
 fi
-
-# ─── Determine source directory ───────────────────────────────────────────
-# If the script is inside a git checkout (local file), use that. Otherwise clone.
-if [ -d "${SCRIPT_DIR}/quadlets" ] && [ -f "${SCRIPT_DIR}/quadlets/ai.network" ]; then
-    SOURCE_DIR="$SCRIPT_DIR"
-    echo "[2/6] Using local checkout at $SOURCE_DIR"
-elif [ -d "${SCRIPT_DIR}/../quadlets" ] && [ -f "${SCRIPT_DIR}/../quadlets/ai.network" ]; then
-    # Fallback: script is inside a subdirectory of the checkout
-    SOURCE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-    echo "[2/6] Using local checkout at $SOURCE_DIR"
-else
-    SOURCE_DIR=$(mktemp -d /tmp/ai-lab-quadlets-XXXXX)
-    echo "[2/6] Cloning from $REPO_URL ..."
-    if command -v git &>/dev/null; then
-        git clone --depth=1 "$REPO_URL" "$SOURCE_DIR"
-    else
-        echo "ERROR: git not found — can't clone."
-        echo "Install git: sudo pacman -S git (Arch) or your distro's equivalent."
-        exit 1
-    fi
+# Build markers whose image is gone, and template copies an older installer
+# deployed (the repo's .example files are the only templates).
+[ -f "$CONF/.comfyui-cu130-built" ] && { rm -f "$CONF/.comfyui-cu130-built"; echo "  removed stale .comfyui-cu130-built"; }
+if [ -f "$CONF/.deepseek-harness-built" ] && ! podman image exists localhost/deepseek-harness:0.1.2-rc.1; then
+    rm -f "$CONF/.deepseek-harness-built"; echo "  removed stale .deepseek-harness-built"
 fi
-echo ""
+while IFS= read -r -d '' ex; do
+    rm -f "$ex"; echo "  removed deployed template ${ex#"$CONF"/}"
+done < <(find "$CONF" -name '*.example' -print0)
 
-# Shared helper is exercised independently by tests/test-optional-image-service.sh.
-# shellcheck source=scripts/optional-image-service.sh
-source "${SOURCE_DIR}/scripts/optional-image-service.sh"
+AI_LAB_CONFIG_DIR="$CONF" "$ROOT/scripts/generate-secrets.sh" \
+    $([ "$WITH_HERMES" = 1 ] && echo --with-hermes)
 
-# ─── GPU Detection ────────────────────────────────────────────────────────
-echo "[3/6] Detecting GPUs and generating llama.cpp configs..."
-LLAMA_CPP_IMAGE_TAG="server"  # default — overridden below for iGPU/Vulkan path
-if [ "$NVIDIA_AVAILABLE" = true ]; then
-    bash "${SOURCE_DIR}/scripts/detect-gpus.sh" \
-        --output-dir "${SOURCE_DIR}/quadlets" \
-        --config-dir "${SOURCE_DIR}/config" || true
-else
-    # CPU fallback — detect iGPU for Vulkan acceleration
-    if ls /dev/dri/renderD* &>/dev/null 2>&1; then
-        LLAMA_CPP_IMAGE_TAG="server-vulkan"
-        echo "  → Detected iGPU — using Vulkan-accelerated llama.cpp (server-vulkan)"
-        sed "s|^Image=.*:server$|Image=ghcr.io/ggml-org/llama.cpp:server-vulkan|" \
-            "${SOURCE_DIR}/quadlets/llama-cpp-cpu.container" \
-            > "${SOURCE_DIR}/quadlets/llama-cpp-5090.container"
-        sed -i '/^\[Service\]/i\# Expose host GPU for Vulkan/iGPU acceleration' \
-            "${SOURCE_DIR}/quadlets/llama-cpp-5090.container"
-        sed -i '/^\[Service\]/i\AddDevice=/dev/dri:/dev/dri' \
-            "${SOURCE_DIR}/quadlets/llama-cpp-5090.container"
-    else
-        cp "${SOURCE_DIR}/quadlets/llama-cpp-cpu.container" "${SOURCE_DIR}/quadlets/llama-cpp-5090.container" 2>/dev/null || true
-        echo "  → Using CPU-only llama.cpp (no iGPU detected)"
-    fi
-
-    # Generate CPU service.env with concrete values (not template placeholders)
-    mkdir -p "${SOURCE_DIR}/config/llama-cpp-5090"
-    if [ ! -f "${SOURCE_DIR}/config/llama-cpp-5090/service.env" ]; then
-        if [ "$LLAMA_CPP_IMAGE_TAG" = "server-vulkan" ]; then
-            echo "  → Enabling iGPU offload (LLAMA_ARG_N_GPU_LAYERS=99)"
-            cat > "${SOURCE_DIR}/config/llama-cpp-5090/service.env" <<'VULKENV'
-# llama.cpp service.env — CPU + iGPU (Vulkan)
-# Generated by install.sh (CPU fallback with iGPU detected)
-LLAMA_ARG_N_GPU_LAYERS=99
-LLAMA_ARG_MODELS_DIR=/models
-LLAMA_ARG_MODELS_MAX=1
-LLAMA_ARG_MODELS_AUTOLOAD=true
-LLAMA_ARG_MODELS_PRESET=/etc/llama-cpp/presets.ini
-LLAMA_ARG_LOAD_MODE=none
-LLAMA_ARG_HOST=0.0.0.0
-LLAMA_ARG_PORT=8080
-LLAMA_ARG_CTX_SIZE=32768
-LLAMA_ARG_N_PARALLEL=1
-LLAMA_ARG_N_PREDICT=-1
-LLAMA_ARG_UBATCH=128
-LLAMA_ARG_BATCH=512
-LLAMA_ARG_FIT=off
-LLAMA_ARG_JINJA=true
-LLAMA_ARG_ENDPOINT_METRICS=true
-LLAMA_ARG_ENDPOINT_SLOTS=true
-LLAMA_ARG_TIMEOUT=3600
-LLAMA_ARG_SSE_PING_INTERVAL=30
-VULKENV
-        else
-            cat > "${SOURCE_DIR}/config/llama-cpp-5090/service.env" <<'CPUENV'
-# llama.cpp service.env — CPU-only
-# Generated by install.sh (CPU fallback)
-LLAMA_ARG_MODELS_DIR=/models
-LLAMA_ARG_MODELS_MAX=1
-LLAMA_ARG_MODELS_AUTOLOAD=true
-LLAMA_ARG_MODELS_PRESET=/etc/llama-cpp/presets.ini
-LLAMA_ARG_LOAD_MODE=none
-LLAMA_ARG_HOST=0.0.0.0
-LLAMA_ARG_PORT=8080
-LLAMA_ARG_CTX_SIZE=32768
-LLAMA_ARG_N_PARALLEL=1
-LLAMA_ARG_N_PREDICT=-1
-LLAMA_ARG_UBATCH=128
-LLAMA_ARG_BATCH=512
-LLAMA_ARG_FIT=off
-LLAMA_ARG_JINJA=true
-LLAMA_ARG_ENDPOINT_METRICS=true
-LLAMA_ARG_ENDPOINT_SLOTS=true
-LLAMA_ARG_TIMEOUT=3600
-LLAMA_ARG_SSE_PING_INTERVAL=30
-CPUENV
+# Non-secret configs: copy each repo template once; the deployed copy is
+# the user's to edit afterwards.
+copy_examples() {  # copy_examples <svc>
+    local svc="$1" ex dst
+    mkdir -p "$CONF/$svc"; chmod 700 "$CONF/$svc"
+    for ex in "$ROOT/config/$svc"/*.example; do
+        [ -f "$ex" ] || continue
+        dst="$CONF/$svc/$(basename "${ex%.example}")"
+        if [ ! -f "$dst" ]; then
+            install -m 600 "$ex" "$dst"; echo "  created $svc/$(basename "$dst")"
         fi
-    fi
-    if [ ! -f "${SOURCE_DIR}/config/llama-cpp-5090/presets.ini" ]; then
-        if [ "$LLAMA_CPP_IMAGE_TAG" = "server-vulkan" ]; then
-            cat > "${SOURCE_DIR}/config/llama-cpp-5090/presets.ini" <<'VULKPRE'
-# llama.cpp per-model presets — CPU + iGPU (Vulkan)
-# Generated by install.sh (CPU fallback with iGPU detected)
+        chmod 600 "$dst"
+    done
+}
+for svc in llama-cpp-5090 llama-cpp-4070ti llama-cpp-both sketchlab; do copy_examples "$svc"; done
 
-version = 1
+# Strata: image (if missing) + its three units + its service.env with the key.
+say "3/6 strata (scripts/install-strata.sh)"
+AI_LAB_NO_RELOAD=1 "$ROOT/scripts/install-strata.sh" | sed 's/^/  /'
 
-[*]
-ctx-size = 8192
-n-predict = -1
-n-gpu-layers = 99
-fit = off
-jinja = on
-load-mode = mmap
-
-VULKPRE
-        else
-            cat > "${SOURCE_DIR}/config/llama-cpp-5090/presets.ini" <<'CPUPRE'
-# llama.cpp per-model presets — CPU-only
-# Generated by install.sh (CPU fallback)
-
-version = 1
-
-[*]
-ctx-size = 8192
-n-predict = -1
-n-gpu-layers = 0
-fit = off
-jinja = on
-load-mode = mmap
-
-CPUPRE
-        fi
-    fi
-fi
-echo ""
-
-# ─── Generate secrets ─────────────────────────────────────────────────────
-echo "[4/6] Generating secrets..."
-if [ "$WITH_HERMES" = 1 ]; then
-    bash "${SOURCE_DIR}/scripts/generate-secrets.sh" --with-hermes || true
-else
-    bash "${SOURCE_DIR}/scripts/generate-secrets.sh" || true
-fi
-echo ""
-
-# ─── Determine hostname for retained Caddy config templates ───────────────
-# Caddy files are kept for reference/manual use but are not deployed or started.
-HOSTNAME_SHORT=$(hostname -s 2>/dev/null || echo "localhost")
-AVAHI_NAME=""
-if command -v avahi-resolve &>/dev/null; then
-    AVAHI_NAME=$(systemctl status avahi-daemon 2>/dev/null | grep -o 'running \[[^]]*\]' | sed 's/running \[\(.*\)\]/\1/' | head -1)
-fi
-if [ -z "$AVAHI_NAME" ]; then
-    AVAHI_NAME="${HOSTNAME_SHORT}.local"
-fi
-LOCAL_HOSTNAME="$AVAHI_NAME"
-echo "  → Using published hostname: ${LOCAL_HOSTNAME}"
-
-
-# ─── Copy files to runtime locations ──────────────────────────────────────
-echo "[5/6] Deploying to system directories..."
-
-# Quadlets
-mkdir -p "$QUADLET_DIR"
-echo "  → Copying quadlets to $QUADLET_DIR/"
-cp "${SOURCE_DIR}/quadlets/ai.network" "$QUADLET_DIR/"
-for quadlet in "${SOURCE_DIR}/quadlets/"*.container; do
-    fname=$(basename "$quadlet")
-    # Caddy config and its Quadlet stay in the repository, but are not deployed.
-    if [[ "$fname" == caddy.container ]]; then
+# Managed lines, rewritten on every run from the live keys (values never printed).
+set_kv() {  # set_kv <file> <KEY> <value>
+    python3 - "$@" <<'EOF'
+import os, sys
+path, key, val = sys.argv[1:4]
+lines = open(path).read().splitlines() if os.path.exists(path) else []
+out, done = [], False
+for ln in lines:
+    if ln.startswith(key + "="):
+        if not done:
+            out.append(f"{key}={val}"); done = True
         continue
-    fi
-    # Hermes and DeepSeek Harness are opt-in; don't deploy their units by default.
-    if [[ "$fname" == hermes.container ]] && [ "$WITH_HERMES" != 1 ]; then
-        continue
-    fi
-    if [[ "$fname" == deepseek-harness.container ]] && [ "$WITH_DEEPSEEK_HARNESS" != 1 ]; then
-        continue
-    fi
-    # Skip CPU fallback if main was generated
-    if [[ "$fname" == llama-cpp-cpu.container ]]; then
-        if [ -f "${SOURCE_DIR}/quadlets/llama-cpp-5090.container" ]; then
-            continue
-        fi
-    fi
-    # Skip comfyui-cpu variant — handled separately below
-    if [[ "$fname" == comfyui-cpu.container ]]; then
-        continue
-    fi
-    cp "$quadlet" "$QUADLET_DIR/"
-    echo "  ✓ $fname"
-done
-
-# Remove any previously deployed Caddy service, preserving its config, certs,
-# and Podman volumes for manual recovery if desired.
-systemctl --user stop caddy.service 2>/dev/null || true
-podman rm -f systemd-caddy 2>/dev/null || true
-rm -f "$QUADLET_DIR/caddy.container"
-echo "  ~ Caddy service stopped/removed; its configuration and data were kept"
-
-# Default installs remove previous containerized optional services without
-# deleting their persistent config/data. Users can opt back in with flags.
-if [ "$WITH_HERMES" != 1 ]; then
-    systemctl --user disable --now hermes.service 2>/dev/null || true
-    rm -f "$QUADLET_DIR/hermes.container"
-fi
-if [ "$WITH_DEEPSEEK_HARNESS" != 1 ]; then
-    systemctl --user disable --now deepseek-harness.service 2>/dev/null || true
-    rm -f "$QUADLET_DIR/deepseek-harness.container"
-fi
-
-# The CPU-only llama unit is a stale fallback on this host: the active main
-# service already selects CUDA or CPU under the canonical llama-cpp-5090 name.
-if [ -f "$QUADLET_DIR/llama-cpp-5090.container" ]; then
-    systemctl --user disable --now llama-cpp-cpu.service 2>/dev/null || true
-    rm -f "$QUADLET_DIR/llama-cpp-cpu.container"
-fi
-
-# ComfyUI: deploy the right variant based on hardware
-if [ "$NVIDIA_AVAILABLE" = true ]; then
-    echo "  ✓ comfyui.container (CUDA — AddDevice configured)"
-else
-    cp "${SOURCE_DIR}/quadlets/comfyui-cpu.container" "$QUADLET_DIR/comfyui.container"
-    echo "  ✓ comfyui.container (CPU — no GPU detected)"
-fi
-
-# Config files — always regenerate files that contain HOSTNAME.local
-# (avahi name can change between reboots). Preserve other existing files.
-mkdir -p "$CONFIG_DIR"
-echo "  → Deploying configs to $CONFIG_DIR/ ..."
-for config_item in "${SOURCE_DIR}/config/"*; do
-    item_name=$(basename "$config_item")
-    # Keep Caddy config files and runtime data unchanged; Caddy is not deployed.
-    if [[ "$item_name" == caddy ]]; then
-        continue
-    fi
-    if [[ "$item_name" == hermes-service ]] && [ "$WITH_HERMES" != 1 ]; then
-        continue
-    fi
-    if [[ "$item_name" == deepseek-harness ]] && [ "$WITH_DEEPSEEK_HARNESS" != 1 ]; then
-        continue
-    fi
-    target="${CONFIG_DIR}/${item_name}"
-    if [ -d "$config_item" ]; then
-        mkdir -p "$target"
-        for file in "$config_item"/*; do
-            fname=$(basename "$file")
-
-            # Keep templates as templates; never deploy placeholder credentials.
-            if [[ "$fname" == *.example ]]; then
-                cp "$file" "$target/" 2>/dev/null || true
-            # If a real source config contains HOSTNAME.local, refresh only its
-            # hostname while preserving the actual (non-example) settings.
-            elif grep -q 'HOSTNAME\.local' "$file" 2>/dev/null; then
-                target_file="${target}/${fname}"
-                sed "s/HOSTNAME\.local/${LOCAL_HOSTNAME}/g" "$file" > "$target_file" 2>/dev/null
-                echo "  ✓ ${item_name}/${target_file##*/} (hostname substituted)"
-            # Other files: only copy if they don't exist yet (preserve manual edits).
-            elif [ ! -f "${target}/${fname}" ]; then
-                cp "$file" "${target}/${fname}" 2>/dev/null || true
-                echo "  ✓ ${item_name}/${fname}"
-            fi
-        done
-    fi
-done
-
-# Runtime data directories
-mkdir -p \
-    "${HOME}/.local/share/sketchlab" \
-    "${HOME}/.local/share/comfyui/models/checkpoints" \
-    "${HOME}/.local/share/llama.cpp/models"
-if [ "$WITH_HERMES" = 1 ]; then
-    mkdir -p "${HOME}/.local/share/hermes-service"
-fi
-if [ "$WITH_DEEPSEEK_HARNESS" = 1 ]; then
-    mkdir -p "${HOME}/.local/share/deepseek-harness"
-fi
-echo "  → Runtime data directories created (including models/)"
-
-# DeepSeek Harness env — upstream ships no service.env, but the quadlet's
-# EnvironmentFile requires one or the container fails with exit 125
-# ("no such file or directory"). Create a working default if missing.
-DSH_ENV="${CONFIG_DIR}/deepseek-harness/service.env"
-if [ "$WITH_DEEPSEEK_HARNESS" = 1 ] && [ ! -f "$DSH_ENV" ]; then
-    mkdir -p "$(dirname "$DSH_ENV")"
-    cat > "$DSH_ENV" <<EOF
-# DeepSeek Harness (dsh) service.env — generated by install.sh.
-# Provider configuration (API keys etc). DSH_PORT defaults to 3105.
-DSH_PORT=3105
-# Preset provider keys (referenced by settings.yaml apiKeyEnv). Fill from:
-#   strata:     grep -oP '^API_KEY=\K\S+' ~/.config/containers/config/strata/service.env
-#   llama.cpp:  head -1 ~/.config/containers/config/llama-cpp/keys.txt
-STRATA_API_KEY=
-LLAMA_CPP_API_KEY=
+    out.append(ln)
+if not done:
+    out.append(f"{key}={val}")
+tmp = path + ".tmp"
+with open(tmp, "w") as f:
+    f.write("\n".join(out) + "\n")
+os.chmod(tmp, 0o600)
+os.replace(tmp, path)
 EOF
-    chmod 600 "$DSH_ENV"
-    echo "  ✓ created ${DSH_ENV} (dsh binds 127.0.0.1:3105 via Network=host)"
-fi
+}
+env_get() { sed -n "s/^$2=//p" "$1" | tail -1; }
+STRATA_KEY="$(env_get "$CONF/strata/service.env" API_KEY)"
+LLAMA_KEY="$(grep -v '^#' "$CONF/llama-cpp/keys.txt" | grep -m1 . || true)"
+[ -n "$STRATA_KEY" ] && [ -n "$LLAMA_KEY" ] || { echo "  ! strata or llama.cpp key missing" >&2; exit 1; }
+HOST_LOCAL="$(hostnamectl --static).local"
 
-# Preset dsh provider connections (strata + llama.cpp, 262k context).
-DSH_SETTINGS="${HOME}/.local/share/deepseek-harness/settings.yaml"
-if [ "$WITH_DEEPSEEK_HARNESS" = 1 ] && [ ! -f "$DSH_SETTINGS" ] && [ -f "${SOURCE_DIR}/config/deepseek-harness/settings.yaml.example" ]; then
-    mkdir -p "$(dirname "$DSH_SETTINGS")"
-    cp "${SOURCE_DIR}/config/deepseek-harness/settings.yaml.example" "$DSH_SETTINGS"
-    echo "  ✓ created ${DSH_SETTINGS} (preset strata/llama-cpp providers)"
-fi
-
-# Podman network (idempotent — safe to re-run)
-echo "  → Ensuring podman network 'systemd-ai' exists..."
-podman network exists systemd-ai 2>/dev/null || podman network create systemd-ai
-echo ""
-
-# ─── Container images ────────────────────────────────────────────────────
-echo "  ~ Ensuring container images..."
-
-
-# Open WebUI (large image; keep Podman's progress visible)
-podman pull ghcr.io/open-webui/open-webui:v0.11.3 && echo "  ✓ open-webui"
-
-# Containerized Hermes is opt-in; this is separate from the host Hermes agent.
-if [ "$WITH_HERMES" = 1 ]; then
-    podman pull docker.io/nousresearch/hermes-agent:latest && echo "  ✓ hermes"
-fi
-
-# Sketchlab env — the /v1 AI proxy needs the Strata key injected server-side.
-SKETCHLAB_ENV="${CONFIG_DIR}/sketchlab/service.env"
-if [ ! -f "$SKETCHLAB_ENV" ]; then
-    mkdir -p "$(dirname "$SKETCHLAB_ENV")"
-    STRATA_KEY=""
-    if [ -f "${CONFIG_DIR}/strata/service.env" ]; then
-        STRATA_KEY=$(grep -oP '^API_KEY=\K\S+' "${CONFIG_DIR}/strata/service.env" || true)
+OW="$CONF/open-webui/service.env"
+set_kv "$OW" WEBUI_URL "http://${HOST_LOCAL}:3100"
+set_kv "$OW" CORS_ALLOW_ORIGIN "http://${HOST_LOCAL}:3100"
+set_kv "$OW" OPENAI_API_BASE_URLS "http://systemd-strata:8080/v1;http://systemd-llama-cpp-5090:8080/v1;http://systemd-llama-cpp-4070ti:8080/v1;http://systemd-llama-cpp-both:8080/v1"
+set_kv "$OW" OPENAI_API_KEYS "${STRATA_KEY};${LLAMA_KEY};${LLAMA_KEY};${LLAMA_KEY}"
+echo "  open-webui: 4 backends (strata, llama-cpp-5090/4070ti/both), URL http://${HOST_LOCAL}:3100"
+set_kv "$CONF/sketchlab/service.env" STRATA_API_KEY "$STRATA_KEY"
+echo "  sketchlab: /v1 proxy key = strata key"
+if [ "$WITH_DSH" = 1 ]; then
+    DSH="$CONF/deepseek-harness/service.env"
+    mkdir -p "$(dirname "$DSH")"; chmod 700 "$(dirname "$DSH")"
+    [ -f "$DSH" ] || printf '# DeepSeek Harness. DSH_PORT: dsh binds 127.0.0.1:<port> (Network=host).\nDSH_PORT=3105\n' > "$DSH"
+    set_kv "$DSH" STRATA_API_KEY "$STRATA_KEY"
+    set_kv "$DSH" LLAMA_CPP_API_KEY "$LLAMA_KEY"
+    DSH_SETTINGS="$DATA/deepseek-harness/settings.yaml"
+    if [ ! -f "$DSH_SETTINGS" ]; then
+        mkdir -p "$(dirname "$DSH_SETTINGS")"
+        install -m 600 "$ROOT/config/deepseek-harness/settings.yaml.example" "$DSH_SETTINGS"
+        echo "  created $DSH_SETTINGS"
     fi
-    cat > "$SKETCHLAB_ENV" <<EOF
-# Sketchlab same-origin AI proxy (/v1/ -> Strata). Generated by install.sh.
-STRATA_UPSTREAM=http://systemd-strata:8080
-STRATA_API_KEY=${STRATA_KEY}
-EOF
-    chmod 600 "$SKETCHLAB_ENV"
-    echo "  ✓ sketchlab service.env created (Strata key: $([ -n "$STRATA_KEY" ] && echo copied || echo MISSING — fill in manually))"
+    echo "  deepseek-harness: strata + llama.cpp keys"
 fi
+umask 022
 
-# Sketch Lab — try GHCR first, fall back to local build
-echo "  ~ Sketch Lab image..."
-if podman image exists localhost/sketchlab:v0.6.1 2>/dev/null; then
-    echo "  ✓ localhost/sketchlab:v0.6.1 (already exists)"
-elif podman pull ghcr.io/dark5un/sketchlab:v0.6.1; then
-    # Tag as localhost too so the quadlet can find it
-    podman tag ghcr.io/dark5un/sketchlab:v0.6.1 localhost/sketchlab:v0.6.1 2>/dev/null || true
-    echo "  ✓ ghcr.io/dark5un/sketchlab:v0.6.1"
-elif [ -d "${HOME}/sketchlab.app" ]; then
-    echo "  ~ Building from local sketchlab.app clone..."
-    (cd "${HOME}/sketchlab.app" && podman build -t localhost/sketchlab:v0.6.1 .) && echo "  ✓ built sketchlab" || echo "  ! Build failed"
-elif command -v git &>/dev/null; then
-    echo "  ~ Building sketchlab from source..."
-    TMP_CLONE=$(mktemp -d /tmp/sketchlab-XXXXX)
-    git clone --depth=1 https://github.com/dark5un/sketchlab.app.git "$TMP_CLONE" 2>/dev/null && \
-        (cd "$TMP_CLONE" && podman build -t localhost/sketchlab:v0.6.1 .) && \
-        echo "  ✓ built sketchlab from source" || \
-        echo "  ! Sketch Lab image not available — build manually: see README"
-    rm -rf "$TMP_CLONE" 2>/dev/null || true
-else
-    echo "  ! Sketch Lab image not available — build manually: see README"
-fi
+# ─── 4. Units ────────────────────────────────────────────────────────────────
+say "4/6 units in $QUADLET_DIR"
+UNITS=(ai llama-cpp-5090 llama-cpp-4070ti llama-cpp-both comfyui-5090 comfyui-4070ti rizzo open-webui sketchlab hyperframes)
+[ "$WITH_DSH" = 1 ] && UNITS+=(deepseek-harness)
+[ "$WITH_HERMES" = 1 ] && UNITS+=(hermes)
+"$ROOT/scripts/render-units.sh" "${UNITS[@]}"
 
-# ─── ComfyUI image (CUDA or CPU based on hardware) ───────────────────────
-# Rebuilds when FORCE_REBUILD=1, or when the Containerfile hash changed since
-# the last build (marker file in the persistent config dir).
-echo "  ~ ComfyUI image..."
-if [ "$NVIDIA_AVAILABLE" = true ]; then
-    # CUDA build — see containers/comfyui/Containerfile
-    CF_HASH=$(sha256sum "${SOURCE_DIR}/containers/comfyui/Containerfile" 2>/dev/null | cut -d' ' -f1)
-    if [ "${FORCE_REBUILD:-0}" = "1" ] || [ "$(cat "${CONFIG_DIR}/.comfyui-cu130-built" 2>/dev/null)" != "$CF_HASH" ]; then
-        podman rm -f comfyui 2>/dev/null || true
-        podman rmi -f localhost/comfyui:v0.34.0-cu130 2>/dev/null || true
-    fi
-    if podman image exists localhost/comfyui:v0.34.0-cu130 2>/dev/null; then
-        echo "  ✓ localhost/comfyui:v0.34.0-cu130 (already exists)"
-    elif [ -f "${SOURCE_DIR}/containers/comfyui/Containerfile" ]; then
-        echo "  ~ Building CUDA ComfyUI image (this takes a while)..."
-        (cd "${SOURCE_DIR}/containers/comfyui" && podman build -t localhost/comfyui:v0.34.0-cu130 -f Containerfile .) && \
-            echo "$CF_HASH" > "${CONFIG_DIR}/.comfyui-cu130-built" && \
-            echo "  ✓ built CUDA comfyui" || echo "  ! CUDA ComfyUI build failed — see containers/comfyui/Containerfile"
-    else
-        echo "  ! No comfyui Containerfile found"
-    fi
-else
-    # CPU build — see containers/comfyui/Containerfile.cpu
-    CF_HASH=$(sha256sum "${SOURCE_DIR}/containers/comfyui/Containerfile.cpu" 2>/dev/null | cut -d' ' -f1)
-    if [ "${FORCE_REBUILD:-0}" = "1" ] || [ "$(cat "${CONFIG_DIR}/.comfyui-cpu-built" 2>/dev/null)" != "$CF_HASH" ]; then
-        podman rm -f comfyui 2>/dev/null || true
-        podman rmi -f localhost/comfyui-cpu:v0.34.0 2>/dev/null || true
-    fi
-    if podman image exists localhost/comfyui-cpu:v0.34.0 2>/dev/null; then
-        echo "  ✓ localhost/comfyui-cpu:v0.34.0 (already exists)"
-    elif [ -f "${SOURCE_DIR}/containers/comfyui/Containerfile.cpu" ]; then
-        echo "  ~ Building CPU ComfyUI image (this takes a while)..."
-        (cd "${SOURCE_DIR}/containers/comfyui" && podman build -t localhost/comfyui-cpu:v0.34.0 -f Containerfile.cpu .) && \
-            echo "$CF_HASH" > "${CONFIG_DIR}/.comfyui-cpu-built" && \
-            echo "  ✓ built CPU comfyui" || echo "  ! CPU ComfyUI build failed — see containers/comfyui/Containerfile.cpu"
-    else
-        echo "  ! No comfyui Containerfile.cpu found"
-    fi
-fi
-echo ""
+LEGACY=(llama-cpp-main llama-cpp-research llama-cpp-cpu comfyui comfyui-cpu strata caddy)
+[ "$WITH_DSH" = 1 ] || LEGACY+=(deepseek-harness)
+[ "$WITH_HERMES" = 1 ] || LEGACY+=(hermes)
+for f in "$QUADLET_DIR"/llama-cpp-extra-*.container; do
+    [ -f "$f" ] && LEGACY+=("$(basename "$f" .container)")
+done
+for name in "${LEGACY[@]}"; do
+    [ -f "$QUADLET_DIR/$name.container" ] || continue
+    systemctl --user stop "$name.service" 2>/dev/null || true
+    rm -f "$QUADLET_DIR/$name.container"
+    echo "  removed legacy $name.container"
+done
+# podman 6 makes every quadlet wait for podman-user-wait-network-online, which
+# times out on Arch: the stack is local-only, so mask it (uninstall unmasks).
+systemctl --user mask podman-user-wait-network-online.service >/dev/null 2>&1 || true
+systemctl --user daemon-reload
+echo "  ✓ daemon-reload (nothing enabled, nothing started)"
 
-# ─── DeepSeek Harness image (opt-in) ───────────────────────────────────
-if [ "$WITH_DEEPSEEK_HARNESS" = 1 ]; then
-    # Rebuilds when --force-rebuild, or when the Containerfile hash changed.
-    echo "  ~ DeepSeek Harness image..."
-    DSH_HASH=$(sha256sum "${SOURCE_DIR}/containers/deepseek-harness/Containerfile" 2>/dev/null | cut -d' ' -f1)
-    if [ "$FORCE_REBUILD" = "1" ] || [ "$(cat "${CONFIG_DIR}/.deepseek-harness-built" 2>/dev/null)" != "$DSH_HASH" ]; then
-        podman rm -f deepseek-harness 2>/dev/null || true
-        podman rmi -f localhost/deepseek-harness:0.1.2-rc.1 2>/dev/null || true
-    fi
-    if podman image exists localhost/deepseek-harness:0.1.2-rc.1 2>/dev/null; then
-        echo "  ✓ localhost/deepseek-harness:0.1.2-rc.1 (already exists)"
-    elif [ -f "${SOURCE_DIR}/containers/deepseek-harness/Containerfile" ]; then
-        echo "  ~ Building DeepSeek Harness image (this takes a while)..."
-        (cd "${SOURCE_DIR}/containers/deepseek-harness" && podman build -t localhost/deepseek-harness:0.1.2-rc.1 -f Containerfile .) && \
-            echo "$DSH_HASH" > "${CONFIG_DIR}/.deepseek-harness-built" && \
-            echo "  ✓ built deepseek-harness" || echo "  ! DeepSeek Harness build failed — see containers/deepseek-harness/Containerfile"
-    else
-        echo "  ! No deepseek-harness Containerfile found"
-    fi
-    echo ""
-fi
-
-# ─── HyperFrames image (built from the local repo checkout) ───────────────
-# The server role (gcp-cloud-run) reads PORT (default 8080) and is bun-native.
-# Build context must be the monorepo ROOT so the @hyperframes/* workspaces are
-# available. Falls back to GHCR if the local checkout is missing.
-echo "  ~ HyperFrames image..."
-HYPERFRAMES_REPO="${HYPERFRAMES_REPO:-$HOME/workspace/github.com/heygen-com/hyperframes}"
-if podman image exists localhost/hyperframes:latest 2>/dev/null; then
-    echo "  ✓ localhost/hyperframes:latest (already exists)"
-elif podman pull ghcr.io/dark5un/hyperframes:latest; then
-    podman tag ghcr.io/dark5un/hyperframes:latest localhost/hyperframes:latest 2>/dev/null || true
-    echo "  ✓ pulled hyperframes from GHCR"
-elif [ -f "${HYPERFRAMES_REPO}/packages/gcp-cloud-run/Dockerfile" ]; then
-    echo "  ~ Building HyperFrames image (repo checkout: ${HYPERFRAMES_REPO})..."
-    (cd "${HYPERFRAMES_REPO}" && podman build -t localhost/hyperframes:latest -f packages/gcp-cloud-run/Dockerfile .) && \
-        echo "  ✓ built hyperframes" || echo "  ! HyperFrames build failed — see packages/gcp-cloud-run/Dockerfile"
-else
-    echo "  ! HyperFrames repo checkout not found — build manually: see quadlets/hyperframes.container"
-fi
-echo ""
-echo "  ~ Ensuring llama.cpp ${LLAMA_CPP_IMAGE_TAG} image (progress shown; no detached pull)..."
-podman pull "ghcr.io/ggml-org/llama.cpp:${LLAMA_CPP_IMAGE_TAG}" && echo "  ✓ llama.cpp image ready" || \
-    echo "  ! llama.cpp image pull failed; systemd may retry when the service starts"
-echo ""
-
-# ─── hf-download tool ────────────────────────────────────────────────────
-echo "  ~ Deploying hf-download tool to ~/.local/bin/..."
+# ─── 5. Data dirs ────────────────────────────────────────────────────────────
+say "5/6 data dirs"
+mkdir -p "$DATA"/llama.cpp/cards/{5090,4070ti,both} "$DATA"/comfyui "$DATA"/sketchlab "$DATA"/rizzo
+[ "$WITH_HERMES" = 1 ] && mkdir -p "$DATA/hermes-service"
+echo "  ✓ ~/.local/share/{llama.cpp/cards/{5090,4070ti,both},comfyui,sketchlab,rizzo}"
 mkdir -p "${HOME}/.local/bin"
-cp "${SOURCE_DIR}/scripts/hf-download.sh" "${HOME}/.local/bin/hf-download" 2>/dev/null
-chmod +x "${HOME}/.local/bin/hf-download" 2>/dev/null
-echo "  ✓ ~/.local/bin/hf-download"
+for tool in ai-lab:scripts/ai-lab hf-download:scripts/hf-download.sh; do
+    ln -sfn "$ROOT/${tool#*:}" "${HOME}/.local/bin/${tool%%:*}"
+done
+echo "  ✓ ~/.local/bin/ai-lab, ~/.local/bin/hf-download -> repo scripts"
 
-# Ensure the Hugging Face CLI (hf) is available (needed by hf-download).
-if command -v hf &>/dev/null; then
-    echo "  ✓ hf CLI (Hugging Face): $(hf --version 2>/dev/null | head -1)"
-elif command -v brew &>/dev/null; then
-    echo "  ~ Installing hf CLI..."
-    curl -LsSf https://hf.co/cli/install.sh | bash && echo "  ✓ installed" || \
-        echo "  ! brew install failed — try: brew install huggingface/tap/huggingface-cli"
-elif command -v pip3 &>/dev/null; then
-    echo "  ~ Installing hf CLI via pip..."
-    pip3 install --user --upgrade "huggingface_hub" && echo "  ✓ installed via pip" || \
-        echo "  ! pip install failed"
-elif command -v curl &>/dev/null; then
-    echo "  ~ Installing hf CLI via standalone installer..."
-    curl -LsSf https://hf.co/cli/install.sh | bash && echo "  ✓ installed" || \
-        echo "  ! standalone install failed"
-fi
-
-# Final check — warn clearly if no working CLI is available
-if ! command -v hf &>/dev/null; then
-    echo "  ! No working Hugging Face CLI (hf) found."
-    echo "  ! hf-download needs it. Install one of:"
-    echo "      brew install hf"
-    echo "      pip install --user huggingface_hub"
-    echo "      curl -LsSf https://hf.co/cli/install.sh | bash"
-fi
-echo ""
-
-# Caddy assets are retained for manual/legacy recovery; the default install
-# does not issue certificates, trust a local CA, or launch a reverse proxy.
-
-# ─── Enable and start services ────────────────────────────────────────────
-echo "[6/6] Starting services..."
-
-if [ "$SYSTEMD_AVAILABLE" = true ]; then
-    systemctl --user daemon-reload
-
-    # Helper: restart a service if its quadlet exists, tolerate failure
-    restart_service() {
-        local svc="$1"
-        if [ -f "$QUADLET_DIR/${svc}.container" ]; then
-            echo "  → ${svc}..."
-            systemctl --user enable "${svc}.service" 2>/dev/null || true
-            systemctl --user restart "${svc}.service" 2>/dev/null || \
-                echo "  ! ${svc} failed to start"
-        fi
-    }
-
-    # Restart in dependency order
-    restart_service ai-network
-    sleep 1
-    restart_service llama-cpp-5090
-    restart_service open-webui
-    restart_service comfyui
-
-    restart_service sketchlab
-    if [ "$WITH_DEEPSEEK_HARNESS" = 1 ]; then
-        restart_service deepseek-harness
-    fi
-    if [ "$WITH_HERMES" = 1 ] && [ "$SKIP_HERMES" != 1 ]; then
-        restart_service hermes
-    elif [ "$WITH_HERMES" = 1 ]; then
-        echo "  ~ (--skip-hermes) not starting containerized hermes.service"
-    fi
-    start_optional_image_service hyperframes localhost/hyperframes:latest
-
-    echo ""
-    echo "============================================="
-    echo "  Deployment Complete!                        "
-    echo "============================================="
-    echo ""
-    echo "Running AI Lab services:"
-    systemctl --user list-units --type=service --state=running --no-pager 2>/dev/null | grep -E '\b(ai-network|llama|open-webui|sketchlab|comfyui|hermes|hyperframes)' || echo "  (none running yet — some may still be pulling images)"
+# ─── 6. Images ───────────────────────────────────────────────────────────────
+say "6/6 images"
+if [ "$NO_IMAGES" = 1 ]; then
+    echo "  skipped (--no-images)"
 else
-    echo "  ~ Systemd user services not available."
-    echo "  ~ Quadlets are installed; start manually with:"
-    echo "    podman network create systemd-ai"
-    for q in "$QUADLET_DIR"/*.container; do
-        name=$(basename "$q" .container)
-        echo "    podman start $name"
-    done
+    IMAGES=(open-webui llama-cpp comfyui rizzo sketchlab hyperframes)
+    [ "$WITH_DSH" = 1 ] && IMAGES+=(deepseek-harness)
+    [ "$WITH_HERMES" = 1 ] && IMAGES+=(hermes)
+    "$ROOT/scripts/build-images.sh" $([ "$REBUILD" = 1 ] && echo --rebuild) "${IMAGES[@]}" \
+        || echo "  ! some images are missing (see above); their services will not start until built"
 fi
 
-echo ""
-echo "Next steps:"
-HOST_LAN_IP=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i == "src") {print $(i+1); exit}}')
-HOST_LAN_IP=${HOST_LAN_IP:-LAN-IP-unavailable}
-echo "  1. Download llama.cpp models with hf-download, then edit presets in ~/.config/containers/config/llama-cpp-5090/presets.ini."
-echo "  2. Direct HTTP endpoints (from services.json; loopback-only services show 127.0.0.1):"
-python3 - "$SOURCE_DIR/services.json" "$HOST_LAN_IP" "$WITH_HERMES" "$WITH_DEEPSEEK_HARNESS" <<'PYEOF'
-import json, sys
-reg_path, lan_ip, with_hermes, with_dsh = sys.argv[1:5]
-reg = json.load(open(reg_path))
+# ─── Summary ─────────────────────────────────────────────────────────────────
+say "deployed (none started, none at boot)"
+python3 - "$REG" "$QUADLET_DIR" <<'EOF'
+import json, os, sys
+reg, qdir = json.load(open(sys.argv[1])), sys.argv[2]
+print(f"  {'SERVICE':<18} {'PORT':<16} {'CARD':<7} AUTH")
 for s in reg["services"]:
-    if not s["boot"] and not (
-        (s["name"] == "hermes" and with_hermes == "1")
-        or (s["name"] == "deepseek-harness" and with_dsh == "1")
-    ):
-        continue
-    host = "127.0.0.1" if s["bind"] == "127.0.0.1" else lan_ip
-    suffix = "/v1" if s["tier"] in ("core", "optional") else ""
-    note = " (loopback only)" if s["bind"] == "127.0.0.1" else ""
-    print(f"     {s['name']}: http://{host}:{s['host_port']}{suffix}{note}")
-PYEOF
-echo "  3. Optional container services: --with-hermes and --with-deepseek-harness (not installed by default)."
-echo "  4. Caddy files remain under config/caddy and quadlets/caddy.container; the service is not installed or started."
-echo "  5. Services are unauthenticated/plain HTTP unless their own application provides authentication; do not expose these ports to the public Internet."
-echo "  6. See https://github.com/dark5un/sketchlab.app for the Sketch Lab skill."
+    if os.path.exists(os.path.join(qdir, s["unit"].replace(".service", ".container"))):
+        print(f"  {s['name']:<18} {s['bind'] + ':' + str(s['host_port']):<16} {s.get('gpu', '-'):<7} {s['auth']}")
+EOF
+cat <<EOF
+
+Start/stop on demand (GPU rules applied by scripts/gpu-arbiter.py):
+  ai-lab start <name>   |  ai-lab strata 5090|4070ti|both|off  |  ai-lab status
+  or the AI Lab bar widget (plugin/ailab).
+Models for llama.cpp: hf-download <repo> <quant> --card 5090|4070ti|both
+EOF
