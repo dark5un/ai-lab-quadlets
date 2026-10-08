@@ -1,0 +1,45 @@
+# llama.cpp router across BOTH cards: RTX 5090 32 GB (main) + RTX 4070 Ti 12 GB,
+# layer split (~44 GB) for models that do not fit one card.
+# Rendered by scripts/render-units.sh (GPU UUIDs filled in from nvidia-smi).
+# Exclusive: start it through `ai-lab start llama-cpp-both` or the AI Lab bar
+# widget. scripts/gpu-arbiter.py stops every other GPU service first (strata
+# included), and stops this unit before any other GPU service starts.
+# Conflicts= below is only the backstop for a bare `systemctl start`.
+# No [Install]: nothing starts at boot.
+
+[Unit]
+Description=llama.cpp router (RTX 5090 + RTX 4070 Ti, layer split)
+Wants=ai-network.service
+After=ai-network.service
+Conflicts=strata-5090.service strata-4070ti.service strata-both.service llama-cpp-5090.service llama-cpp-4070ti.service rizzo.service comfyui-5090.service comfyui-4070ti.service
+
+[Container]
+ContainerName=systemd-llama-cpp-both
+Image=ghcr.io/ggml-org/llama.cpp:server-cuda
+Network=ai.network
+# Pin the cards at the CUDA layer (the stack's convention for non-strata
+# services). Order matters: the 5090 first is CUDA device 0 = main GPU.
+AddDevice=nvidia.com/gpu=all
+Environment=CUDA_VISIBLE_DEVICES=__GPU_5090_UUID__,__GPU_4070TI_UUID__
+SecurityLabelDisable=true
+UserNS=keep-id
+
+# http://<host>:11438/v1 - every request needs a key from keys.txt.
+# Containers on systemd-ai: http://systemd-llama-cpp-both:8080/v1
+PublishPort=0.0.0.0:11438:8080
+
+# Models linked for this server only (hardlinks into the HF cache; see
+# scripts/hf-download.sh --card both). One subdir per model; id = dir name.
+Volume=%h/.local/share/llama.cpp/cards/both:/models:ro,Z
+# Router settings and presets.
+EnvironmentFile=%h/.config/containers/config/llama-cpp-both/service.env
+Volume=%h/.config/containers/config/llama-cpp-both/presets.ini:/etc/llama-cpp/presets.ini:ro,Z
+# API keys shared by every llama.cpp server (LLAMA_ARG_API_KEY_FILE).
+Volume=%h/.config/containers/config/llama-cpp/keys.txt:/etc/llama-cpp/keys.txt:ro
+
+[Service]
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=1800
+TimeoutStopSec=120
+MemoryMax=64G

@@ -8,7 +8,7 @@ it runs on. The registry (`services.json`, field `gpu`) is the source of truth;
 |---|---|---|
 | RTX 5090 32 GB | `__GPU_5090_UUID__` | strata-5090, llama-cpp-5090, comfyui-5090 |
 | RTX 4070 Ti 12 GB | `__GPU_4070TI_UUID__` | strata-4070ti, llama-cpp-4070ti, comfyui-4070ti, rizzo |
-| both | both placeholders | strata-both |
+| both | both placeholders | strata-both, llama-cpp-both (exclusive) |
 
 ## Rules (scripts/gpu-arbiter.py)
 
@@ -19,7 +19,12 @@ it runs on. The registry (`services.json`, field `gpu`) is the source of truth;
    card, except ComfyUI, which moves to the other card.
 3. strata-both stops every GPU service.
 4. ComfyUI runs on the card strata is not on (strata off: the 4070 Ti).
-5. Non-strata services may share a card.
+5. An exclusive service (registry `"exclusive": true`: llama-cpp-both, a
+   layer split over both cards) stops every other GPU service when it
+   starts, strata included (strata has no free card to move to).
+6. Starting any other GPU service while an exclusive one runs stops the
+   exclusive one first.
+7. Other non-strata services may share a card.
 
 Use `ai-lab start|stop|toggle <name>` (or the AI Lab bar widget); add
 `--dry-run` to see the plan. The strata units' `Conflicts=` is a backstop for

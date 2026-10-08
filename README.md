@@ -35,6 +35,7 @@ reboots, and can be rehydrated on a fresh machine with one command.
 | **ai-network** | core | — | Podman network for all container communication |
 | **systemd-llama-cpp-5090** | core | `11435` | llama.cpp router on the RTX 5090 (262K context default), API key required |
 | **systemd-llama-cpp-4070ti** | optional | `11436` | llama.cpp router on the RTX 4070 Ti (65K context default), API key required |
+| **systemd-llama-cpp-both** | optional | `11438` | llama.cpp router split over both cards (exclusive), API key required |
 | **systemd-open-webui** | web | `3100` | AI chat frontend (OpenAI-compatible backend) |
 | **Caddy assets** | retained | — | Caddy Quadlet and config are kept in the repo, not installed or started |
 | **systemd-comfyui** | image | `3101` | Stable Diffusion / AI image generation |
@@ -156,6 +157,7 @@ start|stop|toggle|strata` and the bar widget go through
 | strata-5090 / -4070ti / -both | 5090 / 4070 Ti / both |
 | llama-cpp-5090 | 5090 |
 | llama-cpp-4070ti, rizzo | 4070 Ti |
+| llama-cpp-both (exclusive) | both (layer split, 5090 main) |
 | comfyui (`comfyui-5090` / `comfyui-4070ti`) | the card strata is NOT on (strata off: 4070 Ti) |
 
 1. Starting a GPU service on the card strata occupies moves strata to the
@@ -163,7 +165,9 @@ start|stop|toggle|strata` and the bar widget go through
 2. Starting a single-card strata variant stops every other service on that
    card, except ComfyUI, which moves to the other card.
 3. Starting strata-both stops every GPU service.
-4. Other GPU services may share a card with each other.
+4. Starting llama-cpp-both (exclusive) stops every other GPU service, strata
+   included; starting any other GPU service stops llama-cpp-both first.
+5. Other GPU services may share a card with each other.
 
 `ai-lab start <name> --dry-run` prints the plan. The strata units' `Conflicts=`
 is only a backstop: a bare `systemctl --user start` of a conflicting unit

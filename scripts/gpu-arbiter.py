@@ -9,10 +9,15 @@ Rules (docs: ~/Documents/plans/strata-gpu-variants-plan.md, README "GPU rules"):
   R3  Starting strata-both stops every GPU service.
   R4  ComfyUI runs on the card strata is NOT on (strata-both drops to the
       5090 for it; strata off -> the 4070 Ti).
-Non-strata services may share a card with each other.
+  R5  Starting an exclusive service (registry "exclusive": true, e.g.
+      llama-cpp-both) stops every other GPU service, strata included: it
+      holds both cards, so strata has nowhere to move.
+  R6  Starting any other GPU service (strata included) while an exclusive
+      service runs stops the exclusive service first.
+Non-strata, non-exclusive services may share a card with each other.
 
 services.json fields used: name, unit, gpu (5090 | 4070ti | both), group,
-variant. A group name (strata, comfyui) is accepted where a service is.
+variant, exclusive. A group name (strata, comfyui) is accepted where a service is.
 
   gpu-arbiter.py [--registry F] [--dry-run] start|stop|toggle <name>
 
@@ -113,8 +118,29 @@ class Planner:
                 self.stop(s["name"])
         self.start(self.member("comfyui", variant))
 
+    def start_exclusive(self, name):
+        """R5: an exclusive service gets every card to itself."""
+        if name in self.state:
+            return
+        for s in self.group("strata"):
+            self.stop(s["name"])
+        for other in sorted(self.state):
+            if other != name and cards(self.svcs.get(other, {})):
+                self.stop(other)
+        self.start(name)
+
+    def stop_exclusive(self, keep):
+        """R6: a GPU start first stops any running exclusive service."""
+        for other in sorted(self.state):
+            s = self.svcs.get(other, {})
+            if other != keep and s.get("exclusive"):
+                self.stop(other)
+
     def start_service(self, name):
         s = self.svcs[name]
+        if s.get("exclusive"):
+            self.start_exclusive(name)
+            return
         held = self.strata_cards()
         for card in sorted(cards(s) & held):
             # R1: strata leaves this card (both -> the other card; one -> swap).
@@ -127,11 +153,15 @@ class Planner:
         if name == "strata":
             raise ArbiterError("pick a strata variant: ai-lab strata 5090|4070ti|both")
         if name == "comfyui":
+            if self.live("comfyui") is None:
+                self.stop_exclusive(None)              # R6
             self.start_comfyui()
             return
         if name not in self.svcs:
             raise ArbiterError(f"unknown service '{name}'")
         s = self.svcs[name]
+        if cards(s) and not s.get("exclusive"):
+            self.stop_exclusive(name)                  # R6
         if s.get("group") == "strata":
             self.place_strata(s["variant"])
         elif s.get("group") == "comfyui":

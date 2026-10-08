@@ -51,6 +51,24 @@ cases = [
     # non-GPU services pass straight through
     ("sketchlab", ["strata-both"], "start", "sketchlab", ["start sketchlab"]),
     ("already running", ["strata-5090"], "start", "strata-5090", []),
+    # R5: an exclusive service (llama-cpp-both) takes both cards
+    ("llama-both stops everything GPU", ["strata-5090", "rizzo", "comfyui-4070ti", "llama-cpp-5090", "sketchlab"],
+        "start", "llama-cpp-both",
+        ["stop strata-5090", "stop comfyui-4070ti", "stop llama-cpp-5090", "stop rizzo", "start llama-cpp-both"]),
+    ("llama-both stops strata-both", ["strata-both"], "start", "llama-cpp-both",
+        ["stop strata-both", "start llama-cpp-both"]),
+    ("llama-both already running", ["llama-cpp-both"], "start", "llama-cpp-both", []),
+    # R6: any other GPU start stops the exclusive service first
+    ("strata stops llama-both", ["llama-cpp-both", "sketchlab"], "start", "strata-4070ti",
+        ["stop llama-cpp-both", "start strata-4070ti"]),
+    ("llama-5090 stops llama-both", ["llama-cpp-both"], "start", "llama-cpp-5090",
+        ["stop llama-cpp-both", "start llama-cpp-5090"]),
+    ("comfy stops llama-both", ["llama-cpp-both"], "start", "comfyui",
+        ["stop llama-cpp-both", "start comfyui-4070ti"]),
+    ("rizzo stops llama-both", ["llama-cpp-both"], "toggle", "rizzo",
+        ["stop llama-cpp-both", "start rizzo"]),
+    ("non-GPU leaves llama-both", ["llama-cpp-both"], "start", "sketchlab", ["start sketchlab"]),
+    ("toggle llama-both off", ["llama-cpp-both"], "toggle", "llama-cpp-both", ["stop llama-cpp-both"]),
 ]
 fail = 0
 for title, running, verb, name, want in cases:

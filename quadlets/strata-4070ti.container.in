@@ -14,7 +14,7 @@
 Description=Strata Qwen model server (RTX 4070 Ti 12 GB)
 Wants=ai-network.service
 After=ai-network.service
-Conflicts=strata-5090.service strata-both.service llama-cpp-4070ti.service rizzo.service comfyui-4070ti.service
+Conflicts=strata-5090.service strata-both.service llama-cpp-4070ti.service rizzo.service comfyui-4070ti.service llama-cpp-both.service
 StartLimitIntervalSec=20min
 StartLimitBurst=2
 
