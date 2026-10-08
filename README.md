@@ -45,6 +45,14 @@ GPU rules when they do.
 | `hyperframes` | `3103` | - | none | HyperFrames GCP Cloud Run worker (needs a GCS bucket; local renders: `scripts/hyperframes-render.sh`) |
 | `hermes` (opt-in) | `3104` | - | account | containerized Hermes gateway; this host runs Hermes natively instead |
 | `deepseek-harness` (opt-in) | `127.0.0.1:3105` | - | token | dsh agent runtime, host loopback only |
+| `prometheus` | `127.0.0.1:3107` | - | none | metrics store; scrapes every service, OTLP receiver for Open WebUI; boot |
+| `grafana` | `3106` | - | account | dashboards (provisioned from `monitoring/`), LAN with login; on demand |
+| `node-exporter` | `127.0.0.1:9100` | - | none | host CPU/RAM/disk/net/temp; boot |
+| `gpu-exporter` | `127.0.0.1:9835` | - | none | both cards via NVML (UUID labels, holds no VRAM); boot |
+| `podman-exporter` | `127.0.0.1:9882` | - | none | container state/stats via the user podman socket; boot |
+| `blackbox-exporter` | `127.0.0.1:9115` | - | none | HTTP probes of every service health URL; boot |
+| `victorialogs` | `127.0.0.1:9428` | - | none | log store (30d/5GB); boot |
+| `fluent-bit` | `127.0.0.1:2020` | - | none | ships px's user journal to VictoriaLogs; boot |
 
 Containers are named `systemd-<service>` (both GPU variants of strata and
 ComfyUI share `systemd-strata` / `systemd-comfyui`). Published ports bind
@@ -109,30 +117,47 @@ settings/DB/caches and keeps models, inputs, outputs and custom nodes.
 `scripts/rotate-secrets.sh [--yes]` rotates the Open WebUI, strata and
 llama.cpp secrets and rewrites every client's copy.
 
-### Strata: three GPU variants
+### Strata: GPU variants and context sizes
 
-Strata runs in one of three variants, one at a time, all on port 11434 with
-the same container name (`systemd-strata`) and API key:
+Strata runs as one variant at a time, all on port 11434 with the same
+container name (`systemd-strata`) and API key; a card and a context make the
+variant. Past the trained 262,144 tokens, Strata's setup adds YaRN rope
+scaling (x2 at 524K, x4 at 1M), fixed per engine start, so each context is its
+own unit with its own setup config. The KV cache streams from RAM (32K tokens
+resident in VRAM), so a bigger window costs mostly RAM.
 
-| variant | GPU(s) | notes |
-|---|---|---|
-| `strata-5090` | RTX 5090 32 GB | |
-| `strata-4070ti` | RTX 4070 Ti 12 GB | |
-| `strata-both` | 5090 + 4070 Ti | Strata's layer split (`GPUS=0,1`, 5090 = main card) |
+| variant | GPU(s) | context | model |
+|---|---|---|---|
+| `strata-5090`, `-5090-524k`, `-5090-1m` | RTX 5090 32 GB | 256K / 524K / 1M | IQ3_S |
+| `strata-4070ti`, `-4070ti-524k`, `-4070ti-1m` | RTX 4070 Ti 12 GB | 256K / 524K / 1M | IQ3_XXS |
+| `strata-both` | 5090 + 4070 Ti | 256K | IQ3_XXS (layer split; slower than the 5090 alone, so no bigger contexts) |
+
+The coder group (Qwen3.8 Coder IQ1_M on the 4070 Ti, port 11439, container
+`systemd-strata-coder`) runs one variant at a time BESIDE a 5090 variant
+("duo"): `strata-coder` (256K), `strata-coder-524k`, `strata-coder-1m`. It owns
+the 4070 Ti: strata on that card or any other 4070 Ti service stops it.
 
 `./scripts/install-strata.sh` (run by install.sh) builds `localhost/strata:multi` from
 `~/workspace/github.com/Niko1221/Strata` for CUDA 120 + 89 (if missing;
-`--rebuild` forces it), renders the three units with the GPU UUIDs, and
-reloads systemd. Nothing starts at boot (no `[Install]`); switch with the AI
-Lab bar widget or:
+`--rebuild` forces it), renders the units with the GPU UUIDs and CPU pinning,
+derives the 524K / 1M configs of the 4070 Ti and the coder from their 256K
+ones (context + YaRN args only; identical to what setup writes), and reloads
+systemd. Nothing starts at boot (no `[Install]`); switch with the AI Lab bar
+widget or:
 
 ```bash
-./scripts/ai-lab strata 5090      # or 4070ti | both | off; add --dry-run to preview
-./scripts/ai-lab strata           # prints the live variant
+./scripts/ai-lab strata 4070ti-1m   # 5090[-524k|-1m] | 4070ti[-524k|-1m] | both | off; --dry-run previews
+./scripts/ai-lab coder 524k         # 256k | 524k | 1m | off (the coder, beside a 5090 variant)
+./scripts/ai-lab strata duo 5090-1m 524k   # a 5090 variant + the coder
+./scripts/ai-lab strata             # prints the live variant, e.g. 5090-1m+coder-524k
 ```
 
+When strata has to leave its card (a GPU service starts there, or the coder
+starts), scripts/gpu-arbiter.py moves it to the other card at the same
+context (5090-1m <-> 4070ti-1m); strata-both drops to the plain card variant.
+
 Data: the model files (`~/.local/share/strata/{models,mtp,packs}`, ~86 GB) are
-shared; each variant keeps its own setup in `config-<variant>/strata-iq3_s.json`
+shared; each variant keeps its own setup in `config-<variant>/strata-<quant>.json`
 (KV/context ladder, card choice AND the API key, which wins over the env
 `API_KEY`). A variant with an empty config dir runs Strata's setup on its
 first start from the unit's `CONTEXT`/`KV`/`GPU(S)` env; delete the json to
@@ -459,6 +484,42 @@ hand:
 cd /path/to/hyperframes
 podman build -f packages/gcp-cloud-run/Dockerfile -t localhost/hyperframes:latest .
 ```
+
+## Monitoring
+
+Prometheus + Grafana + VictoriaLogs, all rootless quadlets (plan:
+~/Documents/plans/ai-lab-monitoring-plan.md). The monitoring tier is the
+stack's one deliberate boot exception: Prometheus, the exporters and the
+log pair enable at boot (they hold no GPU/VRAM); Grafana stays on demand
+with the web apps. `ai-lab start|stop monitoring` (or the MONITORING row
+in the bar plugin) controls the whole group.
+
+- What is scraped: strata + coder (`/metrics`, bearer = the strata key),
+  the llama.cpp routers (`/metrics?model=X&autoload=false` per model in
+  the card dir — never autoloads), ComfyUI (the exporter node baked into
+  the image), every service's health URL via blackbox, both GPUs via
+  NVML, the host via node-exporter, containers via the user podman
+  socket, and Open WebUI via OTLP push into Prometheus.
+- Configs are GENERATED from services.json by `scripts/render-prometheus.py`
+  (run by install.sh): registering a service puts it under monitoring.
+  Never edit `~/.config/containers/config/{prometheus,blackbox,fluent-bit}/`
+  by hand.
+- Dashboards live in git under `monitoring/grafana/dashboards/` and are
+  provisioned read-only: AI Lab Overview (mode timeline, both cards, RAM,
+  tok/s, health grid), Strata (upstream), llama.cpp, Open WebUI, ComfyUI,
+  Node Exporter Full (1860), NVIDIA (14574/25547), Podman (21559).
+  Sources + revisions in monitoring/README.md.
+- Logs: fluent-bit reads px's user journal (read-only) and pushes to
+  VictoriaLogs (30d/5GB); Grafana queries it via the
+  victoriametrics-logs-datasource plugin. Pitfalls encoded in the
+  quadlet: fluent-bit must be 4.2+ (4.0 cannot read this ZSTD journal)
+  and must NOT use keep-id (the journal ACL grants px, who is container
+  root; keep-id maps to nobody and silently reads 0 records).
+- Grafana: http://<host>:3106, admin / password from
+  `~/.config/containers/config/grafana/service.env` (generate-secrets.sh).
+- Monitoring never loads or keeps awake any model: llama.cpp scrapes use
+  `autoload=false` and the routers set no idle timer; the GPU exporter
+  holds no VRAM; strata scrape cost measured <1% of decode tok/s.
 
 ## AI Lab bar plugin
 

@@ -11,9 +11,10 @@
 #   --with-hermes            also deploy the opt-in Hermes gateway container
 #                            (this host runs Hermes natively; normally not wanted)
 #
-# Nothing is enabled at boot and nothing is started, stopped or restarted
-# (except obsolete legacy units, which are stopped before removal). Start
-# services on demand: `scripts/ai-lab start <name>` or the AI Lab bar widget.
+# Nothing is started, and nothing is enabled at boot EXCEPT the monitoring
+# tier (prometheus, exporters, logs; plan D1 — they hold no GPU/VRAM).
+# Grafana and every GPU/web service start on demand:
+# `scripts/ai-lab start <name>` or the AI Lab bar widget.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
@@ -97,7 +98,7 @@ copy_examples() {  # copy_examples <svc>
         chmod 600 "$dst"
     done
 }
-for svc in llama-cpp-5090 llama-cpp-4070ti llama-cpp-both sketchlab; do copy_examples "$svc"; done
+for svc in llama-cpp-5090 llama-cpp-4070ti llama-cpp-both sketchlab grafana; do copy_examples "$svc"; done
 
 # Strata: image (if missing) + its units (5 variants + coder) + service.env with the key.
 say "3/6 strata (scripts/install-strata.sh)"
@@ -137,7 +138,18 @@ set_kv "$OW" CORS_ALLOW_ORIGIN "http://${HOST_LOCAL}:3100"
 set_kv "$OW" OPENAI_API_BASE_URLS "http://systemd-strata:8080/v1;http://systemd-strata-coder:8080/v1;http://systemd-llama-cpp-5090:8080/v1;http://systemd-llama-cpp-4070ti:8080/v1;http://systemd-llama-cpp-both:8080/v1"
 set_kv "$OW" OPENAI_API_KEYS "${STRATA_KEY};${STRATA_KEY};${LLAMA_KEY};${LLAMA_KEY};${LLAMA_KEY}"
 set_kv "$OW" ENABLE_PERSISTENT_CONFIG false
-echo "  open-webui: 5 backends (strata, strata-coder, llama-cpp-5090/4070ti/both), URL http://${HOST_LOCAL}:3100"
+# OTLP metrics push straight into Prometheus (plan D5): no collector,
+# metrics only, HTTP exporter (grpc is the default and Prometheus does
+# not accept it). Prometheus runs at boot (D1) so pushes rarely drop.
+set_kv "$OW" ENABLE_OTEL true
+set_kv "$OW" ENABLE_OTEL_METRICS true
+set_kv "$OW" ENABLE_OTEL_TRACES false
+set_kv "$OW" ENABLE_OTEL_LOGS false
+set_kv "$OW" OTEL_METRICS_OTLP_SPAN_EXPORTER http
+set_kv "$OW" OTEL_METRICS_EXPORTER_OTLP_ENDPOINT "http://systemd-prometheus:9090/api/v1/otlp/v1/metrics"
+set_kv "$OW" OTEL_SERVICE_NAME open-webui
+set_kv "$OW" OTEL_METRICS_EXPORT_INTERVAL_MILLIS 15000
+echo "  open-webui: 5 backends (strata, strata-coder, llama-cpp-5090/4070ti/both), URL http://${HOST_LOCAL}:3100, OTLP -> prometheus"
 set_kv "$CONF/sketchlab/service.env" STRATA_API_KEY "$STRATA_KEY"
 echo "  sketchlab: /v1 proxy key = strata key"
 DSH="$CONF/deepseek-harness/service.env"
@@ -162,7 +174,7 @@ umask 022
 
 # ─── 4. Units ────────────────────────────────────────────────────────────────
 say "4/6 units in $QUADLET_DIR"
-UNITS=(ai llama-cpp-5090 llama-cpp-4070ti llama-cpp-both comfyui-5090 comfyui-4070ti rizzo open-webui sketchlab hyperframes)
+UNITS=(ai llama-cpp-5090 llama-cpp-4070ti llama-cpp-both comfyui-5090 comfyui-4070ti rizzo open-webui sketchlab hyperframes prometheus grafana node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit)
 [ "$WITH_DSH" = 1 ] && UNITS+=(deepseek-harness)
 [ "$WITH_HERMES" = 1 ] && UNITS+=(hermes)
 "$ROOT/scripts/render-units.sh" "${UNITS[@]}"
@@ -183,14 +195,23 @@ done
 # times out on Arch: the stack is local-only, so mask it (uninstall unmasks).
 systemctl --user mask podman-user-wait-network-online.service >/dev/null 2>&1 || true
 systemctl --user reset-failed podman-user-wait-network-online.service >/dev/null 2>&1 || true
+# podman-exporter reads the user podman socket: it must be enabled.
+systemctl --user enable --now podman.socket >/dev/null 2>&1 || true
+# Monitoring configs are generated from services.json (registry = source of truth).
+python3 "$ROOT/scripts/render-prometheus.py" | sed 's/^/  /'
+# Boot tier (plan D1): monitoring units except grafana enable at boot.
+for u in prometheus node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit; do
+    systemctl --user enable "$u.service" >/dev/null 2>&1 || true
+done
 systemctl --user daemon-reload
-echo "  ✓ daemon-reload (nothing enabled, nothing started)"
+echo "  ✓ daemon-reload (monitoring enabled at boot; grafana on demand; nothing started)"
 
 # ─── 5. Data dirs ────────────────────────────────────────────────────────────
 say "5/6 data dirs"
 mkdir -p "$DATA"/llama.cpp/cards/{5090,4070ti,both} "$DATA"/comfyui "$DATA"/sketchlab "$DATA"/rizzo
-[ "$WITH_HERMES" = 1 ] && mkdir -p "$DATA/hermes-service"
-echo "  ✓ ~/.local/share/{llama.cpp/cards/{5090,4070ti,both},comfyui,sketchlab,rizzo}"
+mkdir -p "$DATA"/prometheus "$DATA"/victorialogs "$DATA"/node-exporter/textfile
+[ "$WITH_HERMES" = 1 ] && mkdir -p "$DATA"/hermes-service
+echo "  ✓ ~/.local/share/{llama.cpp/cards/{5090,4070ti,both},comfyui,sketchlab,rizzo,prometheus,victorialogs,node-exporter/textfile}"
 mkdir -p "${HOME}/.local/bin"
 for tool in ai-lab:scripts/ai-lab hf-download:scripts/hf-download.sh; do
     ln -sfn "$ROOT/${tool#*:}" "${HOME}/.local/bin/${tool%%:*}"

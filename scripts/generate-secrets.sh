@@ -57,6 +57,16 @@ else
 fi
 chmod 600 "$dst"
 
+# Grafana admin password (monitoring tier; GF_SECURITY_ADMIN_PASSWORD).
+dst="$CONF/grafana/service.env"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if [ ! -f "$dst" ] && [ -f "$ROOT/config/grafana/service.env.example" ]; then
+    sed "s/change-me-to-a-random-hex-string/$(rand_hex 16)/" \
+        "$ROOT/config/grafana/service.env.example" > "$dst"
+    echo "  created $dst"
+fi
+chmod 600 "$dst"
+
 # Containerized Hermes gateway (opt-in; this host runs Hermes natively).
 if [ "$WITH_HERMES" = 1 ]; then
     dst="$CONF/hermes-service/service.env"

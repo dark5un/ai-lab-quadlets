@@ -1,0 +1,26 @@
+# blackbox-exporter (monitoring tier, boot). HTTP probes of every
+# service's registry health URL over ai.network; probe_success{target}
+# drives the Overview health grid. Config rendered by
+# scripts/render-prometheus.py into config/blackbox/blackbox.yml.
+
+[Unit]
+Description=Prometheus blackbox exporter (HTTP probes)
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-blackbox-exporter
+Image=docker.io/prom/blackbox-exporter:v0.28.0
+Network=ai.network
+PublishPort=127.0.0.1:9115:9115/tcp
+Volume=%h/.config/containers/config/blackbox:/config:ro,Z
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=60
+
+[Install]
+WantedBy=default.target

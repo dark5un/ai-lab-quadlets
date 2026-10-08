@@ -112,7 +112,7 @@ Item {
                 hoverEnabled: true
                 cursorShape: Qt.PointingHandCursor
                 onEntered: if (sr.service) sr.service.preview("row:" + sr.row.name, ["toggle", sr.row.name])
-                onExited: if (sr.service) sr.service.preview("", null)
+                onExited: if (sr.service) sr.service.unpreview("row:" + sr.row.name)
                 onClicked: if (sr.service) sr.service.toggleNamed(sr.row.name)
             }
         }

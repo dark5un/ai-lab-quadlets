@@ -6,12 +6,13 @@ import Ryoku.PluginKit.Singletons
 //
 //   STRATA        status lines (main model, coder), then one labelled control
 //                 per decision:
-//                   CARD     OFF | 5090 | 4070 TI | BOTH   (one variant at a time)
-//                   CONTEXT  256K | 524K | 1M              (the 5090's variants;
-//                                                         picking one moves Strata
-//                                                         to the 5090)
-//                   CODER    OFF | ON · 4070 TI            (strata-coder, beside a
-//                                                         5090 variant)
+//                   CARD     OFF | 5090 | 4070 TI | BOTH   (one variant at a time;
+//                                                         a card keeps the context)
+//                   CONTEXT  256K | 524K | 1M              (the 5090's or the 4070
+//                                                         Ti's variants; from off
+//                                                         or BOTH it picks the 5090)
+//                   CODER    OFF | 256K | 524K | 1M        (the coder on the 4070 Ti,
+//                                                         beside a 5090 variant)
 //                 and a hint line that previews what a hovered choice starts and
 //                 stops (the arbiter's --dry-run).
 //   GPU SERVICES  llama.cpp (OFF | 5090 | 4070 TI | BOTH; the single cards
@@ -36,13 +37,23 @@ Item {
     readonly property var strataLive: service ? service.strataLive : null
     readonly property string strataVariant: service ? service.strataVariant : "off"
     readonly property string strataCard: service ? service.strataCard : "off"
+    readonly property string strataCtx: service ? service.strataCtx : ""
     readonly property var coder: service ? service.coder : null
     readonly property bool coderLive: service ? service.coderLive : false
+    readonly property string coderCtx: service ? service.coderCtx : ""
+    // The CODER row's live choice: "off" or the running coder's context.
+    readonly property string coderChoice: coderLive ? coderCtx : "off"
+    readonly property var coderVariants: service ? service.coderVariants : []
+    // The card the CONTEXT row applies to: strata's card when it has context
+    // variants, else the 5090 (from off or BOTH a context pick means the 5090).
+    readonly property string ctxCard: (strataCard === "5090" || strataCard === "4070ti") ? strataCard : "5090"
     readonly property var llamaVariants: service ? service.llamaVariants : []
     readonly property var llamaLive: service ? service.llamaLive : []
     // Plain rows split by whether the service needs a card.
     readonly property var gpuRows: service ? service.plainServices.filter(r => r.gpu || r.name === "comfyui") : []
     readonly property var appRows: service ? service.plainServices.filter(r => !r.gpu && r.name !== "comfyui") : []
+    readonly property bool monitoringLive: service ? service.monitoringLive : false
+    readonly property int monitoringCount: service ? service.monitoringRows.length : 0
     readonly property string previewKey: service ? service.previewKey : ""
     readonly property string previewText: service ? service.previewText : ""
 
@@ -50,8 +61,20 @@ Item {
 
     function has(variant) { return strataVariants.some(v => v.variant === variant) }
     function stateText(r) { return service ? service.healthText(r) : "" }
-    function ctxLabel(v) { return v === "5090" ? "256K" : v === "5090-524k" ? "524K" : v === "5090-1m" ? "1M" : "" }
-    function hover(key, argv) { if (service) service.preview(key, argv) }
+    // Strata status lines are tight (card, context, port): "loading model" -> "loading".
+    function strataState(r) { const x = stateText(r); return x === "loading model" ? "loading" : x }
+    function ctxLabel(c) { return c === "256k" ? "256K" : c === "524k" ? "524K" : c === "1m" ? "1M" : "" }
+    function cardLabel(c) { return c === "4070ti" ? "4070 Ti" : c === "both" ? "both cards" : c }
+    // The variant for a card that keeps the live context when it can.
+    function variantFor(card, ctx) {
+        if (!service || card === "off" || card === "both") return card;
+        return service.strataFor(card, ctx || "256k") || card;
+    }
+    // Hover on a control row: key "" = the pointer left this row (prefix).
+    function hover(prefix, key, argv) {
+        if (!service) return;
+        if (key === "") service.unpreview(prefix); else service.preview(prefix + key, argv);
+    }
 
     implicitWidth: root.widthBudget
     implicitHeight: col.implicitHeight
@@ -98,14 +121,15 @@ Item {
                     { name: root.strataLive ? root.strataLive.name : "", show: true,
                       row: root.strataLive,
                       text: root.strataLive !== null
-                          ? ("main   " + (root.strataCard === "5090" ? "5090 · " + root.ctxLabel(root.strataVariant)
-                                         : root.strataCard === "both" ? "both cards" : "4070 Ti")
-                             + "   :" + root.strataLive.host_port + "   " + root.stateText(root.strataLive))
+                          ? ("main   " + root.cardLabel(root.strataCard)
+                             + (root.strataCard === "both" ? "" : " · " + root.ctxLabel(root.strataCtx))
+                             + "  :" + root.strataLive.host_port + "  " + root.strataState(root.strataLive))
                           : "main   off" },
-                    { name: "strata-coder", show: root.coder !== null,
+                    { name: root.coder ? root.coder.name : "", show: root.coder !== null,
                       row: root.coderLive ? root.coder : null,
                       text: root.coderLive && root.coder
-                          ? ("coder  4070 Ti   :" + root.coder.host_port + "   " + root.stateText(root.coder))
+                          ? ("coder  4070 Ti · " + root.ctxLabel(root.coderCtx) + "  :" + root.coder.host_port
+                             + "  " + root.strataState(root.coder))
                           : "coder  off" }
                 ]
                 delegate: Item {
@@ -181,24 +205,33 @@ Item {
                     })))
                 onPicked: (key) => {
                     if (!root.service || key === root.strataCard) return;
-                    root.service.switchStrata(key);   // 5090 -> its 256K variant
+                    root.service.switchStrata(root.variantFor(key, root.strataCtx));   // keeps the context
                 }
-                onHovered: (key) => root.hover(key === "" ? "" : "strata:" + key,
-                                               key === "" || key === root.strataCard ? null : ["strata", key])
+                onHovered: (key) => root.hover("strata:card-", key,
+                                               key === "" || key === root.strataCard ? null
+                                                   : ["strata", root.variantFor(key, root.strataCtx)])
             }
 
             Segmented {
-                visible: root.has("5090-524k") || root.has("5090-1m")
+                visible: root.strataVariants.some(v => v.variant.includes("-"))
                 width: col.width
                 s: root.s
                 label: "CONTEXT"
                 labelWidth: root.labelW
-                options: ["5090", "5090-524k", "5090-1m"].filter(v => root.has(v)).map(v => ({
-                    key: v, label: root.ctxLabel(v), on: root.strataVariant === v
-                }))
-                onPicked: (key) => { if (root.service && key !== root.strataVariant) root.service.switchStrata(key) }
-                onHovered: (key) => root.hover(key === "" ? "" : "strata:" + key,
-                                               key === "" || key === root.strataVariant ? null : ["strata", key])
+                options: ["256k", "524k", "1m"].filter(c => root.service && root.service.strataFor(root.ctxCard, c) !== "")
+                    .map(c => ({
+                        key: c, label: root.ctxLabel(c),
+                        on: root.strataCard === root.ctxCard && root.strataCtx === c
+                    }))
+                onPicked: (key) => {
+                    const v = root.service ? root.service.strataFor(root.ctxCard, key) : "";
+                    if (v !== "" && v !== root.strataVariant) root.service.switchStrata(v);
+                }
+                onHovered: (key) => {
+                    const v = key === "" || !root.service ? "" : root.service.strataFor(root.ctxCard, key);
+                    root.hover("strata:ctx-", key,
+                               v === "" || v === root.strataVariant ? null : ["strata", v]);
+                }
             }
 
             Segmented {
@@ -207,24 +240,25 @@ Item {
                 s: root.s
                 label: "CODER"
                 labelWidth: root.labelW
-                options: [
-                    { key: "off", label: "OFF", on: !root.coderLive },
-                    { key: "on", label: "ON · 4070 TI", on: root.coderLive }
-                ]
-                onPicked: (key) => {
-                    if (root.service && (key === "on") !== root.coderLive)
-                        root.service.toggleNamed("strata-coder");
-                }
-                onHovered: (key) => root.hover(key === "" ? "" : "strata:coder-" + key,
-                                               key === "" || (key === "on") === root.coderLive ? null
-                                                   : [key === "on" ? "start" : "stop", "strata-coder"])
+                // OFF, then the deployed contexts (strata-coder = 256K, -524k, -1m).
+                options: [{ key: "off", label: "OFF", on: !root.coderLive }]
+                    .concat(["256k", "524k", "1m"]
+                        .filter(c => root.coderVariants.some(v => v.variant === (c === "256k" ? "coder" : "coder-" + c)))
+                        .map(c => ({ key: c, label: root.ctxLabel(c), on: root.coderLive && root.coderCtx === c })))
+                onPicked: (key) => { if (root.service && key !== root.coderChoice) root.service.switchCoder(key) }
+                onHovered: (key) => root.hover("strata:coder-", key,
+                                               key === "" || key === root.coderChoice ? null : ["coder", key])
             }
 
             // Consequence preview: fixed height so the panel does not jump.
+            // Aligned with the segments; a long plan (a duo switch names three
+            // units) also takes the label column instead of eliding.
             Text {
+                id: strataHint
                 width: col.width
                 height: 14 * root.s
-                leftPadding: root.labelW * root.s
+                leftPadding: hintMetrics.advanceWidth + root.labelW * root.s <= width ? root.labelW * root.s : 0
+                TextMetrics { id: hintMetrics; font: strataHint.font; text: strataHint.text }
                 text: root.previewKey.startsWith("strata:") && root.previewText !== "" ? "→ " + root.previewText : ""
                 color: Theme.gold
                 font.family: Theme.mono
@@ -256,7 +290,7 @@ Item {
                     if (!root.service || (key === "off" && root.llamaLive.length === 0)) return;
                     root.service.toggleLlama(key);
                 }
-                onHovered: (key) => root.hover(key === "" ? "" : "llama:" + key,
+                onHovered: (key) => root.hover("llama:", key,
                                                key === "" || (key === "off" && root.llamaLive.length === 0) ? null
                                                    : key === "off" ? ["stop", "llama-cpp"]
                                                    : ["toggle", "llama-cpp-" + key])
@@ -303,6 +337,29 @@ Item {
                     s: root.s
                     row: modelData
                     service: root.service
+                }
+            }
+        }
+
+        // ---- MONITORING -------------------------------------------------------
+        MicroLabel { label: "MONITORING"; s: root.s; visible: root.monitoringCount > 0 }
+
+        Column {
+            width: col.width
+            spacing: 4 * root.s
+            Segmented {
+                visible: root.monitoringCount > 0
+                width: col.width
+                s: root.s
+                label: "STACK"
+                labelWidth: root.labelW
+                options: [
+                    { key: "off", label: "OFF", on: !root.monitoringLive },
+                    { key: "on",  label: "ON",  on: root.monitoringLive }
+                ]
+                onPicked: (key) => {
+                    if (!root.service) return;
+                    if ((key === "on") !== root.monitoringLive) root.service.toggleMonitoring();
                 }
             }
         }

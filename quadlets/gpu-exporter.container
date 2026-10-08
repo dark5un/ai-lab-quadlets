@@ -1,0 +1,30 @@
+# nvidia_gpu_exporter (monitoring tier, boot). Both cards via NVML,
+# metrics keyed by GPU UUID. It needs the CDI devices to talk to NVML,
+# but holds no VRAM and must not count as a GPU service for
+# scripts/gpu-arbiter.py: the registry entry carries NO gpu field, and
+# tests/test-quadlet-policy.sh whitelists this one unit for AddDevice.
+# The -nvml image tag talks to NVML directly (no nvidia-smi fork per
+# scrape). Idle RSS ~35 MB.
+
+[Unit]
+Description=NVIDIA GPU exporter (both cards, NVML)
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-gpu-exporter
+Image=docker.io/utkuozdemir/nvidia_gpu_exporter:1.15.1-nvml
+Network=ai.network
+PublishPort=127.0.0.1:9835:9835/tcp
+AddDevice=nvidia.com/gpu=all
+SecurityLabelDisable=true
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=60
+
+[Install]
+WantedBy=default.target

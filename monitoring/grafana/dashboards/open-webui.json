@@ -1,0 +1,110 @@
+{
+ "uid": "open-webui",
+ "title": "Open WebUI",
+ "tags": [
+  "ai-lab"
+ ],
+ "timezone": "browser",
+ "schemaVersion": 39,
+ "version": 1,
+ "refresh": "30s",
+ "time": {
+  "from": "now-6h",
+  "to": "now"
+ },
+ "editable": true,
+ "panels": [
+  {
+   "type": "timeseries",
+   "title": "Requests/s by route",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 0
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum by (route,method) (rate(http_server_requests_total[5m]))",
+     "legendFormat": "{{method}} {{route}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Latency p95 (ms)",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 0
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "histogram_quantile(0.95, sum by (le,route) (rate(http_server_duration_milliseconds_bucket[5m])))",
+     "legendFormat": "{{route}}",
+     "unit": "ms"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Users",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "webui_users_total",
+     "legendFormat": "total"
+    },
+    {
+     "refId": "B",
+     "expr": "webui_users_active",
+     "legendFormat": "active"
+    },
+    {
+     "refId": "C",
+     "expr": "webui_users_active_today",
+     "legendFormat": "active today"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   }
+  }
+ ]
+}

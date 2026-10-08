@@ -16,11 +16,12 @@ service with a live state dot, its host port, health, and a START/STOP switch.
   - **STRATA**: a status line per instance (main, coder) with an OPEN button
     in the same column as the service rows' (the instance's web app: chat,
     Monitor tab, settings; live once the model is ready), then
-    CARD `OFF | 5090 | 4070 TI | BOTH` (`bin/ai-lab strata <variant>`),
-    CONTEXT `256K | 524K | 1M` (the 5090 variants strata-5090,
-    strata-5090-524k, strata-5090-1m; picking one moves Strata to the 5090)
-    and CODER `OFF | ON · 4070 TI` (strata-coder, port 11439, beside a 5090
-    variant). Hovering a choice shows the arbiter's plan under the controls
+    CARD `OFF | 5090 | 4070 TI | BOTH` (`bin/ai-lab strata <variant>`; a card
+    keeps the current context when it has that variant, BOTH is 256K only),
+    CONTEXT `256K | 524K | 1M` (the live card's variants, 5090 or 4070 Ti;
+    from off or BOTH a pick means the 5090) and CODER `OFF | 256K | 524K | 1M`
+    (`bin/ai-lab coder <ctx>`: the coder on the 4070 Ti, port 11439, beside a
+    5090 variant). Status lines read e.g. `main 4070 Ti · 524K :11434 ready`. Hovering a choice shows the arbiter's plan under the controls
     (`bin/ai-lab ... --dry-run`: "→ starts strata-5090-1m · stops rizzo").
   - **GPU SERVICES**: LLAMA `OFF | 5090 | 4070 TI | BOTH` (single cards toggle
     independently via `bin/ai-lab toggle llama-cpp-<card>`, BOTH is the

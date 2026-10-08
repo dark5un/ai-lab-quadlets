@@ -1,0 +1,35 @@
+# Prometheus (monitoring tier). Part of `ai-lab start|stop monitoring`.
+# Deliberate boot exception (plan D1): monitoring never holds a GPU or VRAM,
+# so it runs at boot while the rest of the stack stays on demand.
+# Config + file_sd targets + secret key files are rendered into
+# ~/.config/containers/config/prometheus/ by scripts/render-prometheus.py
+# (install.sh runs it). OTLP push (Open WebUI) lands on
+# /api/v1/otlp/v1/metrics via --web.enable-otlp-receiver.
+
+[Unit]
+Description=Prometheus (ai-lab metrics store)
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-prometheus
+Image=quay.io/prometheus/prometheus:v3.15.0
+Network=ai.network
+PublishPort=127.0.0.1:3107:9090/tcp
+Volume=%h/.local/share/prometheus:/prometheus:z
+Volume=%h/.config/containers/config/prometheus:/etc/prometheus:ro,Z
+# The image defaults to USER nobody, which cannot read the 700/600 config
+# and secret files (they map to container root = px rootless). Run as root.
+PodmanArgs=--user=0
+# Exec appends to the image entrypoint (/bin/prometheus): flags only.
+Exec=--config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus --storage.tsdb.retention.time=180d --storage.tsdb.retention.size=20GB --web.enable-otlp-receiver --web.enable-lifecycle
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=60
+
+[Install]
+WantedBy=default.target

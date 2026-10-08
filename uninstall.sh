@@ -30,7 +30,7 @@ SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 if [ -f "$SCRIPT_DIR/services.json" ] && command -v python3 >/dev/null 2>&1; then
     SERVICES="$SERVICES $(python3 -c "import json,sys; print(' '.join(s['unit'][:-8] for s in json.load(open(sys.argv[1]))['services']))" "$SCRIPT_DIR/services.json" 2>/dev/null)"
 else
-    SERVICES="$SERVICES strata-5090 strata-5090-524k strata-5090-1m strata-4070ti strata-both strata-coder hermes comfyui-5090 comfyui-4070ti sketchlab open-webui deepseek-harness llama-cpp-4070ti llama-cpp-5090 llama-cpp-both rizzo hyperframes"
+    SERVICES="$SERVICES strata-5090 strata-5090-524k strata-5090-1m strata-4070ti strata-4070ti-524k strata-4070ti-1m strata-both strata-coder strata-coder-524k strata-coder-1m hermes comfyui-5090 comfyui-4070ti sketchlab open-webui deepseek-harness llama-cpp-4070ti llama-cpp-5090 llama-cpp-both rizzo hyperframes"
 fi
 for svc in $SERVICES; do
     if systemctl --user is-active "${svc}.service" &>/dev/null; then
@@ -53,7 +53,11 @@ for f in ai.network caddy.container comfyui.container hermes.container \
          llama-cpp-research.container llama-cpp-5090.container \
          llama-cpp-4070ti.container llama-cpp-both.container \
          llama-cpp-extra-*.container open-webui.container sketchlab.container \
-         hyperframes.container rizzo.container; do
+         hyperframes.container rizzo.container \
+         prometheus.container grafana.container node-exporter.container \
+         gpu-exporter.container podman-exporter.container \
+         blackbox-exporter.container victorialogs.container \
+         fluent-bit.container; do
     # shellcheck disable=SC2086
     for file in "$QUADLET_DIR"/$f; do
         [ -f "$file" ] && rm -f "$file" && echo "  ✓ removed $(basename "$file")"

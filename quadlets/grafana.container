@@ -1,0 +1,28 @@
+# Grafana (monitoring tier, on demand like the web apps — no [Install]).
+# LAN :3106 with login (plan D2); admin password comes from
+# config/grafana/service.env (generate-secrets.sh). Datasources, the
+# VictoriaLogs datasource plugin and every dashboard are provisioned
+# read-only from the repo's monitoring/grafana/ dir: no hand-clicking,
+# dashboards live in git.
+
+[Unit]
+Description=Grafana (ai-lab dashboards)
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-grafana
+Image=docker.io/grafana/grafana:13.2.2
+Network=ai.network
+PublishPort=0.0.0.0:3106:3000/tcp
+Volume=grafana-data:/var/lib/grafana
+Volume=%h/workspace/github.com/dark5un/ai-lab-quadlets/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro,Z
+Volume=%h/workspace/github.com/dark5un/ai-lab-quadlets/monitoring/grafana/dashboards:/etc/grafana/dashboards:ro,Z
+EnvironmentFile=%h/.config/containers/config/grafana/service.env
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=60

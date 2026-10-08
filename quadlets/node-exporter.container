@@ -1,0 +1,32 @@
+# node-exporter (monitoring tier, boot). Host CPU/RAM/disk/net/temp.
+# Network=host like deepseek-harness: it binds 127.0.0.1:9100 itself, so
+# it stays off the LAN. Rootless with Pid=host sees hwmon, pressure,
+# filesystem and cpu (verified 2026-10-08); node_systemd_unit_state needs
+# dbus and is absent — acceptable (podman-exporter covers the stack).
+
+[Unit]
+Description=Prometheus node exporter (host metrics)
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-node-exporter
+Image=quay.io/prometheus/node-exporter:v1.12.1
+Network=host
+Volume=/:/host:ro,rslave
+Volume=%h/.local/share/node-exporter/textfile:/textfile:z
+# The image defaults to USER nobody, which cannot read the 700 textfile
+# dir (owned by px; container root maps to px rootless). Run as root.
+PodmanArgs=--pid=host --user=0
+# Exec appends to the image entrypoint (/bin/node_exporter): flags only.
+Exec=--path.rootfs=/host --collector.textfile.directory=/textfile
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=60
+
+[Install]
+WantedBy=default.target

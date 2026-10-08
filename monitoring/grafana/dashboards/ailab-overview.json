@@ -1,0 +1,147 @@
+{
+  "uid": "ailab-overview",
+  "title": "AI Lab Overview",
+  "tags": ["ai-lab"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "editable": true,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Strata mode timeline (which variant runs when)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "label_replace(ailab:service_running{tier=\"optional\"} > 0, \"variant\", \"$1\", \"variant\", \"(.*)\")",
+          "legendFormat": "{{service}} ({{variant}})"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "custom": { "fillOpacity": 100, "spanNulls": false, "lineWidth": 0 }, "min": 0, "max": 1, "decimals": 0 },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": [] }, "tooltip": { "mode": "multi" } }
+    },
+    {
+      "type": "stat",
+      "title": "GPU util — 5090",
+      "gridPos": { "h": 4, "w": 3, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "avg(nvidia_smi_utilization_gpu_ratio{uuid=\"34466eba-2642-c31a-2e44-6451b6a6b425\"}) / 100" }],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 0.85 } ] } }, "overrides": [] }
+    },
+    {
+      "type": "stat",
+      "title": "GPU util — 4070 Ti",
+      "gridPos": { "h": 4, "w": 3, "x": 3, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "refId": "A", "expr": "avg(nvidia_smi_utilization_gpu_ratio{uuid=\"58e5f98d-a4f4-4cff-a9fc-16df0667d2fd\"}) / 100" }],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 0.85 } ] } }, "overrides": [] }
+    },
+    {
+      "type": "timeseries",
+      "title": "GPU utilization (per card)",
+      "gridPos": { "h": 8, "w": 12, "x": 6, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "nvidia_smi_utilization_gpu_ratio / 100", "legendFormat": "gpu {{uuid}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "custom": { "fillOpacity": 10 } }, "overrides": [
+        { "matcher": { "id": "byName", "options": "gpu 34466eba-2642-c31a-2e44-6451b6a6b425" }, "properties": [ { "id": "displayName", "value": "RTX 5090" } ] },
+        { "matcher": { "id": "byName", "options": "gpu 58e5f98d-a4f4-4cff-a9fc-16df0667d2fd" }, "properties": [ { "id": "displayName", "value": "RTX 4070 Ti" } ] }
+      ] }
+    },
+    {
+      "type": "timeseries",
+      "title": "GPU VRAM used (per card)",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "nvidia_smi_memory_used_bytes", "legendFormat": "{{uuid}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "fillOpacity": 10 } }, "overrides": [] }
+    },
+    {
+      "type": "timeseries",
+      "title": "GPU power (W) and temperature (C)",
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 12 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "nvidia_smi_power_draw_watts", "legendFormat": "W {{uuid}}" },
+        { "refId": "B", "expr": "nvidia_smi_temperature_gpu", "legendFormat": "C {{uuid}}" }
+      ],
+      "fieldConfig": { "defaults": { "custom": { "fillOpacity": 5 } }, "overrides": [
+        { "matcher": { "id": "byRegexp", "options": "/^C /" }, "properties": [ { "id": "unit", "value": "celsius" }, { "id": "custom.axisPlacement", "value": "right" } ] },
+        { "matcher": { "id": "byRegexp", "options": "/^W /" }, "properties": [ { "id": "unit", "value": "watt" } ] }
+      ] }
+    },
+    {
+      "type": "timeseries",
+      "title": "Host RAM (used / total)",
+      "gridPos": { "h": 8, "w": 12, "x": 6, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes", "legendFormat": "used" },
+        { "refId": "B", "expr": "node_memory_MemTotal_bytes", "legendFormat": "total" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "bytes" }, "overrides": [] }
+    },
+    {
+      "type": "timeseries",
+      "title": "Decode tok/s (strata live)",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "strata:live_tok_s", "legendFormat": "{{model_name}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0 }, "overrides": [] }
+    },
+    {
+      "type": "timeseries",
+      "title": "Requests in flight (vllm running / waiting)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "vllm:num_requests_running", "legendFormat": "running {{instance}}" },
+        { "refId": "B", "expr": "vllm:num_requests_waiting", "legendFormat": "waiting {{instance}}" }
+      ],
+      "fieldConfig": { "defaults": { "min": 0, "decimals": 0 }, "overrides": [] }
+    },
+    {
+      "type": "stat",
+      "title": "Service health (blackbox probes)",
+      "description": "probe_success per registered service; stopped services show as no-data (availability keys off ailab:service_running, not up).",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "probe_success", "legendFormat": "{{ai_service}}" }
+      ],
+      "fieldConfig": { "defaults": { "min": 0, "max": 1, "mappings": [ { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "OK", "color": "green" } } } ], "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 1 } ] } }, "overrides": [] },
+      "options": { "colorMode": "background", "graphMode": "none", "textMode": "name_and_value" }
+    },
+    {
+      "type": "timeseries",
+      "title": "Host CPU load",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "node_load1", "legendFormat": "load1" },
+        { "refId": "B", "expr": "1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[2m]))", "legendFormat": "cpu busy" }
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [ { "matcher": { "id": "byName", "options": "cpu busy" }, "properties": [ { "id": "unit", "value": "percentunit" }, { "id": "custom.axisPlacement", "value": "right" }, { "id": "min", "value": 0 }, { "id": "max", "value": 1 } ] } ] }
+    },
+    {
+      "type": "logs",
+      "title": "Container logs (VictoriaLogs)",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 32 },
+      "datasource": { "type": "victoriametrics-logs-datasource", "uid": "victorialogs" },
+      "targets": [ { "refId": "A", "expr": "", "query": "* | sort by (_time) desc", "limit": 100 } ],
+      "options": { "showTime": true, "wrapLogMessage": true, "sortOrder": "Descending", "enableLogDetails": true }
+    }
+  ]
+}

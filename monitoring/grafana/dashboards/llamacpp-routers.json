@@ -1,0 +1,132 @@
+{
+ "uid": "llamacpp",
+ "title": "llama.cpp routers",
+ "tags": [
+  "ai-lab"
+ ],
+ "timezone": "browser",
+ "schemaVersion": 39,
+ "version": 1,
+ "refresh": "30s",
+ "time": {
+  "from": "now-6h",
+  "to": "now"
+ },
+ "editable": true,
+ "panels": [
+  {
+   "type": "timeseries",
+   "title": "Decode tok/s per model",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 0
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "rate(llamacpp:tokens_predicted_seconds_total[2m]) > 0",
+     "legendFormat": "{{ai_service}} {{model}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Prompt tok/s per model",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 0
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "rate(llamacpp:prompt_tokens_seconds_total[2m]) > 0",
+     "legendFormat": "{{ai_service}} {{model}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Requests processing / deferred",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "llamacpp:requests_processing",
+     "legendFormat": "processing {{ai_service}} {{model}}"
+    },
+    {
+     "refId": "B",
+     "expr": "llamacpp:requests_deferred",
+     "legendFormat": "deferred {{ai_service}} {{model}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short",
+     "min": 0
+    },
+    "overrides": []
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "KV cache usage",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "llamacpp:kv_cache_usage_perc",
+     "legendFormat": "{{ai_service}} {{model}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   }
+  }
+ ]
+}

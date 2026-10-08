@@ -41,6 +41,19 @@ Web apps (31xx family, sequential):
 | hermes (opt-in)    | 3003 | 3104 | LAN      |
 | deepseek-harness   | 3080 | 3105 | loopback (Network=host, dsh binds 127.0.0.1 itself) |
 
+Monitoring (added 2026-10-08, plan ~/Documents/plans/ai-lab-monitoring-plan.md):
+
+| service            | port  | binding  |
+|--------------------|-------|----------|
+| grafana            | 3106  | LAN, login |
+| prometheus UI      | 3107  | loopback |
+| node-exporter      | 9100  | loopback (Network=host) |
+| gpu-exporter       | 9835  | loopback |
+| podman-exporter    | 9882  | loopback |
+| blackbox-exporter  | 9115  | loopback |
+| victorialogs       | 9428  | loopback (debug; Grafana uses ai.network DNS) |
+| fluent-bit         | 2020  | loopback (its /api health) |
+
 Caddy files keep their old 3001-3005 TLS front ports: kept for reference
 only, never deployed.
 

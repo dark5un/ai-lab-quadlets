@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # Quadlet policy for every repo quadlet and registry entry:
-#   - nothing starts at boot: no [Install], registry boot=false everywhere
+#   - nothing starts at boot: no [Install], registry boot=false everywhere,
+#     EXCEPT the monitoring tier (plan D1): prometheus, the exporters and the
+#     log pair enable at boot; grafana stays on demand like the web apps.
 #   - no network-online.target dependency (podman's waiter hangs on Arch)
 #   - units on ai.network Want + start After ai-network.service
 #   - no hardcoded GPU UUID (templates carry placeholders only)
 #   - SuccessExitStatus=143 everywhere (a stop must not leave a failed unit)
 #   - every non-strata GPU service pins with AddDevice=nvidia.com/gpu=all +
 #     CUDA_VISIBLE_DEVICES matching its registry card(s); services without a
-#     card get no GPU at all
+#     card get no GPU at all. One whitelist exception: gpu-exporter carries
+#     AddDevice for NVML but NO registry gpu field (it must not count as a
+#     GPU service for the arbiter).
 # (strata variants and strata-coder are covered by test-strata-variants.sh)
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -16,7 +20,15 @@ err() { echo "  FAIL: $*"; fail=1; }
 
 for f in "$ROOT"/quadlets/*.container "$ROOT"/quadlets/*.container.in; do
     n="$(basename "$f")"
-    grep -q '^\[Install\]' "$f" && err "$n has an [Install] section"
+    if grep -q '^\[Install\]' "$f"; then
+        # boot allowed only for the monitoring tier minus grafana
+        case "$n" in
+            prometheus.container|node-exporter.container|gpu-exporter.container|\
+            podman-exporter.container|blackbox-exporter.container|\
+            victorialogs.container|fluent-bit.container) ;;
+            *) err "$n has an [Install] section" ;;
+        esac
+    fi
     grep -q 'network-online.target' "$f" && err "$n depends on network-online.target"
     grep -Eq 'GPU-[0-9a-f]{8}-' "$f" && err "$n hardcodes a GPU UUID (use __GPU_*_UUID__)"
     # A SIGTERM-killed container exits 143; without this every stop of such
@@ -33,12 +45,15 @@ import json, os, re, sys
 root = sys.argv[1]
 want = {"5090": "__GPU_5090_UUID__", "4070ti": "__GPU_4070TI_UUID__",
         "both": "__GPU_5090_UUID__,__GPU_4070TI_UUID__"}
+BOOT_OK = {"prometheus", "node-exporter", "gpu-exporter", "podman-exporter",
+           "blackbox-exporter", "victorialogs", "fluent-bit"}
+GPU_DEVICE_OK = {"gpu-exporter"}   # AddDevice without a registry card
 bad = 0
 for s in json.load(open(f"{root}/services.json"))["services"]:
     name = s["name"]
-    if s["boot"] is not False:
-        print(f"  FAIL: {name}: registry boot must be false"); bad = 1
-    if s.get("group") == "strata" or s["name"] == "strata-coder":
+    if s["boot"] is not (name in BOOT_OK):
+        print(f"  FAIL: {name}: boot={s['boot']} violates the monitoring-tier rule"); bad = 1
+    if s.get("group") in ("strata", "coder"):
         continue
     path = next((p for p in (f"{root}/quadlets/{name}.container.in", f"{root}/quadlets/{name}.container")
                  if os.path.exists(p)), None)
@@ -55,7 +70,10 @@ for s in json.load(open(f"{root}/services.json"))["services"]:
         if s["gpu"] == "both" and not s.get("exclusive"):
             print(f"  FAIL: {name}: a non-strata service on both cards must be exclusive"); bad = 1
     elif devices or cvd:
-        print(f"  FAIL: {name}: has GPU devices but no registry card"); bad = 1
+        if name in GPU_DEVICE_OK and devices == ["nvidia.com/gpu=all"] and not cvd:
+            pass  # gpu-exporter: NVML device access, not a card owner
+        else:
+            print(f"  FAIL: {name}: has GPU devices but no registry card"); bad = 1
 sys.exit(bad)
 EOF
 

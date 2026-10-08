@@ -1,0 +1,37 @@
+# podman-exporter (monitoring tier, boot). Container state/stats through
+# px's USER podman socket: podman.socket (user unit) must be enabled —
+# install.sh enables it. No --userns=keep-id here (the stack's usual
+# convention): the exporter runs as container root, which maps to px in
+# the user namespace and can talk to the socket; keep-id:uid=65534 was
+# verified working in the 2026-10-08 probe but is unnecessary.
+# Default collectors only: --collector.enable-all made scrapes hang
+# (>90 s) on the image-size cache in that probe; container_state/info/
+# stats, which the dashboards need, are on by default.
+
+[Unit]
+Description=Prometheus podman exporter (container metrics)
+Wants=ai-network.service
+After=ai-network.service
+After=podman.socket
+
+[Container]
+ContainerName=systemd-podman-exporter
+Image=quay.io/navidys/prometheus-podman-exporter:v2.0.0
+Network=ai.network
+PublishPort=127.0.0.1:9882:9882/tcp
+Environment=CONTAINER_HOST=unix:///run/podman/podman.sock
+Volume=%t/podman/podman.sock:/run/podman/podman.sock
+# The image runs as USER 65534: keep-id:uid=65534 maps that to a subuid
+# that owns the socket inside the container (verified in the 2026-10-08
+# probe; without it the exporter cannot talk to the API and hangs).
+UserNS=keep-id:uid=65534
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=60
+
+[Install]
+WantedBy=default.target

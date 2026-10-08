@@ -1,0 +1,32 @@
+# VictoriaLogs (monitoring tier, boot). Log store fed by fluent-bit;
+# chosen over Loki in the 2026-10-08 bake-off (VictoriaLogs+Fluent Bit
+# worked with zero tuning; Loki needed a world-writable data dir, raised
+# ingestion limits, and Alloy's journal labels needed a relabel stage).
+# Retention 30 days capped at 5 GB (plan D6). No host port: Grafana
+# reaches it as http://systemd-victorialogs:9428 on ai.network.
+
+[Unit]
+Description=VictoriaLogs (ai-lab log store)
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-victorialogs
+Image=docker.io/victoriametrics/victoria-logs:v1.53.0
+Network=ai.network
+# loopback only: Grafana reaches it as systemd-victorialogs:9428 on ai.network;
+# the published port exists for curl debugging.
+PublishPort=127.0.0.1:9428:9428/tcp
+Volume=%h/.local/share/victorialogs:/vlogs-storage:z
+# Exec appends to the image entrypoint (/victoria-logs-prod): flags only.
+Exec=-storageDataPath=/vlogs-storage -retentionPeriod=30d -retention.maxDiskSpaceUsageBytes=5GiB
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=60
+
+[Install]
+WantedBy=default.target

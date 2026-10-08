@@ -1,0 +1,109 @@
+{
+ "uid": "comfyui",
+ "title": "ComfyUI",
+ "tags": [
+  "ai-lab"
+ ],
+ "timezone": "browser",
+ "schemaVersion": 39,
+ "version": 1,
+ "refresh": "30s",
+ "time": {
+  "from": "now-6h",
+  "to": "now"
+ },
+ "editable": true,
+ "panels": [
+  {
+   "type": "timeseries",
+   "title": "Jobs (executions/s)",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 0
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "rate(comfyui_prompt_executions_total[5m])",
+     "legendFormat": "{{instance}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Queue wait / execution / end-to-end p95",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 12,
+    "y": 0
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "histogram_quantile(0.95, sum by (le) (rate(comfyui_queue_wait_seconds_bucket[5m])))",
+     "legendFormat": "queue wait"
+    },
+    {
+     "refId": "B",
+     "expr": "histogram_quantile(0.95, sum by (le) (rate(comfyui_execution_seconds_bucket[5m])))",
+     "legendFormat": "execution"
+    },
+    {
+     "refId": "C",
+     "expr": "histogram_quantile(0.95, sum by (le) (rate(comfyui_end_to_end_seconds_bucket[5m])))",
+     "legendFormat": "end-to-end"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "s"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Failures by class",
+   "gridPos": {
+    "h": 8,
+    "w": 12,
+    "x": 0,
+    "y": 8
+   },
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "rate(comfyui_prompt_failures_total[15m])",
+     "legendFormat": "{{instance}}"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   }
+  }
+ ]
+}

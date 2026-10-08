@@ -61,6 +61,22 @@ RUN git clone \
     && git -C /opt/ComfyUI rev-parse HEAD \
        > /opt/ComfyUI/IMAGE_COMMIT
 
+# Prometheus exporter custom node (adds /metrics on ComfyUI's own port):
+# pinned to a commit and patched (upstream deadlock: any job with a
+# client_id hangs forever; see the patch header). Installed in the IMAGE,
+# not /data/custom_nodes, so ComfyUI Manager cannot silently replace it.
+# Monitoring plan: ~/Documents/plans/ai-lab-monitoring-plan.md (D4).
+COPY patches/comfyui-prometheus-exporter-rlock.patch /tmp/rlock.patch
+RUN git clone \
+      --depth 50 \
+      https://github.com/OliverGee/comfyui-prometheus-exporter.git \
+      /opt/ComfyUI/custom_nodes/comfyui-prometheus-exporter \
+    && git -C /opt/ComfyUI/custom_nodes/comfyui-prometheus-exporter \
+       checkout 593647f418295b97ed7ff96015b207dba320b44a \
+    && git -C /opt/ComfyUI/custom_nodes/comfyui-prometheus-exporter \
+       apply /tmp/rlock.patch \
+    && rm /tmp/rlock.patch
+
 WORKDIR /opt/ComfyUI
 
 # Write entrypoint script that creates the data dirs and copies built-in custom nodes on first boot

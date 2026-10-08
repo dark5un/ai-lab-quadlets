@@ -1,0 +1,38 @@
+# Fluent Bit (monitoring tier, boot). Ships px's USER journal to
+# VictoriaLogs. Two verified pitfalls (2026-10-08 bake-off):
+#   - image must be 4.2+: fluent-bit 4.0's systemd input silently reads
+#     0 records from this ZSTD-compressed journal (systemd 262);
+#   - do NOT use --userns=keep-id: the journal ACL grants read to px,
+#     and the container's root already maps to px; keep-id makes the
+#     process nobody and the input again reads 0 records without error.
+# The read cursor lives on a volume (db) so restarts do not re-ingest.
+# Config rendered by scripts/render-prometheus.py into
+# config/fluent-bit/fluent-bit.conf.
+
+[Unit]
+Description=Fluent Bit (user journal -> VictoriaLogs)
+Wants=ai-network.service
+After=ai-network.service
+After=victorialogs.service
+
+[Container]
+ContainerName=systemd-fluent-bit
+Image=docker.io/fluent/fluent-bit:4.2.8
+Network=ai.network
+# loopback only: the built-in HttpServer (/api/v1/health) for debugging.
+PublishPort=127.0.0.1:2020:2020/tcp
+Volume=%h/.config/containers/config/fluent-bit:/cfg:ro,Z
+Volume=fluent-bit-db:/db:z
+Volume=/var/log/journal:/var/log/journal:ro
+# Exec appends to the image entrypoint (/fluent-bit/bin/fluent-bit).
+Exec=-c /cfg/fluent-bit.conf
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=60
+
+[Install]
+WantedBy=default.target

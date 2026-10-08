@@ -21,6 +21,12 @@ Rules (docs: ~/Documents/plans/strata-gpu-variants-plan.md, README "GPU rules"):
   C2  Strata placed on an owner's card (strata-4070ti, strata-both) stops it.
   C3  Any other service that needs an owner's card stops the owner (it cannot
       move); ComfyUI picks a card no owner holds when it can.
+  X1  When strata moves to the other card (R1, R4, C1) it keeps its context
+      (5090-1m -> 4070ti-1m and back) if that card has a variant for it;
+      strata-both (256K only) drops to the plain card variant.
+Groups (strata, comfyui, llama-cpp, coder) run one member at a time where
+their units say so; the coder group (strata-coder, -524k, -1m) are card
+owners, so starting one stops the other (C1: same card).
 Non-strata, non-exclusive, non-owner services may share a card with each other.
 
 services.json fields used: name, unit, gpu (5090 | 4070ti | both), group,
@@ -74,6 +80,15 @@ class Planner:
             if s["name"] in self.state:
                 return s["name"]
         return None
+
+    def moved_variant(self, card):
+        """X1: the strata variant on `card` with the live variant's context."""
+        live = self.live("strata")
+        variant = self.svcs[live]["variant"] if live else card
+        ctx = variant.split("-", 1)[1] if "-" in variant else ""
+        if ctx and any(s.get("variant") == f"{card}-{ctx}" for s in self.group("strata")):
+            return f"{card}-{ctx}"
+        return card
 
     def strata_cards(self):
         n = self.live("strata")
@@ -130,14 +145,14 @@ class Planner:
         held = self.strata_cards()
         if variant is None:
             if held == set(CARDS):
-                self.place_strata("5090")          # R4: strata-both drops to the 5090
+                self.place_strata(self.moved_variant("5090"))  # R4: strata-both drops to the 5090
                 held = {"5090"}
             if held:
                 variant = OTHER[next(iter(held))]
             else:                                  # C3: prefer a card no owner holds
                 variant = COMFY_DEFAULT if COMFY_DEFAULT not in self.owner_cards() else OTHER[COMFY_DEFAULT]
         elif variant in held:
-            self.place_strata(OTHER[variant])      # R1
+            self.place_strata(self.moved_variant(OTHER[variant]))  # R1 + X1
         self.stop_owners_on({variant})             # C3
         for s in self.group("comfyui"):
             if s["variant"] != variant:
@@ -174,7 +189,7 @@ class Planner:
         held = self.strata_cards()
         for card in sorted(cards(s) & held):
             # R1: strata leaves this card (both -> the other card; one -> swap).
-            self.place_strata(OTHER[card])
+            self.place_strata(self.moved_variant(OTHER[card]))   # X1: keeps its context
             held = self.strata_cards()
         self.start(name)
 
@@ -184,7 +199,7 @@ class Planner:
             return
         want = cards(self.svcs[name])
         if self.strata_cards() & want:
-            self.place_strata("5090" if "5090" not in want else "4070ti")
+            self.place_strata(self.moved_variant("5090" if "5090" not in want else "4070ti"))
         for other in sorted(self.state):
             o = self.svcs.get(other, {})
             if other == name or o.get("group") == "strata" or not (cards(o) & want):
@@ -203,11 +218,14 @@ class Planner:
         return {s["group"] for s in self.svcs.values() if s.get("group")}
 
     def do_start(self, name):
-        if name == "strata":
-            raise ArbiterError("pick a strata variant: ai-lab strata 5090|4070ti|both")
-        if name in self.groups() and name != "comfyui":
+        if name in self.groups() and name not in ("comfyui", "monitoring"):
             variants = "|".join(s["variant"] for s in self.group(name))
             raise ArbiterError(f"pick a {name} variant: {variants}")
+        if name == "monitoring":
+            # the whole monitoring tier comes up together (no GPU rules apply)
+            for s in self.group("monitoring"):
+                self.start(s["name"])
+            return
         if name == "comfyui":
             if self.live("comfyui") is None:
                 self.stop_exclusive(None)              # R6

@@ -1,0 +1,21 @@
+# Fix the add-on's self-deadlock: _handle_ws_event holds _lock on
+# execution_start and calls _nvml_update_peak -> _nvml_used_by_gpu ->
+# _nvml_init_once, which takes the same non-reentrant threading.Lock.
+# Every job submitted with a client_id (i.e. every browser-UI job) then
+# hangs in the queue forever. Repro + fix verified 2026-10-08 in a
+# CPU-only container of localhost/comfyui:v0.34.0-cu130 with the add-on
+# at 593647f418295b97ed7ff96015b207dba320b44a. Drop this patch when the
+# upstream PR merges.
+diff --git a/exporter.py b/exporter.py
+index b68dcef..e9760e6 100644
+--- a/exporter.py
++++ b/exporter.py
+@@ -61,7 +61,7 @@ _CACHE_TTL = float(os.getenv("COMFY_PROM_CACHE_TTL_SECONDS", "2.0"))
+ _SYSSTATS_TTL = float(os.getenv("COMFY_PROM_SYSSTATS_TTL_SECONDS", "10.0"))
+ _LOG_LEVEL = os.getenv("COMFY_PROM_LOG_LEVEL", "info").strip().lower()
+ 
+-_lock = threading.Lock()
++_lock = threading.RLock()
+ _instrumented = False
+ 
+ _last_log_ts: dict[str, float] = {}
