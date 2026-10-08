@@ -90,37 +90,78 @@ Item {
             width: col.width
             spacing: 4 * root.s
 
-            // Status: what runs where, one line per instance.
+            // Status: one line per instance, with OPEN in the same right-hand
+            // column as the service rows (the instance's web app: chat,
+            // Monitor tab, settings). OPEN is live only once the model is ready.
             Repeater {
                 model: [
-                    { dot: root.strataLive !== null, show: true,
+                    { name: root.strataLive ? root.strataLive.name : "", show: true,
+                      row: root.strataLive,
                       text: root.strataLive !== null
                           ? ("main   " + (root.strataCard === "5090" ? "5090 · " + root.ctxLabel(root.strataVariant)
                                          : root.strataCard === "both" ? "both cards" : "4070 Ti")
                              + "   :" + root.strataLive.host_port + "   " + root.stateText(root.strataLive))
                           : "main   off" },
-                    { dot: root.coderLive, show: root.coder !== null,
+                    { name: "strata-coder", show: root.coder !== null,
+                      row: root.coderLive ? root.coder : null,
                       text: root.coderLive && root.coder
                           ? ("coder  4070 Ti   :" + root.coder.host_port + "   " + root.stateText(root.coder))
                           : "coder  off" }
                 ]
-                delegate: Row {
+                delegate: Item {
                     id: statusRow
                     required property var modelData
+                    readonly property bool live: modelData.row !== null && modelData.row !== undefined
+                    readonly property bool ready: live && modelData.row.state === "running"
+                                                  && String(modelData.row.health).startsWith("up")
                     visible: modelData.show
-                    spacing: 6 * root.s
+                    width: col.width
+                    height: visible ? 24 * root.s : 0
+
                     Rectangle {
+                        id: sdot
                         anchors.verticalCenter: parent.verticalCenter
                         width: 6 * root.s; height: width; radius: width / 2
-                        color: statusRow.modelData.dot ? Theme.accent : Theme.hair
+                        color: statusRow.live ? Theme.accent : Theme.hair
                     }
                     Text {
+                        anchors.left: sdot.right
+                        anchors.leftMargin: 6 * root.s
+                        anchors.right: open.left
+                        anchors.rightMargin: 8 * root.s
+                        anchors.verticalCenter: parent.verticalCenter
                         text: statusRow.modelData.text
-                        color: statusRow.modelData.dot ? Theme.bright : Theme.dim
+                        color: statusRow.live ? Theme.bright : Theme.dim
                         font.family: Theme.mono
                         font.pixelSize: 10 * root.s
-                        width: col.width - 12 * root.s
                         elide: Text.ElideRight
+                    }
+                    // Same size and place as ServiceRow's OPEN (right edge minus
+                    // the START/STOP column), so the OPEN buttons line up.
+                    Rectangle {
+                        id: open
+                        anchors.right: parent.right
+                        anchors.rightMargin: 56 * root.s
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: 50 * root.s; height: 22 * root.s
+                        radius: Theme.radius
+                        color: "transparent"
+                        border.width: 1
+                        border.color: statusRow.ready ? Theme.border : Theme.hair
+                        Text {
+                            anchors.centerIn: parent
+                            text: "OPEN"
+                            color: statusRow.ready ? Theme.bright : Theme.faint
+                            opacity: statusRow.ready ? 1 : 0.45
+                            font.family: Theme.font
+                            font.pixelSize: 10 * root.s
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            enabled: statusRow.ready
+                            cursorShape: statusRow.ready ? Qt.PointingHandCursor : Qt.ArrowCursor
+                            onClicked: if (root.service) root.service.launchNamed(statusRow.modelData.name)
+                        }
                     }
                 }
             }

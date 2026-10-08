@@ -13,7 +13,9 @@ service with a live state dot, its host port, health, and a START/STOP switch.
 - **Panel** (`content/Panel.qml`), three sections; every control is a
   labelled segmented row (`content/Segmented.qml`) whose segments share the
   row's width, so nothing runs off the card at any option count:
-  - **STRATA**: a status line per instance (main, coder), then
+  - **STRATA**: a status line per instance (main, coder) with an OPEN button
+    in the same column as the service rows' (the instance's web app: chat,
+    Monitor tab, settings; live once the model is ready), then
     CARD `OFF | 5090 | 4070 TI | BOTH` (`bin/ai-lab strata <variant>`),
     CONTEXT `256K | 524K | 1M` (the 5090 variants strata-5090,
     strata-5090-524k, strata-5090-1m; picking one moves Strata to the 5090)
