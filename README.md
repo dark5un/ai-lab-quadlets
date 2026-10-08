@@ -139,6 +139,28 @@ first start from the unit's `CONTEXT`/`KV`/`GPU(S)` env; delete the json to
 re-run it. Shared settings and the key live in
 `~/.config/containers/config/strata/service.env` (mode 600).
 
+Upgrading Strata (last: 6f32ec0 / engine 0.1.39 -> 6674a00 / 0.1.40.4,
+2026-10-08; decode/prefill within noise of the old build, strata-both decode
++7%):
+
+```bash
+podman tag localhost/strata:multi localhost/strata:multi-<old-commit>   # rollback point
+for v in 5090 4070ti both; do d=~/.local/share/strata/config-$v
+  cp -p $d/strata-iq3_s.json $d/strata-iq3_s.json.<old-commit>; done
+git -C ~/workspace/github.com/Niko1221/Strata pull --ff-only
+./scripts/install-strata.sh --rebuild
+rm ~/.local/share/strata/config-*/strata-iq3_s.json   # re-run setup: new defaults
+./scripts/ai-lab strata 5090 && ./scripts/ai-lab strata 4070ti && ./scripts/ai-lab strata both
+chmod 600 ~/.local/share/strata/config-*/strata-iq3_s.json   # setup writes 644
+```
+
+Re-running setup reuses the model data (no download) and keeps the API key
+(setup takes it from `service.env`); it only refreshes the json's engine args.
+Upstream rewrote its git history on 2026-10-06 (#1276): a clone from before
+that cannot pull; move it with `git branch pre-cleanup-backup && git checkout
+-B main origin/main` (done here). Rollback: retag the old image to `:multi`
+and restore the saved jsons.
+
 GPU pinning: the strata units add the CDI device by UUID
 (`AddDevice=nvidia.com/gpu=GPU-…`) so nvidia-smi (which Strata's setup reads)
 and CUDA see the same cards in the same order. This is safe here because the
