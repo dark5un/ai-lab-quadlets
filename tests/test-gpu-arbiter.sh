@@ -69,6 +69,11 @@ cases = [
         ["stop llama-cpp-both", "start rizzo"]),
     ("non-GPU leaves llama-both", ["llama-cpp-both"], "start", "sketchlab", ["start sketchlab"]),
     ("toggle llama-both off", ["llama-cpp-both"], "toggle", "llama-cpp-both", ["stop llama-cpp-both"]),
+    # llama-cpp group (bar widget row): stop/toggle-off the whole group
+    ("stop llama group", ["llama-cpp-5090", "llama-cpp-4070ti", "sketchlab"], "stop", "llama-cpp",
+        ["stop llama-cpp-5090", "stop llama-cpp-4070ti"]),
+    ("toggle llama group off", ["llama-cpp-both"], "toggle", "llama-cpp", ["stop llama-cpp-both"]),
+    ("single llama chips coexist", ["llama-cpp-5090"], "start", "llama-cpp-4070ti", ["start llama-cpp-4070ti"]),
 ]
 fail = 0
 for title, running, verb, name, want in cases:
@@ -78,6 +83,10 @@ for title, running, verb, name, want in cases:
         print(f"  FAIL {title}:\n    want {want}\n    got  {got}")
 try:
     arb.plan(reg, set(), "start", "strata"); fail = 1; print("  FAIL bare 'strata' start must ask for a variant")
+except arb.ArbiterError:
+    pass
+try:
+    arb.plan(reg, set(), "start", "llama-cpp"); fail = 1; print("  FAIL bare 'llama-cpp' start must ask for a variant")
 except arb.ArbiterError:
     pass
 if fail:

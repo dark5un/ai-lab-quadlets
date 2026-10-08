@@ -177,6 +177,7 @@ done
 # podman 6 makes every quadlet wait for podman-user-wait-network-online, which
 # times out on Arch: the stack is local-only, so mask it (uninstall unmasks).
 systemctl --user mask podman-user-wait-network-online.service >/dev/null 2>&1 || true
+systemctl --user reset-failed podman-user-wait-network-online.service >/dev/null 2>&1 || true
 systemctl --user daemon-reload
 echo "  ✓ daemon-reload (nothing enabled, nothing started)"
 

@@ -12,6 +12,10 @@ import Quickshell.Io
 // Strata's three GPU variants (registry group "strata") are one row with a
 // selector: `ai-lab strata 5090|4070ti|both|off` (Conflicts= in the units
 // stops the running variant, and rizzo when the 4070 Ti is taken).
+// llama.cpp's three servers (group "llama-cpp") are one row too, but its
+// 5090 / 4070 Ti chips are independent toggles (both cards may serve at
+// once); BOTH is exclusive and OFF stops the group. Every start goes through
+// `ai-lab toggle`, so scripts/gpu-arbiter.py applies the GPU rules.
 Item {
     id: svc
 
@@ -57,13 +61,20 @@ Item {
     }
     readonly property string strataVariant: strataLive ? strataLive.variant : "off"
 
+    // The llama-cpp group: deployed variants and the live ones ([] = off).
+    readonly property var llamaVariants:
+        services.filter(s => s.installed && s.group === "llama-cpp")
+    readonly property var llamaLive:
+        llamaVariants.filter(s => s.state === "running" || s.state === "starting")
+
     readonly property int runningCount: {
-        let n = strataLive ? 1 : 0;
+        let n = (strataLive ? 1 : 0) + (llamaLive.length > 0 ? 1 : 0);
         for (const s of plainServices) if (s.state === "running") n += 1;
         return n;
     }
     readonly property int totalCount:
         plainServices.length + (strataVariants.length > 0 ? 1 : 0)
+        + (llamaVariants.length > 0 ? 1 : 0)
 
     readonly property int pollMs: {
         const sec = svc.settings ? (svc.settings.pollSec ?? 10) : 10;
@@ -104,6 +115,39 @@ Item {
                     health: "-"
                 })
                 : s);
+    }
+
+    // llama.cpp chips: "off" stops the group; a variant toggles that server
+    // (the arbiter stops llama-cpp-both before a single card starts, and the
+    // single cards before BOTH starts).
+    function toggleLlama(variant) {
+        if (llamaProc.running) return;
+        const stopping = variant === "off"
+            || llamaLive.some(s => s.variant === variant);
+        llamaProc.verb = variant === "off" ? "stop" : "toggle";
+        llamaProc.target = variant === "off" ? "llama-cpp" : "llama-cpp-" + variant;
+        llamaProc.running = true;
+        // Optimistic: reflect the request; the poll corrects it.
+        svc.services = svc.services.map(s => {
+            if (s.group !== "llama-cpp") return s;
+            let on = s.state === "running" || s.state === "starting";
+            if (variant === "off") on = false;
+            else if (s.variant === variant) on = !stopping;
+            else if (!stopping && (variant === "both" || s.variant === "both")) on = false;
+            return Object.assign({}, s, { state: on ? "starting" : "stopped", health: "-" });
+        });
+    }
+
+    Process {
+        id: llamaProc
+        property string verb: "toggle"
+        property string target: ""
+        command: [(svc.pluginApi ? svc.pluginApi.pluginDir : "") + "/bin/ai-lab",
+                  llamaProc.verb, llamaProc.target]
+        onExited: (code) => {
+            if (code !== 0) svc.lastError = llamaProc.verb + " " + llamaProc.target + " failed (exit " + code + ")";
+            svc.refresh();
+        }
     }
 
     Process {

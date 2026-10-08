@@ -149,9 +149,15 @@ class Planner:
         self.start(name)
 
     # --- verbs -------------------------------------------------------------------
+    def groups(self):
+        return {s["group"] for s in self.svcs.values() if s.get("group")}
+
     def do_start(self, name):
         if name == "strata":
             raise ArbiterError("pick a strata variant: ai-lab strata 5090|4070ti|both")
+        if name in self.groups() and name != "comfyui":
+            variants = "|".join(s["variant"] for s in self.group(name))
+            raise ArbiterError(f"pick a {name} variant: {variants}")
         if name == "comfyui":
             if self.live("comfyui") is None:
                 self.stop_exclusive(None)              # R6
@@ -170,7 +176,7 @@ class Planner:
             self.start_service(name)
 
     def do_stop(self, name):
-        if name in ("strata", "comfyui"):
+        if name in self.groups():
             for s in self.group(name):
                 self.stop(s["name"])
             return
@@ -179,7 +185,7 @@ class Planner:
         self.stop(name)
 
     def is_running(self, name):
-        if name in ("strata", "comfyui"):
+        if name in self.groups():
             return self.live(name) is not None
         return name in self.state
 

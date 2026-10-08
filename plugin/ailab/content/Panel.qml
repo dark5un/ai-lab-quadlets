@@ -5,7 +5,10 @@ import Ryoku.PluginKit.Singletons
 // live state dot, its host port, and a start/stop switch. Clicks call
 // service.toggleNamed(name), which shells out to `ai-lab toggle` (systemctl
 // --user on the quadlet unit). Strata's GPU variants are one row with an
-// OFF / 5090 / 4070TI / BOTH selector (service.switchStrata). Services whose
+// OFF / 5090 / 4070TI / BOTH selector (service.switchStrata). llama.cpp is one
+// row with the same chips, but 5090 and 4070TI toggle independently (both
+// cards may serve at once) and BOTH is exclusive (service.toggleLlama).
+// Services whose
 // quadlet is not deployed are hidden. The host sizes the card to implicitHeight.
 Item {
     id: root
@@ -20,6 +23,8 @@ Item {
     readonly property var services: service ? service.plainServices : []
     readonly property var strataVariants: service ? service.strataVariants : []
     readonly property var strataLive: service ? service.strataLive : null
+    readonly property var llamaVariants: service ? service.llamaVariants : []
+    readonly property var llamaLive: service ? service.llamaLive : []
 
     implicitWidth: root.widthBudget
     implicitHeight: col.implicitHeight + 24 * root.s
@@ -114,6 +119,79 @@ Item {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: if (root.service && !parent.live)
                                 root.service.switchStrata(modelData)
+                        }
+                    }
+                }
+            }
+        }
+
+        // llama.cpp: one row; single-card chips toggle, BOTH is exclusive.
+        Row {
+            visible: root.llamaVariants.length > 0
+            spacing: 8 * root.s
+
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: 8 * root.s
+                height: width
+                radius: width / 2
+                color: root.llamaLive.length > 0 ? Theme.accent : Theme.dim
+            }
+
+            Column {
+                width: root.widthBudget - 226 * root.s
+                spacing: 1 * root.s
+                Text {
+                    text: "llama.cpp"
+                    color: Theme.bright
+                    font.family: Theme.font
+                    font.pixelSize: 13 * root.s
+                    elide: Text.ElideRight
+                    width: parent.width
+                }
+                Text {
+                    text: root.llamaLive.length > 0
+                        ? root.llamaLive.map(v => ":" + v.host_port + " " +
+                              (v.state === "starting" ? "starting" : v.health)).join("  ")
+                        : "off"
+                    color: Theme.dim
+                    font.family: Theme.mono
+                    font.pixelSize: 10 * root.s
+                    elide: Text.ElideRight
+                    width: parent.width
+                }
+            }
+
+            Row {
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: 2 * root.s
+                Repeater {
+                    model: ["off"].concat(root.llamaVariants.map(v => v.variant))
+                    delegate: Rectangle {
+                        required property var modelData
+                        readonly property bool live: modelData === "off"
+                            ? root.llamaLive.length === 0
+                            : root.llamaLive.some(v => v.variant === modelData)
+                        width: (modelData === "4070ti" ? 52 : 40) * root.s
+                        height: 20 * root.s
+                        radius: Theme.radius
+                        color: live ? (modelData === "off" ? Theme.vermDeep : Theme.accent) : Theme.dim
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: modelData.toUpperCase()
+                            color: Theme.cardBot
+                            font.family: Theme.font
+                            font.pixelSize: 10 * root.s
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            // OFF only acts when something runs; a lit card
+                            // chip stops that server, an unlit one starts it.
+                            onClicked: if (root.service && !(modelData === "off" && parent.live))
+                                root.service.toggleLlama(modelData)
                         }
                     }
                 }

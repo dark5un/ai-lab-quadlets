@@ -1,9 +1,9 @@
 {
   "id": "ailab",
   "name": "AI Lab",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "dark5un <dark5un@users.noreply.github.com>",
-  "description": "Start/stop the ai-lab-quadlets stack from the bar, and switch Strata between its GPU variants (5090 / 4070 Ti / both / off).",
+  "description": "Start/stop the ai-lab-quadlets stack from the bar; Strata and llama.cpp each get one row with a GPU selector (OFF / 5090 / 4070 Ti / BOTH).",
   "license": "MIT",
   "official": false,
   "hosts": [

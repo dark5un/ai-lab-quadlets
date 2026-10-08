@@ -15,7 +15,9 @@
       "auth": "api-key",
       "image_digest": "ghcr.io/ggml-org/llama.cpp@sha256:185d70a45b05b10c005d1f66b79646fad988bb70278d620dcf5edac2a4a025d4",
       "note": "RTX 5090 (fixed card); router over ~/.local/share/llama.cpp/cards/5090; every request needs a key from config/llama-cpp/keys.txt",
-      "gpu": "5090"
+      "gpu": "5090",
+      "group": "llama-cpp",
+      "variant": "5090"
     },
     {
       "name": "llama-cpp-4070ti",
@@ -31,7 +33,9 @@
       "auth": "api-key",
       "image_digest": "ghcr.io/ggml-org/llama.cpp@sha256:185d70a45b05b10c005d1f66b79646fad988bb70278d620dcf5edac2a4a025d4",
       "note": "RTX 4070 Ti (fixed card); router over ~/.local/share/llama.cpp/cards/4070ti; every request needs a key from config/llama-cpp/keys.txt",
-      "gpu": "4070ti"
+      "gpu": "4070ti",
+      "group": "llama-cpp",
+      "variant": "4070ti"
     },
     {
       "name": "llama-cpp-both",
@@ -48,7 +52,9 @@
       "image_digest": "ghcr.io/ggml-org/llama.cpp@sha256:185d70a45b05b10c005d1f66b79646fad988bb70278d620dcf5edac2a4a025d4",
       "note": "RTX 5090 + RTX 4070 Ti layer split (5090 main); exclusive: starting it stops every other GPU service incl. strata, and any GPU start stops it; router over ~/.local/share/llama.cpp/cards/both; every request needs a key from config/llama-cpp/keys.txt",
       "gpu": "both",
-      "exclusive": true
+      "exclusive": true,
+      "group": "llama-cpp",
+      "variant": "both"
     },
     {
       "name": "strata-5090",

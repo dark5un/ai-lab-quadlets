@@ -14,8 +14,11 @@ service with a live state dot, its host port, health, and a START/STOP switch.
   entries whose quadlet is not installed are hidden); clicking START/STOP
   calls `bin/ai-lab toggle <name>`. Strata is a single row with an
   OFF / 5090 / 4070TI / BOTH selector that calls `bin/ai-lab strata <variant>`
-  (the units' `Conflicts=` stops the running variant, and rizzo when the
-  4070 Ti is taken); clicking the service name or LAUNCH
+  (scripts/gpu-arbiter.py moves or stops what shares its card). llama.cpp is
+  a single row with the same chips: 5090 and 4070TI toggle their server
+  independently (`bin/ai-lab toggle llama-cpp-<card>`), BOTH starts the
+  exclusive layer-split server (the arbiter stops the others first), OFF runs
+  `bin/ai-lab stop llama-cpp`. Clicking the service name or LAUNCH
   resolves the URL via `bin/ai-lab url <name>` (token-gated services like dsh
   get their one-time token appended), opens it with xdg-open, and closes the
   panel so focus lands on the browser.
