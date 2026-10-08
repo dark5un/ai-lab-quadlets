@@ -42,7 +42,7 @@ GPU rules when they do.
 | `open-webui` | `3100` | - | account | chat frontend over strata + the three llama.cpp servers |
 | `comfyui-5090` / `-4070ti` | `3101` | the card strata is not on | none | image generation |
 | `sketchlab` | `3102` | - | none | diagramming SPA; same-origin `/v1` proxy to strata (key server-side) |
-| `hyperframes` | `3103` | - | none | HTML-to-video render API |
+| `hyperframes` | `3103` | - | none | HyperFrames GCP Cloud Run worker (needs a GCS bucket; local renders: `scripts/hyperframes-render.sh`) |
 | `hermes` (opt-in) | `3104` | - | account | containerized Hermes gateway; this host runs Hermes natively instead |
 | `deepseek-harness` (opt-in) | `127.0.0.1:3105` | - | token | dsh agent runtime, host loopback only |
 
@@ -415,18 +415,28 @@ README.
 
 ## HyperFrames
 
-HyperFrames is an HTML-to-video render engine. The quadlet runs the
-[GCP Cloud Run server](https://github.com/heygen-com/hyperframes) image,
-which provides a headless render API on `http://<host-LAN-IP>:3103`. The image is
-built automatically by the installer from a hyperframes repo checkout; if you build
-it manually:
+HyperFrames is an HTML-to-video render engine. Two images, two purposes:
+
+- **Local renders: `scripts/hyperframes-render.sh <composition-dir> <out.mp4>`.**
+  A one-shot CLI container (`localhost/hyperframes-render:latest`, built from
+  `packages/cli/src/docker/Dockerfile.render` on first use). It needs no
+  service running. A 2 s 1080p composition renders in about 5 s on the CPU.
+- **The `hyperframes` service on :3103** runs the
+  [GCP Cloud Run adapter](https://github.com/heygen-com/hyperframes)
+  (`packages/gcp-cloud-run`). It is only the worker half of a distributed
+  render: `GET /healthz`, and `POST /` with `Action` = `plan` /
+  `renderChunk` / `assemble`, each of which downloads from and uploads to a
+  **GCS bucket**. It cannot render local files; without a bucket and Google
+  credentials every action fails. Start it only if you drive it with the
+  `@hyperframes/gcp-cloud-run` SDK against your own bucket.
+
+The installer builds the service image from a hyperframes repo checkout; by
+hand:
 
 ```bash
 cd /path/to/hyperframes
 podman build -f packages/gcp-cloud-run/Dockerfile -t localhost/hyperframes:latest .
 ```
-
-The `scripts/hyperframes-render.sh` script provides a one-shot render helper.
 
 ## AI Lab bar plugin
 
