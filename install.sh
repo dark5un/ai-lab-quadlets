@@ -140,19 +140,23 @@ set_kv "$OW" ENABLE_PERSISTENT_CONFIG false
 echo "  open-webui: 4 backends (strata, llama-cpp-5090/4070ti/both), URL http://${HOST_LOCAL}:3100"
 set_kv "$CONF/sketchlab/service.env" STRATA_API_KEY "$STRATA_KEY"
 echo "  sketchlab: /v1 proxy key = strata key"
-if [ "$WITH_DSH" = 1 ]; then
-    DSH="$CONF/deepseek-harness/service.env"
+DSH="$CONF/deepseek-harness/service.env"
+if [ "$WITH_DSH" = 1 ] || [ -f "$DSH" ]; then
+    # An existing dsh env holds copies of both keys: keep them current (key
+    # rotation) even without --with-deepseek-harness; only the flag creates it.
     mkdir -p "$(dirname "$DSH")"; chmod 700 "$(dirname "$DSH")"
     [ -f "$DSH" ] || printf '# DeepSeek Harness. DSH_PORT: dsh binds 127.0.0.1:<port> (Network=host).\nDSH_PORT=3105\n' > "$DSH"
     set_kv "$DSH" STRATA_API_KEY "$STRATA_KEY"
     set_kv "$DSH" LLAMA_CPP_API_KEY "$LLAMA_KEY"
+    echo "  deepseek-harness: strata + llama.cpp keys"
+fi
+if [ "$WITH_DSH" = 1 ]; then
     DSH_SETTINGS="$DATA/deepseek-harness/settings.yaml"
     if [ ! -f "$DSH_SETTINGS" ]; then
         mkdir -p "$(dirname "$DSH_SETTINGS")"
         install -m 600 "$ROOT/config/deepseek-harness/settings.yaml.example" "$DSH_SETTINGS"
         echo "  created $DSH_SETTINGS"
     fi
-    echo "  deepseek-harness: strata + llama.cpp keys"
 fi
 umask 022
 

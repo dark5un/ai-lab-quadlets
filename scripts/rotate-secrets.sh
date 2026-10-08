@@ -91,6 +91,9 @@ if [ "$APPLY" = 1 ]; then
     done
     echo "Done. Update any client configs that referenced the old keys."
 else
+    echo "  ~ would update the client copies of the keys (install.sh --no-images:"
+    echo "    open-webui, sketchlab, deepseek-harness if its env exists) and restart"
+    echo "    the active services"
     echo ""
     echo "Re-run with --yes to apply and restart affected services."
 fi

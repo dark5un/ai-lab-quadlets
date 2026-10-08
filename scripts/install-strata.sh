@@ -76,8 +76,11 @@ chmod 600 "$SERVICE_ENV"
 
 # --- Data layout: shared model data, one setup config dir per variant -----------
 mkdir -p "$DATA_DIR"/{models,mtp,packs}
-for v in "${VARIANTS[@]}"; do mkdir -p "$DATA_DIR/config-$v"; done
+for v in "${VARIANTS[@]}"; do mkdir -p "$DATA_DIR/config-$v"; chmod 700 "$DATA_DIR/config-$v"; done
 chmod 700 "$DATA_DIR"
+# Strata's setup writes strata-*.json (it holds the API key) 644; later rewrites
+# keep the mode, so tightening it once sticks.
+find "$DATA_DIR"/config-* -maxdepth 1 -name 'strata-*.json' -exec chmod 600 {} +
 # A single-unit install kept its setup in config/: that one ran on the 5090.
 if [[ -d "$DATA_DIR/config" ]]; then
     if [[ -z "$(ls -A "$DATA_DIR/config-5090")" ]]; then
