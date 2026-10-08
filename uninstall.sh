@@ -32,7 +32,7 @@ SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
 if [ -f "$SCRIPT_DIR/services.json" ] && command -v python3 >/dev/null 2>&1; then
     SERVICES="$SERVICES $(python3 -c "import json,sys; print(' '.join(s['unit'][:-8] for s in json.load(open(sys.argv[1]))['services']))" "$SCRIPT_DIR/services.json" 2>/dev/null)"
 else
-    SERVICES="$SERVICES strata hermes comfyui sketchlab open-webui deepseek-harness llama-cpp-research llama-cpp-main hyperframes"
+    SERVICES="$SERVICES strata hermes comfyui sketchlab open-webui deepseek-harness llama-cpp-4070ti llama-cpp-5090 hyperframes"
 fi
 for svc in $SERVICES; do
     if systemctl --user is-active "${svc}.service" &>/dev/null; then
@@ -52,7 +52,7 @@ echo "[2/3] Removing quadlet files..."
 for f in ai.network caddy.container comfyui.container hermes.container \
          deepseek-harness.container strata.container strata-*.container \
          comfyui-*.container llama-cpp-cpu.container \
-         llama-cpp-main.container llama-cpp-research.container \
+         llama-cpp-5090.container llama-cpp-4070ti.container \
          llama-cpp-extra-*.container open-webui.container sketchlab.container \
          hyperframes.container; do
     # shellcheck disable=SC2086

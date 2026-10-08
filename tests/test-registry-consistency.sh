@@ -2,7 +2,8 @@
 # Drift alarm: every non-opt-in service in services.json must match the
 # quadlet's PublishPort (bind:host_port:container_port) and Image.
 # Checks the deployed quadlet dir when present, else the repo quadlets/.
-# llama-cpp-main/research are generated from scripts/templates/*.in.
+# A quadlets/<name>.container.in template (GPU UUID placeholders) counts as
+# the quadlet; scripts/render-units.sh renders it at install time.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REG="$ROOT/services.json"
@@ -46,11 +47,7 @@ EOF
     fi
 }
 
-for name in llama-cpp-main llama-cpp-research; do
-    check "$name" "$ROOT/scripts/templates/$name.container.in"
-done
-
-for svc in $(python3 -c "import json,sys; [print(s['name']) for s in json.load(open('$REG'))['services'] if s['name'] not in ('llama-cpp-main','llama-cpp-research')]"); do
+for svc in $(python3 -c "import json,sys; [print(s['name']) for s in json.load(open('$REG'))['services']]"); do
     file=""
     [ -f "$DEPLOYED/$svc.container" ] && file="$DEPLOYED/$svc.container"
     [ -f "$ROOT/quadlets/$svc.container" ] && file="$ROOT/quadlets/$svc.container"

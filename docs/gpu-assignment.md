@@ -1,113 +1,44 @@
-# GPU Assignment
+# GPU assignment
 
-## How GPU detection works
+This host has two NVIDIA cards and every GPU service is named after the card
+it runs on. The registry (`services.json`, field `gpu`) is the source of truth;
+`scripts/gpu-arbiter.py` enforces the rules when services start.
 
-When you run `./scripts/detect-gpus.sh`, the script:
+| card | UUID placeholder | services |
+|---|---|---|
+| RTX 5090 32 GB | `__GPU_5090_UUID__` | strata-5090, llama-cpp-5090, comfyui-5090 |
+| RTX 4070 Ti 12 GB | `__GPU_4070TI_UUID__` | strata-4070ti, llama-cpp-4070ti, comfyui-4070ti, rizzo |
+| both | both placeholders | strata-both |
 
-1. Scans all available NVIDIA GPUs using `nvidia-smi`
-2. Extracts each GPU's **index**, **name**, **UUID**, and **VRAM** (in MiB)
-3. Sorts GPUs by VRAM descending (most VRAM → highest priority)
-4. Assigns GPUs to llama.cpp services using the **GPU UUID**
+## Rules (scripts/gpu-arbiter.py)
 
-## Assignment scheme
+1. Strata owns its card(s). Starting a GPU service on strata's card moves
+   strata to the other card (strata-both drops to the other card). Strata off
+   stays off.
+2. Starting a single-card strata variant stops every other service on that
+   card, except ComfyUI, which moves to the other card.
+3. strata-both stops every GPU service.
+4. ComfyUI runs on the card strata is not on (strata off: the 4070 Ti).
+5. Non-strata services may share a card.
 
-| Priority | GPU (sorted by VRAM) | Service name | Port |
-|---|---|---|---|
-| 1st (largest VRAM) | e.g. RTX 5090 (32 GB) | `systemd-llama-cpp-main` | `11435` |
-| 2nd | e.g. RTX 4070 Ti (12 GB) | `systemd-llama-cpp-research` | `11436` |
-| 3rd | e.g. RTX 4080 (16 GB) | `systemd-llama-cpp-extra-1` | `11439` |
-| 4th | ... | `systemd-llama-cpp-extra-2` | `11440` |
-| No GPU | CPU | `systemd-llama-cpp-main` | `11435` |
+Use `ai-lab start|stop|toggle <name>` (or the AI Lab bar widget); add
+`--dry-run` to see the plan. The strata units' `Conflicts=` is a backstop for
+a bare `systemctl start`, which stops the other side instead of moving it.
 
-> **Why UUIDs?** Quadlet's `AddDevice=nvidia.com/gpu=GPU-xxxx` accepts UUIDs,
-> not indices. Using UUIDs guarantees the correct GPU is assigned even if the
-> PCIe topology changes (e.g. after a BIOS update or re-seating cards).
+## Pinning
 
-## VRAM profiles
+- Placeholders are filled by `scripts/render-units.sh` from `nvidia-smi`,
+  matching cards by **name** (never by index).
+- Strata units add the CDI device by UUID (`AddDevice=nvidia.com/gpu=GPU-...`)
+  so nvidia-smi (which Strata's setup reads) and CUDA see the same cards.
+  Safe here because the CDI spec is `/var/run/cdi/nvidia.yaml`, regenerated
+  every boot by `nvidia-cdi-refresh`.
+- Every other GPU service passes all devices and pins at the CUDA layer:
+  `AddDevice=nvidia.com/gpu=all` + `Environment=CUDA_VISIBLE_DEVICES=<uuid>`.
+  This survives a stale static `/etc/cdi/nvidia.yaml` (minor numbers of
+  /dev/nvidiaN can reshuffle at driver load).
 
-Each GPU gets a tuned configuration profile based on its available VRAM.
+## Replaced a card?
 
-### Profile: `vram_very_high` (28 GB+, e.g., RTX 5090, A6000)
-
-```ini
-LLAMA_ARG_CTX_SIZE=262144
-LLAMA_ARG_CACHE_TYPE_K=q8_0
-LLAMA_ARG_CACHE_TYPE_V=q8_0
-LLAMA_ARG_BATCH=1024
-LLAMA_ARG_UBATCH=256
-```
-
-Best for: Large models (27B+), maximum context length, multi-model hosting.
-
-### Profile: `vram_high` (20-27 GB, e.g., RTX 4090 24 GB)
-
-```ini
-LLAMA_ARG_CTX_SIZE=131072
-LLAMA_ARG_CACHE_TYPE_K=q8_0
-LLAMA_ARG_CACHE_TYPE_V=q8_0
-LLAMA_ARG_BATCH=1024
-LLAMA_ARG_UBATCH=256
-```
-
-Best for: Large models with moderate context.
-
-### Profile: `vram_medium` (10-19 GB, e.g., RTX 4070 Ti, RTX 4080)
-
-```ini
-LLAMA_ARG_CTX_SIZE=32768
-LLAMA_ARG_CACHE_TYPE_K=q4_0
-LLAMA_ARG_CACHE_TYPE_V=q4_0
-LLAMA_ARG_BATCH=512
-LLAMA_ARG_UBATCH=128
-```
-
-Best for: Mid-sized models (10-15B), conservative context to fit in limited VRAM.
-
-### Profile: `vram_low` (< 10 GB, e.g., laptop GPUs)
-
-```ini
-LLAMA_ARG_CTX_SIZE=16384
-LLAMA_ARG_CACHE_TYPE_K=q4_0
-LLAMA_ARG_CACHE_TYPE_V=q4_0
-LLAMA_ARG_BATCH=256
-LLAMA_ARG_UBATCH=64
-```
-
-Best for: Small models (1-8B), limited context.
-
-### CPU fallback
-
-When no NVIDIA GPU is detected, a CPU-only llama.cpp service is deployed:
-
-```ini
-Image=ghcr.io/ggml-org/llama.cpp:server
-No GPU device assignment.
-LLAMA_ARG_CTX_SIZE=32768
-LLAMA_ARG_N_GPU_LAYERS=0
-```
-
-## Manual override
-
-You can manually edit the generated `.container` files to change GPU
-assignments. Regenerate with `./scripts/detect-gpus.sh` after making
-hardware changes.
-
-## Troubleshooting
-
-### "Could not enable llama-cpp-main.service"
-
-Check: `systemctl --user status llama-cpp-main.service`
-
-Common issues:
-- GPU UUID mismatch (GPU replaced or BIOS changed): re-run `detect-gpus.sh`
-- nvidia-container-toolkit not installed: `sudo pacman -S nvidia-container-toolkit`
-- Rootless podman can't access GPU: check `podman info | grep runtime`
-- GPU UUID may have changed: run `nvidia-smi -L` and compare with the UUID
-  in the quadlet file.
-
-To verify GPU accessibility from a container:
-
-```bash
-podman run --rm --device=nvidia.com/gpu=all \
-    ghcr.io/ggml-org/llama.cpp:server-cuda nvidia-smi
-```
+Update the name match in `scripts/render-units.sh` (and the placeholders if
+the card model changes), re-render the units, `systemctl --user daemon-reload`.

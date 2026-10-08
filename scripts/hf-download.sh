@@ -10,14 +10,18 @@
 #   hf-download bartowski/Llama-3.2-3B-Instruct-GGUF IQ4_XS
 #   hf-download unsloth/Qwen3.8-27B-GGUF            (downloads all *.gguf)
 #
-# Downloads to: ~/.local/share/llama.cpp/models/
-# Updates:      ~/.config/containers/config/llama.cpp/presets.ini
+# Downloads to: ~/.local/share/llama.cpp/models/ (shared by both cards)
+# Updates:      ~/.config/containers/config/llama-cpp-<card>/presets.ini
+#               (LLAMA_CARD=5090 default, or 4070ti: sizes ctx for that card)
 #
 # Requires the `hf` CLI (huggingface_hub).
 
 set -euo pipefail
 
 MODELS_DIR="${HOME}/.local/share/llama.cpp/models"
+CARD="${LLAMA_CARD:-5090}"
+case "$CARD" in 5090) PORT=11435 ;; 4070ti) PORT=11436 ;;
+    *) echo "LLAMA_CARD must be 5090 or 4070ti" >&2; exit 2 ;; esac
 
 usage() {
     echo "Usage: hf-download <repo> [quantization-or-filter]"
@@ -97,7 +101,7 @@ echo ""
 if [ "${HF_DOWNLOAD_NO_REFRESH:-0}" = "1" ]; then
     echo "  (HF_DOWNLOAD_NO_REFRESH=1 — deferring preset refresh + restart)"
     echo ""
-    echo "Done. Verify with: curl http://127.0.0.1:11435/v1/models"
+    echo "Done. Verify with: curl -H \"Authorization: Bearer <key>\" http://127.0.0.1:${PORT}/v1/models"
     exit 0
 fi
 
@@ -108,15 +112,15 @@ if [ ! -f "$REFRESH" ]; then
     echo "    Downloaded but NOT registered. Run it manually after configuring models."
 else
     echo "  → Refreshing per-model presets with hardware-fitted ctx..."
-    python3 "$REFRESH" --write || echo "  ! refresh-presets.py failed (see above)"
+    python3 "$REFRESH" --card "$CARD" --write || echo "  ! refresh-presets.py failed (see above)"
 fi
 
 # ─── Restart llama.cpp ────────────────────────────────────────────────────
-if systemctl --user is-active llama-cpp-main.service &>/dev/null; then
+if systemctl --user is-active "llama-cpp-${CARD}.service" &>/dev/null; then
     echo ""
-    echo "Restarting llama-cpp-main.service to pick up new model..."
-    systemctl --user restart llama-cpp-main.service || true
+    echo "Restarting llama-cpp-${CARD}.service to pick up new model..."
+    systemctl --user restart "llama-cpp-${CARD}.service" || true
 fi
 
 echo ""
-echo "Done. Verify with: curl http://127.0.0.1:11435/v1/models"
+echo "Done. Verify with: curl -H \"Authorization: Bearer <key>\" http://127.0.0.1:${PORT}/v1/models"

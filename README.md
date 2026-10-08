@@ -14,8 +14,8 @@ reboots, and can be rehydrated on a fresh machine with one command.
 │                   Host (Arch Linux)                          │
 │                                                              │
 │  systemd-ai ──── Podman network (container communication)    │
-│       ├── llama.cpp API: 0.0.0.0:11435                       │
-│       ├── llama.cpp research: 0.0.0.0:11436 (optional)        │
+│       ├── llama.cpp RTX 5090: 0.0.0.0:11435                   │
+│       ├── llama.cpp RTX 4070 Ti: 0.0.0.0:11436                │
 │       ├── Strata API: 0.0.0.0:11434 (optional)                │
 │       ├── Open WebUI: 0.0.0.0:3100                            │
 │       ├── ComfyUI: 0.0.0.0:3101                               │
@@ -33,8 +33,8 @@ reboots, and can be rehydrated on a fresh machine with one command.
 | Service | Status | Port | Description |
 |---|---|---|---|
 | **ai-network** | core | — | Podman network for all container communication |
-| **systemd-llama-cpp-main** | core | `11435` | llama.cpp on the largest GPU (long context, big models) |
-| **systemd-llama-cpp-research** | optional | `11436` | llama.cpp on the 2nd GPU (conservative settings) |
+| **systemd-llama-cpp-5090** | core | `11435` | llama.cpp router on the RTX 5090 (262K context default), API key required |
+| **systemd-llama-cpp-4070ti** | optional | `11436` | llama.cpp router on the RTX 4070 Ti (65K context default), API key required |
 | **systemd-open-webui** | web | `3100` | AI chat frontend (OpenAI-compatible backend) |
 | **Caddy assets** | retained | — | Caddy Quadlet and config are kept in the repo, not installed or started |
 | **systemd-comfyui** | image | `3101` | Stable Diffusion / AI image generation |
@@ -154,8 +154,8 @@ start|stop|toggle|strata` and the bar widget go through
 | service | card |
 |---|---|
 | strata-5090 / -4070ti / -both | 5090 / 4070 Ti / both |
-| llama-cpp-main | 5090 |
-| llama-cpp-research, rizzo | 4070 Ti |
+| llama-cpp-5090 | 5090 |
+| llama-cpp-4070ti, rizzo | 4070 Ti |
 | comfyui (`comfyui-5090` / `comfyui-4070ti`) | the card strata is NOT on (strata off: 4070 Ti) |
 
 1. Starting a GPU service on the card strata occupies moves strata to the
@@ -331,7 +331,7 @@ Then open `http://127.0.0.1:3105/?token=<token>` in your browser.
 
 The containerized Hermes gateway lives in the `hermes` systemd quadlet
 (`quadlets/hermes.container`, image `docker.io/nousresearch/hermes-agent:latest`)
-and is opt-in (`--with-hermes`). It connects to `systemd-llama-cpp-main` for
+and is opt-in (`--with-hermes`). It connects to `systemd-llama-cpp-5090` for
 local model serving and the dashboard is reachable at
 `http://<host-LAN-IP>:3104`. This is separate from the host Hermes Agent that
 manages the machine.
@@ -387,7 +387,7 @@ systemctl --user daemon-reload
 # `restart`, not `enable --now`, or systemd reports "transient or generated"):
 systemctl --user restart ai-network.service
 sleep 1
-systemctl --user restart llama-cpp-main.service
+systemctl --user restart llama-cpp-5090.service
 systemctl --user restart open-webui.service
 systemctl --user restart comfyui.service
 systemctl --user restart sketchlab.service
@@ -400,48 +400,21 @@ systemctl --user restart hyperframes.service
 > handles direct port publication, the dsh/hermes metadata env files, and the
 > start ordering above automatically while retaining Caddy files without deploying them.
 
-### iGPU/Vulkan acceleration (non-NVIDIA machines)
+## GPU units (this host: RTX 5090 + RTX 4070 Ti)
 
-On machines without NVIDIA GPUs, the installer checks for `/dev/dri` — the
-presence of an integrated GPU (iGPU) or any other DRM device. If found:
+This stack is tailored to one host: GPU services are named after the card
+they run on, and `quadlets/*.container.in` templates carry the placeholders
+`__GPU_5090_UUID__` / `__GPU_4070TI_UUID__`. `scripts/render-units.sh NAME...`
+fills them from `nvidia-smi` (cards matched by name, never by index) into
+`~/.config/containers/systemd/`. See `docs/gpu-assignment.md`.
 
-- The **llama.cpp** quadlet is switched to the `:server-vulkan` image
-- The host GPU is passed through to the container via `AddDevice=/dev/dri`
-- Offload is enabled via `LLAMA_ARG_N_GPU_LAYERS=99` in the service.env
+| llama.cpp | port | context | KV | batch / ubatch | config |
+|---|---|---|---|---|---|
+| llama-cpp-5090 | 11435 | 262,144 | q4_0 | 1024 / 256 | `config/llama-cpp-5090/` |
+| llama-cpp-4070ti | 11436 | 65,536 | q4_0 | 512 / 128 | `config/llama-cpp-4070ti/` |
 
-This provides significant speedup on modern laptop iGPUs. For example, on a
-**Ryzen AI 9 HX 370** (Radeon 890M) running a 27B model, tok/s goes from
-~3 (CPU-only) to **~15-30** (Vulkan iGPU offload), depending on quantization.
-
-If no `/dev/dri` is present (e.g. headless server), the plain CPU image is
-used and no device passthrough is configured. The `:server-vulkan` image
-also handles this gracefully — it falls back to CPU-only if no Vulkan device
-is available at runtime.
-
-**Note:** ComfyUI uses PyTorch, not Vulkan, so its CPU variant remains
-CPU-only even when an iGPU is present. For ComfyUI on AMD iGPUs, ROCm
-support for `gfx1150` (Radeon 890M) is experimental upstream and needs a
-matching ROCm/kernel combination — not practical on this stack.
-
-## GPU detection details
-
-The `detect-gpus.sh` script:
-1. Runs `nvidia-smi --query-gpu=index,name,uuid,memory.total --format=csv,noheader`
-2. Sorts GPUs by VRAM descending
-3. Assigns the **largest** GPU → primary llama-cpp service (port **11435**)
-4. Assigns the **second** GPU → research llama-cpp service (port **11436**)
-5. Creates N+ llama-cpp services for additional GPUs (port **11438+N**)
-
-### VRAM profiles
-
-| VRAM | Profile | Context | KV Cache | Batch |
-|---|---|---|---|---|
-| 28 GB+ | very_high | 262,144 | Q8 | 1024 |
-| 20-27 GB | high | 131,072 | Q8 | 1024 |
-| 10-19 GB | medium | 32,768 | Q4 | 512 |
-| < 10 GB | low | 16,384 | Q4 | 256 |
-
-**No GPUs?** Falls back to a single CPU-based llama.cpp service.
+Both serve the same model library (`~/.local/share/llama.cpp/models`) and
+share one key file (`~/.config/containers/config/llama-cpp/keys.txt`).
 
 ## Downloading models (hf-download)
 
@@ -459,11 +432,12 @@ hf-download unsloth/Qwen3.8-27B-GGUF UD-IQ1_M
 - arg1 — HuggingFace repo ID (e.g. `unsloth/Qwen3.8-27B-GGUF`)
 - arg2 (optional) — quantization or filename filter (e.g. `UD-IQ1_M`, `*IQ4_XS.gguf`)
 
-On this RTX 5090, the global llama.cpp preset is also 262,144 tokens.
-`refresh-presets.py` writes per-model overrides capped by the model's trained
-context and its VRAM estimate. Downloads go to `~/.local/share/llama.cpp/models/`
-and are registered in `~/.config/containers/config/llama.cpp/presets.ini`, then
-llama-cpp-main restarts. Requires `hf` (the installer tries brew, then pip,
+`LLAMA_CARD=5090` (default) or `LLAMA_CARD=4070ti` picks the server the model
+is registered for: `refresh-presets.py --card <card>` writes per-model
+overrides capped by the model's trained context and that card's VRAM.
+Downloads go to `~/.local/share/llama.cpp/models/` (shared) and are registered
+in `~/.config/containers/config/llama-cpp-<card>/presets.ini`; that server
+restarts if it is running. Requires `hf` (the installer tries brew, then pip,
 then standalone installer, and tells you what's missing).
 
 To place files manually instead, drop GGUF files in

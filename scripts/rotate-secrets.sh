@@ -5,7 +5,7 @@
 #
 # Rotates:
 #   - open-webui WEBUI_SECRET_KEY   (config/open-webui/service.env)
-#   - llama.cpp API keys            (config/llama.cpp/keys.txt)
+#   - llama.cpp API keys            (config/llama-cpp/keys.txt)
 #   - strata API_KEY                (config/strata/service.env + every
 #                                    ~/.local/share/strata/config-*/strata-*.json)
 # Then restarts the affected services. Existing sessions/cookies tied to the
@@ -81,7 +81,7 @@ if [ -f "$KEYS" ]; then
 fi
 
 if [ "$APPLY" = 1 ]; then
-    for svc in open-webui strata-5090 strata-4070ti strata-both llama-cpp-main; do
+    for svc in open-webui strata-5090 strata-4070ti strata-both llama-cpp-5090; do
         systemctl --user is-active "${svc}.service" &>/dev/null || continue
         systemctl --user restart "${svc}.service" && echo "  ✓ restarted $svc"
     done

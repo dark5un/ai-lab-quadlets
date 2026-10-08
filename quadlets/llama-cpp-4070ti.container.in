@@ -1,0 +1,42 @@
+# llama.cpp router on the RTX 4070 Ti 12 GB.
+# Rendered by scripts/render-units.sh (GPU UUID filled in from nvidia-smi).
+# The card is fixed. Start it through `ai-lab start llama-cpp-4070ti` or the AI Lab
+# bar widget: scripts/gpu-arbiter.py moves strata off this card first when
+# strata-4070ti or strata-both is running (a bare `systemctl start` would stop strata instead,
+# via the strata units' Conflicts=).
+# No [Install]: nothing starts at boot.
+
+[Unit]
+Description=llama.cpp router (RTX 4070 Ti 12 GB)
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-llama-cpp-4070ti
+Image=ghcr.io/ggml-org/llama.cpp:server-cuda
+Network=ai.network
+# Pin the card at the CUDA layer (the stack's convention for non-strata
+# services; see README "GPU pinning").
+AddDevice=nvidia.com/gpu=all
+Environment=CUDA_VISIBLE_DEVICES=__GPU_4070TI_UUID__
+SecurityLabelDisable=true
+UserNS=keep-id
+
+# http://<host>:11436/v1 - every request needs a key from keys.txt.
+# Containers on systemd-ai: http://systemd-llama-cpp-4070ti:8080/v1
+PublishPort=0.0.0.0:11436:8080
+
+# Shared read-only model library (both cards serve from it).
+Volume=%h/.local/share/llama.cpp/models:/models:ro,Z
+# Per-card router settings and presets.
+EnvironmentFile=%h/.config/containers/config/llama-cpp-4070ti/service.env
+Volume=%h/.config/containers/config/llama-cpp-4070ti/presets.ini:/etc/llama-cpp/presets.ini:ro,Z
+# API keys shared by both cards (LLAMA_ARG_API_KEY_FILE).
+Volume=%h/.config/containers/config/llama-cpp/keys.txt:/etc/llama-cpp/keys.txt:ro
+
+[Service]
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=1800
+TimeoutStopSec=120
+MemoryMax=24G

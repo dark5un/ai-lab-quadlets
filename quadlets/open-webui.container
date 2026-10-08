@@ -1,7 +1,7 @@
 [Unit]
 Description=Open WebUI
-After=llama-cpp-main.service
-Wants=llama-cpp-main.service
+After=llama-cpp-5090.service
+Wants=llama-cpp-5090.service
 
 [Container]
 ContainerName=systemd-open-webui

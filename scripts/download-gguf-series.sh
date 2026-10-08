@@ -25,6 +25,9 @@ HF_DL="${SCRIPT_DIR}/hf-download.sh"
 REFRESH="${SCRIPT_DIR}/refresh-presets.py"
 
 LIST="${1:-${HOME}/.config/llama.cpp/gguf-download-list.txt}"
+CARD="${LLAMA_CARD:-5090}"   # presets/restart target: 5090 or 4070ti
+case "$CARD" in 5090) PORT=11435 ;; 4070ti) PORT=11436 ;;
+    *) echo "LLAMA_CARD must be 5090 or 4070ti" >&2; exit 2 ;; esac
 
 if [ ! -f "$LIST" ]; then
     echo "No list file: $LIST"
@@ -78,16 +81,16 @@ done
 # ─── Refresh presets + restart once ───────────────────────────────────────
 echo "════════ refreshing presets for all models ════════"
 if [ -f "$REFRESH" ]; then
-    python3 "$REFRESH" --write || { echo "! refresh-presets.py failed"; fail=1; }
+    python3 "$REFRESH" --card "$CARD" --write || { echo "! refresh-presets.py failed"; fail=1; }
 else
     echo "! refresh-presets.py not found next to this script"
     fail=1
 fi
 
-if systemctl --user is-active llama-cpp-main.service &>/dev/null; then
+if systemctl --user is-active "llama-cpp-${CARD}.service" &>/dev/null; then
     echo ""
-    echo "Restarting llama-cpp-main.service..."
-    systemctl --user restart llama-cpp-main.service || true
+    echo "Restarting llama-cpp-${CARD}.service..."
+    systemctl --user restart "llama-cpp-${CARD}.service" || true
 fi
 
 echo ""
@@ -95,4 +98,4 @@ if [ "$fail" -ne 0 ]; then
     echo "Finished WITH ERRORS (see above)."
     exit 1
 fi
-echo "Done. Verify with: curl http://127.0.0.1:11435/v1/models"
+echo "Done. Verify with: curl -H \"Authorization: Bearer <key>\" http://127.0.0.1:${PORT}/v1/models"

@@ -1,0 +1,27 @@
+# llama.cpp per-model presets - RTX 5090 32 GB.
+# The installer copies this to ~/.config/containers/config/llama-cpp-5090/presets.ini
+# when missing. scripts/hf-download.sh and refresh-presets.py add model sections.
+
+version = 1
+
+; Global defaults for this card
+[*]
+ctx-size = 262144
+n-predict = -1
+n-gpu-layers = all
+split-mode = none
+main-gpu = 0
+kv-offload = true
+flash-attn = on
+cache-type-k = q4_0
+cache-type-v = q4_0
+fit = off
+jinja = on
+load-mode = mmap
+temp = 0.7
+top-p = 0.95
+
+; Per-model overrides:
+; [model-name]
+; m = /models/path/to/model.gguf
+; ctx-size = 262144

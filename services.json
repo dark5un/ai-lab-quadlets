@@ -2,9 +2,9 @@
   "network": "systemd-ai",
   "services": [
     {
-      "name": "llama-cpp-main",
-      "unit": "llama-cpp-main.service",
-      "container": "systemd-llama-cpp-main",
+      "name": "llama-cpp-5090",
+      "unit": "llama-cpp-5090.service",
+      "container": "systemd-llama-cpp-5090",
       "host_port": 11435,
       "container_port": 8080,
       "bind": "0.0.0.0",
@@ -12,15 +12,15 @@
       "tier": "core",
       "image": "ghcr.io/ggml-org/llama.cpp:server-cuda",
       "boot": true,
-      "auth": "none",
+      "auth": "api-key",
       "image_digest": "ghcr.io/ggml-org/llama.cpp@sha256:e8318a7b3988f9ca57b28c03486569e60def08f2b7b060550ebfa046e175e6cb",
-      "note": "open mode: no --api-key enforced (keys.txt is mounted but unused)",
+      "note": "RTX 5090 (fixed card); router over ~/.local/share/llama.cpp/models; every request needs a key from config/llama-cpp/keys.txt",
       "gpu": "5090"
     },
     {
-      "name": "llama-cpp-research",
-      "unit": "llama-cpp-research.service",
-      "container": "systemd-llama-cpp-research",
+      "name": "llama-cpp-4070ti",
+      "unit": "llama-cpp-4070ti.service",
+      "container": "systemd-llama-cpp-4070ti",
       "host_port": 11436,
       "container_port": 8080,
       "bind": "0.0.0.0",
@@ -28,9 +28,9 @@
       "tier": "optional",
       "image": "ghcr.io/ggml-org/llama.cpp:server-cuda",
       "boot": false,
-      "auth": "none",
+      "auth": "api-key",
       "image_digest": "ghcr.io/ggml-org/llama.cpp@sha256:e8318a7b3988f9ca57b28c03486569e60def08f2b7b060550ebfa046e175e6cb",
-      "note": "open mode: no --api-key enforced (keys.txt is mounted but unused)",
+      "note": "RTX 4070 Ti (fixed card); router over ~/.local/share/llama.cpp/models; every request needs a key from config/llama-cpp/keys.txt",
       "gpu": "4070ti"
     },
     {

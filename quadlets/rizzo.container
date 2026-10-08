@@ -1,7 +1,7 @@
 # Rizzo Flow — local Jev-compatible System One decisions (llama.cpp)
 # Port 11437: the reserved 1143x model-API slot (see docs/cleanup-plan.md port scheme).
 # GPU: pinned to the 4070 Ti by CUDA UUID (never CDI device pinning — minor
-# numbers reshuffle at driver load; see llama-cpp-main.container comment).
+# numbers reshuffle at driver load; see llama-cpp-5090.container comment).
 
 [Unit]
 Description=Rizzo Flow System One decision server (4070 Ti)

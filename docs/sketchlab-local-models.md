@@ -19,7 +19,7 @@ or brain icon in the editor toolbar). In the settings panel:
 
 | Setting | Value (example) |
 |---|---|
-| **Endpoint** | `http://127.0.0.1:11435` (systemd-llama-cpp-main) |
+| **Endpoint** | `http://127.0.0.1:11435` (systemd-llama-cpp-5090) |
 | **Model** | (auto-populated from endpoint's `/v1/models`) |
 | **API Key** | (leave blank for local endpoints without auth) |
 
@@ -30,8 +30,8 @@ directly:
 
 | Endpoint | Service |
 |---|---|
-| `http://systemd-llama-cpp-main:8080` | Primary llama.cpp (largest GPU) |
-| `http://systemd-llama-cpp-research:8080` | Research llama.cpp (2nd GPU) |
+| `http://systemd-llama-cpp-5090:8080` | Primary llama.cpp (largest GPU) |
+| `http://systemd-llama-cpp-4070ti:8080` | Research llama.cpp (2nd GPU) |
 
 ### For AI agents (Claude Code, Codex, etc.)
 
@@ -77,11 +77,11 @@ Recommended models:
 - Check the model directory: `ls ~/.local/share/llama.cpp/models/`
 
 **"Connection refused"**
-The service may not be running: `systemctl --user status llama-cpp-main.service`
+The service may not be running: `systemctl --user status llama-cpp-5090.service`
 
-### \"Could not enable llama-cpp-main.service\"
+### \"Could not enable llama-cpp-5090.service\"
 
-Check: `systemctl --user status llama-cpp-main.service`
+Check: `systemctl --user status llama-cpp-5090.service`
 - From the host, use `127.0.0.1` not container names
 - If using container names, make sure both are on `ai.network`
 

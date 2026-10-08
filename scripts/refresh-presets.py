@@ -137,6 +137,18 @@ def round_down(ctx):
     return (ctx // 2048) * 2048
 
 
+def card_index(card):
+    """nvidia-smi index of the card a llama.cpp server is pinned to (matched by name)."""
+    want = {"5090": "RTX 5090", "4070ti": "RTX 4070 Ti"}[card]
+    out = subprocess.run(["nvidia-smi", "--query-gpu=index,name", "--format=csv,noheader"],
+                         capture_output=True, text=True, check=False).stdout
+    for line in out.splitlines():
+        idx, _, name = line.partition(",")
+        if want in name:
+            return int(idx)
+    sys.exit(f"refresh-presets: no {want} in nvidia-smi")
+
+
 def gpu_label(idx=0):
     out = subprocess.run(
         ["nvidia-smi", "-L"], capture_output=True, text=True, check=False
@@ -165,7 +177,10 @@ def main():
     ap.add_argument(
         "--models-dir", default=os.path.expanduser("~/.local/share/llama.cpp/models")
     )
-    ap.add_argument("--gpu", type=int, default=0)
+    ap.add_argument("--card", choices=("5090", "4070ti"), default=os.environ.get("LLAMA_CARD", "5090"),
+                    help="llama.cpp server to size for: llama-cpp-5090 or llama-cpp-4070ti")
+    ap.add_argument("--gpu", type=int, default=None,
+                    help="nvidia-smi index (default: the --card's card, found by name)")
     ap.add_argument("--cache", default="q4_0", choices=sorted(CACHE_BPE))
     ap.add_argument(
         "--reserve",
@@ -176,15 +191,18 @@ def main():
     ap.add_argument(
         "--margin", type=float, default=0.10, help="fraction of max_ctx held back"
     )
-    ap.add_argument(
-        "--presets",
-        default=os.path.expanduser("~/.config/containers/config/llama.cpp/presets.ini"),
-    )
+    ap.add_argument("--presets", default=None,
+                    help="default: ~/.config/containers/config/llama-cpp-<card>/presets.ini")
     ap.add_argument("--write", action="store_true")
     ap.add_argument(
         "--model", help="target a single gguf path instead of the whole dir"
     )
     args = ap.parse_args()
+    if args.presets is None:
+        args.presets = os.path.expanduser(
+            f"~/.config/containers/config/llama-cpp-{args.card}/presets.ini")
+    if args.gpu is None:
+        args.gpu = card_index(args.card)
 
     vram = gpu_vram(args.gpu)
     gname = gpu_label(args.gpu)

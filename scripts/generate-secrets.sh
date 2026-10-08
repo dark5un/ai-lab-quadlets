@@ -74,7 +74,8 @@ else
 fi
 
 # ─── llama.cpp API key ────────────────────────────────────────────────────
-DST="${PROJECT_DIR}/config/llama.cpp/keys.txt"
+DST="${PROJECT_DIR}/config/llama-cpp/keys.txt"
+mkdir -p "$(dirname "$DST")"
 if [ ! -f "$DST" ] || [ "$FORCE" = true ]; then
     echo "$(rand_hex 16)" > "$DST"
     echo "  Created: $DST"

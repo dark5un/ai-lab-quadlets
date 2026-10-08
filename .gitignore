@@ -4,11 +4,6 @@ config/**/presets.ini
 config/**/keys.txt
 config/**/.deepseek-harness-built
 
-# Generated quadlets (from detect-gpus.sh)
-quadlets/llama-cpp-main.container
-quadlets/llama-cpp-research.container
-quadlets/llama-cpp-extra-*.container
-
 # OS junk
 .DS_Store
 Thumbs.db
