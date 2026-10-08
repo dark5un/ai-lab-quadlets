@@ -136,6 +136,7 @@ set_kv "$OW" WEBUI_URL "http://${HOST_LOCAL}:3100"
 set_kv "$OW" CORS_ALLOW_ORIGIN "http://${HOST_LOCAL}:3100"
 set_kv "$OW" OPENAI_API_BASE_URLS "http://systemd-strata:8080/v1;http://systemd-llama-cpp-5090:8080/v1;http://systemd-llama-cpp-4070ti:8080/v1;http://systemd-llama-cpp-both:8080/v1"
 set_kv "$OW" OPENAI_API_KEYS "${STRATA_KEY};${LLAMA_KEY};${LLAMA_KEY};${LLAMA_KEY}"
+set_kv "$OW" ENABLE_PERSISTENT_CONFIG false
 echo "  open-webui: 4 backends (strata, llama-cpp-5090/4070ti/both), URL http://${HOST_LOCAL}:3100"
 set_kv "$CONF/sketchlab/service.env" STRATA_API_KEY "$STRATA_KEY"
 echo "  sketchlab: /v1 proxy key = strata key"

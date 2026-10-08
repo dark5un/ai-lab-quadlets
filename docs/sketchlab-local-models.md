@@ -1,91 +1,69 @@
 # Connecting Sketch Lab to Local Models
 
 Sketch Lab has a built-in AI panel that generates diagrams from text prompts.
-It connects to any **OpenAI-compatible API** endpoint — no special integration needed.
+It talks to any **OpenAI-compatible API** endpoint.
 
 ## How it works
 
 1. You describe a diagram in natural language
-2. Sketch Lab sends your prompt to a local LLM endpoint
+2. Sketch Lab sends your prompt to an LLM endpoint
 3. The LLM returns structured JSON (`GeneratedGraph`)
 4. Sketch Lab renders the diagram on the canvas
 
-## Configuration
+## Default: same-origin proxy to Strata
 
-### From the host (outside the container network)
+The sketchlab image (v0.6.2) ships an nginx that proxies `/v1/` to Strata
+(`systemd-strata:8080` on `ai.network`) and injects the Strata API key
+server-side from `~/.config/containers/config/sketchlab/service.env`
+(`STRATA_API_KEY`, written by `install.sh`). The browser never sees the key,
+and there is no CORS to configure: the default endpoint is
+`http://<host>:3102/v1` and the model list comes from Strata.
 
-Open Sketch Lab at `http://<host-LAN-IP>:3102` and click the AI button (magic wand
-or brain icon in the editor toolbar). In the settings panel:
+Strata is on-demand. nginx resolves the upstream per request, so Sketch Lab
+starts and serves the UI while Strata is off; `/v1/*` then returns `502` until
+you start Strata (`ai-lab strata 5090`, or the bar widget).
+
+## Other endpoints
+
+To use a different OpenAI-compatible server, open the AI settings in the
+editor and set:
 
 | Setting | Value (example) |
 |---|---|
-| **Endpoint** | `http://127.0.0.1:11435` (systemd-llama-cpp-5090) |
-| **Model** | (auto-populated from endpoint's `/v1/models`) |
-| **API Key** | (leave blank for local endpoints without auth) |
+| **Endpoint** | `http://<host-LAN-IP>:11435/v1` (llama-cpp-5090; 11436 = 4070 Ti, 11438 = both cards) |
+| **Model** | auto-populated from the endpoint's `/v1/models` |
+| **API Key** | the llama.cpp key from `~/.config/containers/config/llama-cpp/keys.txt` |
 
-### From within the container network
+The browser calls that endpoint directly, so it must be reachable from the
+browser and must answer CORS. Only the built-in `/v1` proxy avoids both.
 
-If running Sketch Lab inside the ai.network, you can use the container names
-directly:
+## For AI agents
 
-| Endpoint | Service |
-|---|---|
-| `http://systemd-llama-cpp-5090:8080` | Primary llama.cpp (largest GPU) |
-| `http://systemd-llama-cpp-4070ti:8080` | Research llama.cpp (2nd GPU) |
-
-### For AI agents (Claude Code, Codex, etc.)
-
-The Sketch Lab skill for AI agents is published at:
-
-**Skill URL:** https://sketchlab.webdevcody.com/skills/sketch-lab/SKILL.md
-
-Install it into Claude Code:
-
-```bash
-mkdir -p ~/.claude/skills/sketch-lab
-curl -fsSL https://sketchlab.webdevcody.com/skills/sketch-lab/SKILL.md \
-    -o ~/.claude/skills/sketch-lab/SKILL.md
-```
-
-Then ask: *"Create a flowchart of the user authentication flow in Sketch Lab"*
-
-The agent will generate a `GeneratedGraph` JSON and open it as a `?g=` URL.
+The sketchlab.app repo ships a zero-dependency stdio MCP server
+(`mcp/server.mjs`: `sketchlab_icons`, `sketchlab_validate`,
+`sketchlab_diagram`). See its README for the Hermes, Strata and Claude Code
+config blocks.
 
 ## Required model capabilities
 
-For best diagram generation results, the model should:
+- Follows structured output instructions (system prompt -> JSON)
+- Understands graph concepts (nodes, edges, containers)
+- At least 8K context (diagrams are verbose as JSON)
 
-- Follow structured output instructions (system prompt → JSON)
-- Understand graph concepts (nodes, edges, arrows, containers)
-- Generate valid JSON with correct `GeneratedGraph` schema
-- Handle at least 8K context (diagrams can be verbose as JSON)
-
-Recommended models:
-- 27B+ parameter models (e.g., ThinkingCap, Qwen-3.5, Gemma 4)
-- Instruction-tuned models with good JSON adherence
-- Any model that works well with structured output
+Small models (< 8B) often struggle with the full schema.
 
 ## Troubleshooting
 
 **Can't reach Sketch Lab in the browser**
-- Your machine's avahi-published name may differ from the kernel hostname due
-  to LAN conflicts. Check the actual name: `systemctl status avahi-daemon 2>/dev/null | grep -o 'running \[[^]]*\]'`
-- Allow TCP port 3102 plus any model API ports needed from your trusted LAN; do not port-forward these unauthenticated HTTP endpoints to the public Internet.
+- The host publishes `<hostname>.local` via systemd-resolved mDNS. Check with
+  `getent hosts "$(hostnamectl --static).local"`.
+- Port 3102 must be allowed from your trusted LAN; never port-forward these
+  unauthenticated endpoints to the Internet. Anyone who can reach :3102 can
+  use the Strata key through the proxy.
 
-**"No models available"**
-- Verify the endpoint is running: `curl http://127.0.0.1:11435/v1/models`
-- Check the model directory: `hf-download --list` (models per llama.cpp server)
-
-**"Connection refused"**
-The service may not be running: `systemctl --user status llama-cpp-5090.service`
-
-### \"Could not enable llama-cpp-5090.service\"
-
-Check: `systemctl --user status llama-cpp-5090.service`
-- From the host, use `127.0.0.1` not container names
-- If using container names, make sure both are on `ai.network`
+**"No models available" / 502 on /v1**
+- Strata is off: `ai-lab status`, then start it.
+- Check the proxy directly: `curl -s http://127.0.0.1:3102/v1/models`.
 
 **"Empty or invalid diagram"**
-- The model may not support structured output well
-- Try a different model or add explicit instructions to the prompt
-- Some small models (< 8B) struggle with the full JSON schema
+- The model may not follow the JSON schema; try a larger model.

@@ -179,7 +179,7 @@
       "bind": "0.0.0.0",
       "health": "/",
       "tier": "web",
-      "image": "localhost/sketchlab:v0.6.1",
+      "image": "localhost/sketchlab:v0.6.2",
       "boot": false,
       "auth": "none",
       "note": "same-origin /v1 AI proxy -> strata (key injected by nginx from config/sketchlab/service.env); proxy shares sketchlab's LAN exposure"

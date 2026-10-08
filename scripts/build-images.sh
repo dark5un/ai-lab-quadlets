@@ -52,8 +52,9 @@ pull() {  # pull <service>
         echo "  ✓ $image (pulled)"
     fi
     if [ -n "$digest" ]; then
-        have="$(podman image inspect "$image" --format '{{.Digest}}')"
-        [ "${digest##*@}" = "$have" ] || echo "  ~ $image is $have; services.json pins ${digest##*@} (update the registry or re-pull)"
+        have="$(podman image inspect "$image" --format '{{.Digest}} {{join .RepoDigests " "}}')"
+        # The registry pins the index (multi-arch) or the manifest digest; either matches.
+        [[ " $have " == *"${digest##*@}"* ]] || echo "  ~ $image is ${have%% *}; services.json pins ${digest##*@} (update the registry or re-pull)"
     fi
 }
 

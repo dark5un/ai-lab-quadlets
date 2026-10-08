@@ -78,6 +78,13 @@ lists an RTX 5090 and an RTX 4070 Ti) and is idempotent. It:
    `~/workspace/github.com/dark5un/sketchlab.app`, HyperFrames from
    `~/workspace/github.com/heygen-com/hyperframes`.
 
+Open WebUI runs with `ENABLE_PERSISTENT_CONFIG=false` (managed line): its
+env file is authoritative, so the backends and keys always come from
+`service.env` and a key rotation reaches it. Settings changed in the admin UI
+are not persisted and reset on the next restart; change the env file (or
+`install.sh`) instead. Accounts and chats live in the `open-webui-data`
+volume and are kept.
+
 Opt-ins: `--with-deepseek-harness`, `--with-hermes`. `./uninstall.sh` stops
 everything and removes units, the bar plugin and the `~/.local/bin` links;
 data and configs stay.
@@ -382,6 +389,9 @@ Sketch Lab's AI panel works out of the box: since v0.6.0 the app's own
 nginx proxies `/v1/` to Strata and injects the API key server-side (from
 `config/sketchlab/service.env`), so the default endpoint is same-origin
 and the default model is the loaded Strata model — no key entry, no CORS.
+Since v0.6.2 nginx resolves Strata per request, so Sketch Lab starts while
+Strata is off and `/v1/` answers `502` until Strata is started. Details:
+`docs/sketchlab-local-models.md`.
 
 To point it at a different OpenAI-compatible endpoint instead:
 
