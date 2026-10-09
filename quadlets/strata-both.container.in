@@ -16,7 +16,7 @@
 Description=Strata Qwen model server (RTX 5090 + RTX 4070 Ti, layer split)
 Wants=ai-network.service
 After=ai-network.service
-Conflicts=strata-5090.service strata-5090-524k.service strata-5090-1m.service strata-4070ti.service llama-cpp-5090.service llama-cpp-4070ti.service rizzo.service comfyui-5090.service comfyui-4070ti.service llama-cpp-both.service strata-coder.service strata-4070ti-524k.service strata-4070ti-1m.service strata-coder-524k.service strata-coder-1m.service
+Conflicts=comfyui-4070ti.service comfyui-5090.service llama-cpp-4070ti.service llama-cpp-5090.service llama-cpp-both.service rizzo.service strata-4070ti-1m.service strata-4070ti-524k.service strata-4070ti.service strata-5090-1m.service strata-5090-524k.service strata-5090.service strata-coder-128k.service strata-coder-1m.service strata-coder-524k.service strata-coder.service
 StartLimitIntervalSec=20min
 StartLimitBurst=2
 

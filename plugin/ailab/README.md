@@ -19,9 +19,10 @@ service with a live state dot, its host port, health, and a START/STOP switch.
     CARD `OFF | 5090 | 4070 TI | BOTH` (`bin/ai-lab strata <variant>`; a card
     keeps the current context when it has that variant, BOTH is 256K only),
     CONTEXT `256K | 524K | 1M` (the live card's variants, 5090 or 4070 Ti;
-    from off or BOTH a pick means the 5090) and CODER `OFF | 256K | 524K | 1M`
-    (`bin/ai-lab coder <ctx>`: the coder on the 4070 Ti, port 11439, beside a
-    5090 variant). Status lines read e.g. `main 4070 Ti · 524K :11434 ready`. Hovering a choice shows the arbiter's plan under the controls
+    from off or BOTH a pick means the 5090) and CODER `OFF | 128K | 256K |
+    524K | 1M` (`bin/ai-lab coder <ctx>`: the coder on the 4070 Ti, port
+    11439, beside a 5090 variant; 128K runs 4 batch slots, 256K runs 2, the
+    rest one at a time). Status lines read e.g. `main 4070 Ti · 524K :11434 ready`. Hovering a choice shows the arbiter's plan under the controls
     (`bin/ai-lab ... --dry-run`: "→ starts strata-5090-1m · stops rizzo").
   - **GPU SERVICES**: LLAMA `OFF | 5090 | 4070 TI | BOTH` (single cards toggle
     independently via `bin/ai-lab toggle llama-cpp-<card>`, BOTH is the

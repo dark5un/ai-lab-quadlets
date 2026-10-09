@@ -11,7 +11,7 @@ import Ryoku.PluginKit.Singletons
 //                   CONTEXT  256K | 524K | 1M              (the 5090's or the 4070
 //                                                         Ti's variants; from off
 //                                                         or BOTH it picks the 5090)
-//                   CODER    OFF | 256K | 524K | 1M        (the coder on the 4070 Ti,
+//                   CODER    OFF | 128K | 256K | 524K | 1M (the coder on the 4070 Ti,
 //                                                         beside a 5090 variant)
 //                 and a hint line that previews what a hovered choice starts and
 //                 stops (the arbiter's --dry-run).
@@ -63,7 +63,7 @@ Item {
     function stateText(r) { return service ? service.healthText(r) : "" }
     // Strata status lines are tight (card, context, port): "loading model" -> "loading".
     function strataState(r) { const x = stateText(r); return x === "loading model" ? "loading" : x }
-    function ctxLabel(c) { return c === "256k" ? "256K" : c === "524k" ? "524K" : c === "1m" ? "1M" : "" }
+    function ctxLabel(c) { return c === "128k" ? "128K" : c === "256k" ? "256K" : c === "524k" ? "524K" : c === "1m" ? "1M" : "" }
     function cardLabel(c) { return c === "4070ti" ? "4070 Ti" : c === "both" ? "both cards" : c }
     // The variant for a card that keeps the live context when it can.
     function variantFor(card, ctx) {
@@ -240,9 +240,11 @@ Item {
                 s: root.s
                 label: "CODER"
                 labelWidth: root.labelW
-                // OFF, then the deployed contexts (strata-coder = 256K, -524k, -1m).
+                // OFF, then the deployed contexts (strata-coder = 256K, -128k,
+                // -524k, -1m). The 128K coder runs 4 batch slots ("parallel": 4,
+                // four conversations at once); 256K runs 2; the rest one at a time.
                 options: [{ key: "off", label: "OFF", on: !root.coderLive }]
-                    .concat(["256k", "524k", "1m"]
+                    .concat(["128k", "256k", "524k", "1m"]
                         .filter(c => root.coderVariants.some(v => v.variant === (c === "256k" ? "coder" : "coder-" + c)))
                         .map(c => ({ key: c, label: root.ctxLabel(c), on: root.coderLive && root.coderCtx === c })))
                 onPicked: (key) => { if (root.service && key !== root.coderChoice) root.service.switchCoder(key) }

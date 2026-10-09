@@ -16,7 +16,7 @@
 Description=Strata Qwen model server (RTX 5090 32 GB, 256K context)
 Wants=ai-network.service
 After=ai-network.service
-Conflicts=strata-5090-524k.service strata-5090-1m.service strata-4070ti.service strata-both.service llama-cpp-5090.service comfyui-5090.service llama-cpp-both.service strata-4070ti-524k.service strata-4070ti-1m.service
+Conflicts=comfyui-5090.service llama-cpp-5090.service llama-cpp-both.service strata-4070ti-1m.service strata-4070ti-524k.service strata-4070ti.service strata-5090-1m.service strata-5090-524k.service strata-both.service
 StartLimitIntervalSec=20min
 StartLimitBurst=2
 

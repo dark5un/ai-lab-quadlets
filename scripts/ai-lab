@@ -12,9 +12,9 @@
 #   ai-lab strata [VARIANT]           live strata variant (+coder), or switch:
 #                                     5090|5090-524k|5090-1m|4070ti|4070ti-524k|
 #                                     4070ti-1m|both|off
-#   ai-lab coder [256k|524k|1m|off]   live coder context, or switch the coder
+#   ai-lab coder [128k|256k|524k|1m|off] live coder context, or switch the coder
 #                                     (strata-coder on the 4070 Ti, beside a 5090 variant)
-#   ai-lab strata duo [5090-VARIANT] [256k|524k|1m]   a 5090 variant + the coder
+#   ai-lab strata duo [5090-VARIANT] [128k|256k|524k|1m]  a 5090 variant + the coder
 #                                     (Coder on the 4070 Ti, :11439) side by side
 #
 # <name> is a service or a group (strata, comfyui). start/stop/toggle/strata go
@@ -134,8 +134,8 @@ cmd_strata() {  # strata [VARIANT|duo [5090-VARIANT]|off] [--dry-run]
     if [ "$want" = duo ]; then  # duo [5090-VARIANT] [256k|524k|1m] [--dry-run]
         local v="5090" cv="256k" dry="" a
         for a in "${@:2}"; do
-            case "$a" in --dry-run) dry=--dry-run ;; 5090*) v="$a" ;; 256k|524k|1m) cv="$a" ;;
-                *) echo "ai-lab: duo [5090|5090-524k|5090-1m] [256k|524k|1m] [--dry-run]" >&2; exit 1 ;; esac
+            case "$a" in --dry-run) dry=--dry-run ;; 5090*) v="$a" ;; 128k|256k|524k|1m) cv="$a" ;;
+                *) echo "ai-lab: duo [5090|5090-524k|5090-1m] [128k|256k|524k|1m] [--dry-run]" >&2; exit 1 ;; esac
         done
         cmd_strata "$v" $dry
         cmd_coder "$cv" $dry
@@ -163,7 +163,7 @@ coder_live() {  # the live coder variant as "coder" / "coder-524k" / ..., or "of
     echo off
 }
 
-cmd_coder() {  # coder [256k|524k|1m|off] [--dry-run]
+cmd_coder() {  # coder [128k|256k|524k|1m|off] [--dry-run]
     local want="${1:-}" name unit variant
     if [ -z "$want" ]; then
         local v; v=$(coder_live)
@@ -181,7 +181,7 @@ cmd_coder() {  # coder [256k|524k|1m|off] [--dry-run]
             return
         fi
     done < <(group_members coder)
-    echo "ai-lab: unknown coder context '$want' (256k|524k|1m|off)" >&2
+    echo "ai-lab: unknown coder context '$want' (128k|256k|524k|1m|off)" >&2
     exit 1
 }
 
@@ -247,5 +247,5 @@ case "${1:-status}" in
     restart) action restart "$2" ;;
     strata)  shift; cmd_strata "$@" ;;
     coder)   shift; cmd_coder "$@" ;;
-    *) echo "usage: ai-lab status [--json] | ports | url <name> | info [name] | start|stop|toggle <name> [--dry-run] | restart <name> | strata [5090|5090-524k|5090-1m|4070ti|4070ti-524k|4070ti-1m|both|duo [5090-variant] [256k|524k|1m]|off] [--dry-run] | coder [256k|524k|1m|off] [--dry-run]" >&2; exit 1 ;;
+    *) echo "usage: ai-lab status [--json] | ports | url <name> | info [name] | start|stop|toggle <name> [--dry-run] | restart <name> | strata [5090|5090-524k|5090-1m|4070ti|4070ti-524k|4070ti-1m|both|duo [5090-variant] [256k|524k|1m]|off] [--dry-run] | coder [128k|256k|524k|1m|off] [--dry-run]" >&2; exit 1 ;;
 esac

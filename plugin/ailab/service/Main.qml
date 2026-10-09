@@ -12,8 +12,9 @@ import Quickshell.Io
 // Strata's GPU variants (registry group "strata") are one row with a card
 // selector (`ai-lab strata 5090|4070ti|both|off`) and context chips for the
 // cards that have them (<card> = 256K, <card>-524k, <card>-1m; strata-both is
-// 256K only). The coder group (strata-coder at 256K / 524K / 1M on the 4070 Ti,
-// beside a 5090 variant) is a CODER selector (`ai-lab coder 256k|524k|1m|off`);
+// 256K only). The coder group (strata-coder at 128K / 256K / 524K / 1M on the
+// 4070 Ti, beside a 5090 variant) is a CODER selector
+// (`ai-lab coder 128k|256k|524k|1m|off`);
 // the arbiter applies the card rules.
 // llama.cpp's three servers (group "llama-cpp") are one row too, but its
 // 5090 / 4070 Ti chips are independent toggles (both cards may serve at
@@ -106,7 +107,7 @@ Item {
         const v = ctx === "256k" ? card : card + "-" + ctx;
         return strataVariants.some(s => s.variant === v) ? v : "";
     }
-    // The coder group (strata-coder, -524k, -1m): deployed variants, the live
+    // The coder group (strata-coder, -128k, -524k, -1m): deployed variants, the live
     // one, and its context ("" when off). `coder` is the live row, or the 256K
     // row while off (for the status line); null when none is deployed.
     readonly property var coderVariants:
@@ -177,7 +178,7 @@ Item {
                 : s);
     }
 
-    // Switch the coder to a context (256k | 524k | 1m) or "off", like strata.
+    // Switch the coder to a context (128k | 256k | 524k | 1m) or "off", like strata.
     property string pendingCoder: ""
     function switchCoder(ctx) {
         if (coderProc.running) return;

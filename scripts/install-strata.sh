@@ -9,7 +9,7 @@
 #   ./scripts/install-strata.sh --rebuild  rebuild localhost/strata:multi first
 #
 # Nothing is started and nothing is enabled at boot: switch with
-# `scripts/ai-lab strata <variant>|duo|off`, `scripts/ai-lab coder 256k|524k|1m|off` or the
+#   ai-lab strata <variant>|duo|off`, `scripts/ai-lab coder 128k|256k|524k|1m|off` or the
 # AI Lab bar widget.
 set -euo pipefail
 
@@ -17,7 +17,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STRATA_REPO="${STRATA_REPO:-${HOME}/workspace/github.com/Niko1221/Strata}"
 IMAGE="localhost/strata:multi"
 CUDA_ARCHS="120;89"   # RTX 5090 = sm_120, RTX 4070 Ti = sm_89
-VARIANTS=(5090 5090-524k 5090-1m 4070ti 4070ti-524k 4070ti-1m both coder coder-524k coder-1m)
+VARIANTS=(5090 5090-524k 5090-1m 4070ti 4070ti-524k 4070ti-1m both coder coder-128k coder-524k coder-1m)
 QUADLET_DIR="${HOME}/.config/containers/systemd"
 CONFIG_DIR="${HOME}/.config/containers/config/strata"
 DATA_DIR="${HOME}/.local/share/strata"
@@ -99,7 +99,7 @@ fi
 # --- Units -------------------------------------------------------------------------
 # GPU UUIDs are filled in by name from nvidia-smi (never by index).
 "$ROOT/scripts/render-units.sh" ai strata-5090 strata-5090-524k strata-5090-1m strata-4070ti strata-4070ti-524k \
-    strata-4070ti-1m strata-both strata-coder strata-coder-524k strata-coder-1m
+    strata-4070ti-1m strata-both strata-coder strata-coder-128k strata-coder-524k strata-coder-1m
 
 # --- strata-coder's setup config ------------------------------------------------------
 # The coder runs pinned to the last 8 CPUs, so its --pool-workers must be 7
@@ -143,6 +143,57 @@ PYEOF
     chmod 600 "$CODER_CFG"
     printf '  strata-coder: --pool-workers %s\n' "$CODER_WORKERS"
 fi
+# --- Coder batch slots ("parallel") + the 128K coder variant -----------------------
+# "parallel": N (docs/BATCHING.md) decodes up to N conversations together. Measured
+# on this box (plans/strata-coder-parallelism-plan.md): 256K + 2 slots costs nothing
+# solo and beats the queue for 2 clients; 256K + 4 slots starves the expert cache
+# (0.91 GiB left, slower than queueing); 128K + 4 slots keeps 1015 experts and wins
+# for 3-4 clients. So: coder = 2 slots, coder-128k = 4 slots, 524K/1M stay at 1.
+# The 128K config derives from the 256K one with --max-context only (131072 is
+# under the trained 262144: no YaRN).
+derive_128k() {  # derive_128k <src-dir> <dst-dir>
+    local src="$1" dst="$2" j
+    for j in "$src"/strata-*.json; do
+        [ -f "$j" ] || continue
+        [ -f "$dst/$(basename "$j")" ] && continue
+        python3 - "$j" "$dst/$(basename "$j")" <<'PYEOF'
+import json, sys
+src, dst = sys.argv[1:3]
+cfg = json.load(open(src))
+a = cfg["args"]
+for flag in ("--rope-scaling", "--rope-scale"):
+    while flag in a:
+        i = a.index(flag); del a[i:i + 2]
+a[a.index("--max-context") + 1] = "131072"
+json.dump(cfg, open(dst, "w"), indent=1)
+PYEOF
+        chmod 600 "$dst/$(basename "$j")"
+        printf '  %s: %s derived (context 131072, no YaRN)\n' "$(basename "$dst")" "$(basename "$j")"
+    done
+}
+derive_128k "$DATA_DIR/config-coder" "$DATA_DIR/config-coder-128k"
+
+set_parallel() {  # set_parallel <cfg-dir> <N>
+    local dir="$1" n="$2" j
+    for j in "$dir"/strata-*.json; do
+        [ -f "$j" ] || continue
+        python3 - "$j" "$n" <<'PYEOF'
+import json, sys
+path, n = sys.argv[1], int(sys.argv[2])
+cfg = json.load(open(path))
+if n > 1:
+    cfg["parallel"] = n
+else:
+    cfg.pop("parallel", None)
+json.dump(cfg, open(path, "w"), indent=1)
+PYEOF
+        chmod 600 "$j"
+    done
+    printf '  %s: parallel %s\n' "$(basename "$dir")" "$n"
+}
+# NOTE: the set_parallel calls run AFTER the 524K/1M derive below, so the
+# derived configs do not inherit the 256K coder's slots.
+
 # --- Context variants: derive 524K / 1M configs from the 256K ones ----------------
 # Strata's setup bakes the context into the config: --max-context plus YaRN
 # rope scaling past the trained 262,144 (factor 2 at 524,288, 4 at 1,048,576),
@@ -175,6 +226,13 @@ for card in 4070ti coder; do
     derive_ctx "$DATA_DIR/config-$card" "$DATA_DIR/config-$card-524k" 524288 2
     derive_ctx "$DATA_DIR/config-$card" "$DATA_DIR/config-$card-1m" 1048576 4
 done
+# Batch slots last: after the derive, so 524K/1M configs (copied from the 256K
+# one) get their own value — 1 = no "parallel" key (slots at those windows cost
+# 6-12 GB pinned RAM each and the 12 GB card's VRAM is already full).
+set_parallel "$DATA_DIR/config-coder" 2
+set_parallel "$DATA_DIR/config-coder-128k" 4
+set_parallel "$DATA_DIR/config-coder-524k" 1
+set_parallel "$DATA_DIR/config-coder-1m" 1
 
 # Retire the single-GPU unit of earlier installs.
 if [[ -f "$QUADLET_DIR/strata.container" ]]; then
@@ -192,7 +250,7 @@ systemctl --user mask podman-user-wait-network-online.service >/dev/null 2>&1 ||
 
 printf '\nStrata variants installed (none started, none at boot):\n'
 printf 'Switch:   %s/scripts/ai-lab strata 5090[-524k|-1m]|4070ti[-524k|-1m]|both|duo|off\n' "$ROOT"
-printf 'Coder:    %s/scripts/ai-lab coder 256k|524k|1m|off\n' "$ROOT"
+printf 'Coder:    %s/scripts/ai-lab coder 128k|256k|524k|1m|off\n' "$ROOT"
 printf 'API:      http://<host>:11434/v1, coder http://<host>:11439/v1 (API key in %s)\n' "$SERVICE_ENV"
 printf 'Clients:  http://systemd-strata:8080/v1 on the systemd-ai network\n'
 printf 'A variant whose config-<v>/ is empty runs Strata setup on its first start.\n'

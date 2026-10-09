@@ -69,20 +69,20 @@ EOF
     case "$variant" in *-524k) ctx=524288 ;; *-1m) ctx=1048576 ;; *) ctx=262144 ;; esac
     grep -qx "Environment=CONTEXT=$ctx" "$f" || err "$name: CONTEXT is not $ctx"
     case "$variant" in 4070ti*|both)
-        for c in strata-coder strata-coder-524k strata-coder-1m; do
+        for c in strata-coder strata-coder-128k strata-coder-524k strata-coder-1m; do
             [[ " $conflicts " == *" $c.service "* ]] || err "$name: Conflicts= lacks $c.service"
         done ;;
     esac
 done
 
-# The coder group (strata-coder 256K, -524k, -1m): beside the strata group,
+# The coder group (strata-coder 256K, -128k, -524k, -1m): beside the strata group,
 # owns the 4070 Ti, own name/port; one coder variant at a time.
 mapfile -t coders < <(python3 -c "
 import json
 for s in json.load(open('$REG'))['services']:
     if s.get('group') == 'coder':
         print(s['name'], s['variant'], s['host_port'], str(s['boot']).lower(), str(s.get('owns_card')).lower(), s['gpu'])")
-[ "${#coders[@]}" -eq 3 ] || err "expected 3 coder variants in services.json, got ${#coders[@]}"
+[ "${#coders[@]}" -eq 4 ] || err "expected 4 coder variants in services.json, got ${#coders[@]}"
 for m in "${coders[@]}"; do
     read -r name variant cport cboot cowns cgpu <<<"$m"
     f="$ROOT/quadlets/$name.container.in"
@@ -96,7 +96,7 @@ for m in "${coders[@]}"; do
     grep -qx 'Exec=-c __CPUS_CODER__ ./docker-entrypoint.sh' "$f" || err "$name: not pinned to __CPUS_CODER__"
     cfg="config-${variant}"
     grep -q "Volume=%h/.local/share/strata/$cfg:/data/config" "$f" || err "$name: config volume is not $cfg"
-    case "$variant" in *-524k) ctx=524288 ;; *-1m) ctx=1048576 ;; *) ctx=262144 ;; esac
+    case "$variant" in *-128k) ctx=131072 ;; *-524k) ctx=524288 ;; *-1m) ctx=1048576 ;; *) ctx=262144 ;; esac
     grep -qx "Environment=CONTEXT=$ctx" "$f" || err "$name: CONTEXT is not $ctx"
     grep -q '^\[Install\]' "$f" && err "$name: has [Install]"
     conflicts=$(sed -n 's/^Conflicts=//p' "$f")

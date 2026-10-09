@@ -134,20 +134,29 @@ resident in VRAM), so a bigger window costs mostly RAM.
 
 The coder group (Qwen3.8 Coder IQ1_M on the 4070 Ti, port 11439, container
 `systemd-strata-coder`) runs one variant at a time BESIDE a 5090 variant
-("duo"): `strata-coder` (256K), `strata-coder-524k`, `strata-coder-1m`. It owns
+("duo"): `strata-coder-128k` (128K, 4 batch slots), `strata-coder` (256K, 2
+slots), `strata-coder-524k`, `strata-coder-1m`. It owns
 the 4070 Ti: strata on that card or any other 4070 Ti service stops it.
+Batch slots (`"parallel": N` in the config, Strata's docs/BATCHING.md) decode
+up to N conversations together: nobody waits for a whole answer. Measured on
+this box: 256K+2 costs nothing solo and beats the queue for 2 clients; 256K+4
+starves the expert cache (slower than queueing); 128K+4 is the concurrency
+pick (4 clients in ~7 s). 524K/1M stay at one at a time (slots there cost
+6-12 GB pinned RAM each).
 
 `./scripts/install-strata.sh` (run by install.sh) builds `localhost/strata:multi` from
 `~/workspace/github.com/Niko1221/Strata` for CUDA 120 + 89 (if missing;
 `--rebuild` forces it), renders the units with the GPU UUIDs and CPU pinning,
 derives the 524K / 1M configs of the 4070 Ti and the coder from their 256K
-ones (context + YaRN args only; identical to what setup writes), and reloads
+ones (context + YaRN args only; identical to what setup writes), derives the
+128K coder config from the 256K one (context only, no YaRN), sets the coder's
+batch slots (`"parallel"`: 2 at 256K, 4 at 128K), and reloads
 systemd. Nothing starts at boot (no `[Install]`); switch with the AI Lab bar
 widget or:
 
 ```bash
 ./scripts/ai-lab strata 4070ti-1m   # 5090[-524k|-1m] | 4070ti[-524k|-1m] | both | off; --dry-run previews
-./scripts/ai-lab coder 524k         # 256k | 524k | 1m | off (the coder, beside a 5090 variant)
+./scripts/ai-lab coder 128k         # 128k | 256k | 524k | 1m | off (the coder, beside a 5090 variant)
 ./scripts/ai-lab strata duo 5090-1m 524k   # a 5090 variant + the coder
 ./scripts/ai-lab strata             # prints the live variant, e.g. 5090-1m+coder-524k
 ```

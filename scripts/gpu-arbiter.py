@@ -25,7 +25,7 @@ Rules (docs: ~/Documents/plans/strata-gpu-variants-plan.md, README "GPU rules"):
       (5090-1m -> 4070ti-1m and back) if that card has a variant for it;
       strata-both (256K only) drops to the plain card variant.
 Groups (strata, comfyui, llama-cpp, coder) run one member at a time where
-their units say so; the coder group (strata-coder, -524k, -1m) are card
+their units say so; the coder group (strata-coder, -128k, -524k, -1m) are card
 owners, so starting one stops the other (C1: same card).
 Non-strata, non-exclusive, non-owner services may share a card with each other.
 
