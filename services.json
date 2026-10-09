@@ -117,7 +117,7 @@
       "health": "/health",
       "tier": "optional",
       "image": "localhost/strata:multi",
-      "boot": false,
+      "boot": true,
       "auth": "api-key",
       "group": "strata",
       "variant": "4070ti",

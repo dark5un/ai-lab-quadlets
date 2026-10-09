@@ -3,6 +3,9 @@
 #   - nothing starts at boot: no [Install], registry boot=false everywhere,
 #     EXCEPT the monitoring tier (plan D1): prometheus, the exporters and the
 #     log pair enable at boot; grafana stays on demand like the web apps.
+#   - the one GPU exception: strata-4070ti is the default strata variant and
+#     boots with the session (its Conflicts= lines stop it when another
+#     variant or card user takes over).
 #   - no network-online.target dependency (podman's waiter hangs on Arch)
 #   - units on ai.network Want + start After ai-network.service
 #   - no hardcoded GPU UUID (templates carry placeholders only)
@@ -21,11 +24,12 @@ err() { echo "  FAIL: $*"; fail=1; }
 for f in "$ROOT"/quadlets/*.container "$ROOT"/quadlets/*.container.in; do
     n="$(basename "$f")"
     if grep -q '^\[Install\]' "$f"; then
-        # boot allowed only for the monitoring tier minus grafana
+        # boot allowed only for the monitoring tier minus grafana, plus the
+        # default strata variant
         case "$n" in
             prometheus.container|node-exporter.container|gpu-exporter.container|\
             podman-exporter.container|blackbox-exporter.container|\
-            victorialogs.container|fluent-bit.container) ;;
+            victorialogs.container|fluent-bit.container|strata-4070ti.container.in) ;;
             *) err "$n has an [Install] section" ;;
         esac
     fi
@@ -46,7 +50,7 @@ root = sys.argv[1]
 want = {"5090": "__GPU_5090_UUID__", "4070ti": "__GPU_4070TI_UUID__",
         "both": "__GPU_5090_UUID__,__GPU_4070TI_UUID__"}
 BOOT_OK = {"prometheus", "node-exporter", "gpu-exporter", "podman-exporter",
-           "blackbox-exporter", "victorialogs", "fluent-bit"}
+           "blackbox-exporter", "victorialogs", "fluent-bit", "strata-4070ti"}
 GPU_DEVICE_OK = {"gpu-exporter"}   # AddDevice without a registry card
 bad = 0
 for s in json.load(open(f"{root}/services.json"))["services"]:

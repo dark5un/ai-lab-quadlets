@@ -9,8 +9,10 @@
 # scripts/gpu-arbiter.py moves strata or ComfyUI to the other card. Conflicts=
 # below is only the backstop for a bare `systemctl start`, which STOPS the
 # other side instead of moving it (Conflicts= works in both directions).
-# No [Install]: nothing starts at boot; switch with `ai-lab strata 4070ti` or the
-# AI Lab bar widget.
+# The default strata variant: [Install] below starts it at login (the stack's
+# only GPU service that boots; every other variant and GPU service stays on
+# demand). Switch with `ai-lab strata <variant>` or the AI Lab bar widget;
+# Conflicts= below stops this unit when another variant takes over.
 
 [Unit]
 Description=Strata Qwen model server (RTX 4070 Ti 12 GB)
@@ -53,3 +55,6 @@ Restart=on-failure
 RestartSec=30
 TimeoutStartSec=1800
 TimeoutStopSec=120
+
+[Install]
+WantedBy=default.target

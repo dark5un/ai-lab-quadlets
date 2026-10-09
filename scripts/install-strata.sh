@@ -8,7 +8,8 @@
 #   ./scripts/install-strata.sh            build the image if missing, render units
 #   ./scripts/install-strata.sh --rebuild  rebuild localhost/strata:multi first
 #
-# Nothing is started and nothing is enabled at boot: switch with
+# Nothing is started here; only strata-4070ti (the default variant) is
+# enabled at boot by install.sh. Switch with
 #   ai-lab strata <variant>|duo|off`, `scripts/ai-lab coder 128k|256k|524k|1m|off` or the
 # AI Lab bar widget.
 set -euo pipefail

@@ -199,12 +199,13 @@ systemctl --user reset-failed podman-user-wait-network-online.service >/dev/null
 systemctl --user enable --now podman.socket >/dev/null 2>&1 || true
 # Monitoring configs are generated from services.json (registry = source of truth).
 python3 "$ROOT/scripts/render-prometheus.py" | sed 's/^/  /'
-# Boot tier (plan D1): monitoring units except grafana enable at boot.
-for u in prometheus node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit; do
+# Boot tier (plan D1): monitoring units except grafana enable at boot, plus
+# the default strata variant (strata-4070ti).
+for u in prometheus node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit strata-4070ti; do
     systemctl --user enable "$u.service" >/dev/null 2>&1 || true
 done
 systemctl --user daemon-reload
-echo "  ✓ daemon-reload (monitoring enabled at boot; grafana on demand; nothing started)"
+echo "  ✓ daemon-reload (monitoring + default strata variant enabled at boot; grafana on demand)"
 
 # ─── 5. Data dirs ────────────────────────────────────────────────────────────
 say "5/6 data dirs"

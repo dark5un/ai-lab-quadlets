@@ -1,8 +1,8 @@
 # AI Lab Quadlets
 
 > **Self-hosted AI services for ONE host: Arch Linux, RTX 5090 + RTX 4070 Ti,
-> rootless Podman Quadlets.** Every service starts on demand; nothing starts
-> at boot.
+> rootless Podman Quadlets.** Every service starts on demand; at boot only
+> the monitoring tier and the default strata variant (4070 Ti) start.
 
 This repo packages the AI lab of the `ai` box as Podman Quadlets (declarative
 container units managed by `systemd --user`). `services.json` is the single
@@ -151,7 +151,8 @@ derives the 524K / 1M configs of the 4070 Ti and the coder from their 256K
 ones (context + YaRN args only; identical to what setup writes), derives the
 128K coder config from the 256K one (context only, no YaRN), sets the coder's
 batch slots (`"parallel"`: 2 at 256K, 4 at 128K), and reloads
-systemd. Nothing starts at boot (no `[Install]`); switch with the AI Lab bar
+systemd. Only the default variant strata-4070ti starts at boot (`[Install]`);
+every other variant stays on demand — switch with the AI Lab bar
 widget or:
 
 ```bash

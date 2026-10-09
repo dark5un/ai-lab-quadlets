@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Strata variants: exactly one may run, nothing starts at boot.
+# Strata variants: exactly one may run; only the default variant
+# (strata-4070ti) starts at boot, the rest stay on demand.
 # Every quadlets/strata-*.container.in must
-#   - be registered in services.json under group "strata" with boot=false,
+#   - be registered in services.json under group "strata" with boot=false
+#     (strata-4070ti: boot=true),
 #   - share ContainerName=systemd-strata and the registry's PublishPort,
 #   - list in Conflicts= every sibling variant and every registry service on
 #     its card(s) (the systemd backstop for the GPU rules; gpu-arbiter.py does
@@ -25,9 +27,14 @@ for m in "${members[@]}"; do
     read -r name variant boot <<<"$m"
     f="$ROOT/quadlets/$name.container.in"
     [ -f "$f" ] || { err "$name: missing $f"; continue; }
-    [ "$boot" = false ] || err "$name: boot must be false in services.json"
     grep -qx 'ContainerName=systemd-strata' "$f" || err "$name: ContainerName is not systemd-strata"
-    grep -q '^\[Install\]' "$f" && err "$name: has an [Install] section (must not start at boot)"
+    if [ "$name" = strata-4070ti ]; then
+        [ "$boot" = true ] || err "$name: the default variant must have boot=true"
+        grep -q '^\[Install\]' "$f" || err "$name: the default variant must have an [Install] section"
+    else
+        [ "$boot" = false ] || err "$name: boot must be false in services.json"
+        grep -q '^\[Install\]' "$f" && err "$name: has an [Install] section (must not start at boot)"
+    fi
     grep -q 'network-online.target' "$f" && err "$name: depends on network-online.target"
     grep -Eq '^AddDevice=nvidia.com/gpu=(all|[0-9]+)$' "$f" && err "$name: CDI device by index/all, pin by UUID"
     grep -q "Volume=%h/.local/share/strata/config-$variant:/data/config" "$f" \
