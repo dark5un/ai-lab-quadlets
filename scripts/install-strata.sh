@@ -15,8 +15,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-STRATA_REPO="${STRATA_REPO:-${HOME}/workspace/github.com/Niko1221/Strata}"
-IMAGE="localhost/strata:multi"
+STRATA_REPO="${STRATA_REPO:-${HOME}/workspace/github.com/dark5un/strata-harness}"
+IMAGE="localhost/strata-harness:multi"
 CUDA_ARCHS="120;89"   # RTX 5090 = sm_120, RTX 4070 Ti = sm_89
 VARIANTS=(5090 5090-524k 5090-1m 4070ti 4070ti-524k 4070ti-1m both coder coder-128k coder-524k coder-1m)
 QUADLET_DIR="${HOME}/.config/containers/systemd"

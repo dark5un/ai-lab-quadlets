@@ -22,7 +22,7 @@ StartLimitBurst=2
 
 [Container]
 ContainerName=systemd-strata-coder
-Image=localhost/strata:multi
+Image=localhost/strata-harness:multi
 Network=ai.network
 AddDevice=nvidia.com/gpu=__GPU_4070TI_UUID__
 SecurityLabelDisable=true
@@ -42,6 +42,11 @@ Environment=KV=int8
 Volume=%h/.local/share/strata/models:/data/models:z
 Volume=%h/.local/share/strata/mtp:/data/mtp:z
 Volume=%h/.local/share/strata/packs:/data/packs:z
+# strata-harness fork: the agent tab at /harness (serve/harness); sessions
+# and spill live on a shared state volume (same layout as the host CLI).
+Environment=STRATA_HARNESS=1
+Environment=STRATA_HARNESS_DIR=/data/harness
+Volume=%h/.local/share/strata/harness:/data/harness:Z
 Volume=%h/.local/share/strata/config-coder:/data/config:Z
 PublishPort=0.0.0.0:11439:8080/tcp
 

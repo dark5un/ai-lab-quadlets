@@ -144,8 +144,9 @@ starves the expert cache (slower than queueing); 128K+4 is the concurrency
 pick (4 clients in ~7 s). 524K/1M stay at one at a time (slots there cost
 6-12 GB pinned RAM each).
 
-`./scripts/install-strata.sh` (run by install.sh) builds `localhost/strata:multi` from
-`~/workspace/github.com/Niko1221/Strata` for CUDA 120 + 89 (if missing;
+`./scripts/install-strata.sh` (run by install.sh) builds `localhost/strata-harness:multi` from
+`~/workspace/github.com/dark5un/strata-harness` (the harness fork; every
+strata variant runs it and serves the agent tab at /harness) for CUDA 120 + 89 (if missing;
 `--rebuild` forces it), renders the units with the GPU UUIDs and CPU pinning,
 derives the 524K / 1M configs of the 4070 Ti and the coder from their 256K
 ones (context + YaRN args only; identical to what setup writes), derives the
@@ -179,7 +180,7 @@ Upgrading Strata (last: 6f32ec0 / engine 0.1.39 -> 6674a00 / 0.1.40.4,
 +7%):
 
 ```bash
-podman tag localhost/strata:multi localhost/strata:multi-<old-commit>   # rollback point
+podman tag localhost/strata-harness:multi localhost/strata-harness:multi-<old-commit>   # rollback point
 for v in 5090 4070ti both; do d=~/.local/share/strata/config-$v
   cp -p $d/strata-iq3_s.json $d/strata-iq3_s.json.<old-commit>; done
 git -C ~/workspace/github.com/Niko1221/Strata pull --ff-only
