@@ -230,6 +230,10 @@ done
 # Batch slots last: after the derive, so 524K/1M configs (copied from the 256K
 # one) get their own value — 1 = no "parallel" key (slots at those windows cost
 # 6-12 GB pinned RAM each and the 12 GB card's VRAM is already full).
+# strata-4070ti (256K): 2 slots measured good (solo unaffected, 2 clients
+# 3.2s vs 3.8s queued, +9 GB RAM); 4 slots starve the expert cache (0.91 GiB)
+# and are slower than queueing — see plans/strata-coder-parallelism-plan.md.
+set_parallel "$DATA_DIR/config-4070ti" 2
 set_parallel "$DATA_DIR/config-coder" 2
 set_parallel "$DATA_DIR/config-coder-128k" 4
 set_parallel "$DATA_DIR/config-coder-524k" 1
