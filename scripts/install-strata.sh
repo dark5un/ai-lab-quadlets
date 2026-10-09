@@ -65,7 +65,7 @@ chmod 700 "$CONFIG_DIR"
 SERVICE_ENV="$CONFIG_DIR/service.env"
 if [[ ! -e "$SERVICE_ENV" ]]; then
     umask 077
-    printf 'FAMILY=qwen\nMODEL=IQ3_S\nVISION=no\nLOW_RAM=auto\nAPI_KEY=%s\n' \
+    printf 'FAMILY=qwen\nMODEL=IQ3_S\nVISION=cpu\nLOW_RAM=auto\nAPI_KEY=%s\n' \
         "$(openssl rand -hex 32)" > "$SERVICE_ENV"
     printf '  created %s with a new API key\n' "$SERVICE_ENV"
 elif ! grep -Eq '^API_KEY=[^[:space:]]+' "$SERVICE_ENV"; then
@@ -124,7 +124,7 @@ if [[ ! -f "$CODER_CFG" ]]; then
             --entrypoint sh "$IMAGE" -c '
               set -e; cd /opt/strata
               .venv/bin/python setup.py --setup --yes --family coder --model IQ1_M --context 262144 \
-                --vision no --data-dir /data --host 0.0.0.0 --api-key "$API_KEY" --port 8080 --no-start \
+                --vision cpu --data-dir /data --host 0.0.0.0 --api-key "$API_KEY" --port 8080 --no-start \
                 --low-ram "$LOW_RAM" --kv int8 --gpu 0
               cp -f /opt/strata/strata-coder-iq1_m.json /data/config/strata-coder-iq1_m.json'
     fi
