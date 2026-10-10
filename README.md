@@ -177,6 +177,9 @@ re-run it. Shared settings and the key live in
 per-session trusted workspaces (M9) mount from `~/.local/share/strata/workspaces`
 to `/data/workspaces` in every variant — place project dirs into that tree to
 share them with a session; nothing else on the host is visible to the agent.
+Every variant also sets `STRATA_HARNESS_ROOTS=/data/workspaces`: a harness
+session created without picked folders is fenced to that tree from the first
+message (pick folders in the tab's workspace chip to override per session).
 
 Upgrading Strata (last: 6f32ec0 / engine 0.1.39 -> 6674a00 / 0.1.40.4,
 2026-10-08; decode/prefill within noise of the old build, strata-both decode

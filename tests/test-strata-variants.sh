@@ -41,6 +41,8 @@ for m in "${members[@]}"; do
         || err "$name: config volume is not config-$variant"
     grep -q "Volume=%h/.local/share/strata/workspaces:/data/workspaces:Z" "$f" \
         || err "$name: workspaces mount missing"
+    grep -qx 'Environment=STRATA_HARNESS_ROOTS=/data/workspaces' "$f" \
+        || err "$name: STRATA_HARNESS_ROOTS default missing"
     conflicts=$(sed -n 's/^Conflicts=//p' "$f")
     for other in "${members[@]}"; do
         read -r oname _ _ <<<"$other"
@@ -106,6 +108,7 @@ for m in "${coders[@]}"; do
     cfg="config-${variant}"
     grep -q "Volume=%h/.local/share/strata/$cfg:/data/config" "$f" || err "$name: config volume is not $cfg"
     grep -q "Volume=%h/.local/share/strata/workspaces:/data/workspaces:Z" "$f" || err "$name: workspaces mount missing"
+    grep -qx 'Environment=STRATA_HARNESS_ROOTS=/data/workspaces' "$f" || err "$name: STRATA_HARNESS_ROOTS default missing"
     case "$variant" in *-128k) ctx=131072 ;; *-524k) ctx=524288 ;; *-1m) ctx=1048576 ;; *) ctx=262144 ;; esac
     grep -qx "Environment=CONTEXT=$ctx" "$f" || err "$name: CONTEXT is not $ctx"
     grep -q '^\[Install\]' "$f" && err "$name: has [Install]"

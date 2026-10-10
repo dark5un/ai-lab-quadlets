@@ -50,6 +50,9 @@ Volume=%h/.local/share/strata/packs:/data/packs:z
 # and spill live on a shared state volume (same layout as the host CLI).
 Environment=STRATA_HARNESS=1
 Environment=STRATA_HARNESS_DIR=/data/harness
+# M9: new sessions default to the shared workspaces tree (the
+# harness tab's trusted-folder fence; pick per-session roots to override).
+Environment=STRATA_HARNESS_ROOTS=/data/workspaces
 Volume=%h/.local/share/strata/harness:/data/harness:Z
 # M9 trusted workspaces: the agent tab's per-session trusted folders live
 # here — place project dirs into this tree to share them with a session.
