@@ -80,7 +80,7 @@ fi
 chmod 600 "$SERVICE_ENV"
 
 # --- Data layout: shared model data, one setup config dir per variant -----------
-mkdir -p "$DATA_DIR"/{models,mtp,packs}
+mkdir -p "$DATA_DIR"/{models,mtp,packs,workspaces}
 for v in "${VARIANTS[@]}"; do mkdir -p "$DATA_DIR/config-$v"; chmod 700 "$DATA_DIR/config-$v"; done
 chmod 700 "$DATA_DIR"
 # Strata's setup writes strata-*.json (it holds the API key) 644; later rewrites

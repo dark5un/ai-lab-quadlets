@@ -173,7 +173,10 @@ shared; each variant keeps its own setup in `config-<variant>/strata-<quant>.jso
 `API_KEY`). A variant with an empty config dir runs Strata's setup on its
 first start from the unit's `CONTEXT`/`KV`/`GPU(S)` env; delete the json to
 re-run it. Shared settings and the key live in
-`~/.config/containers/config/strata/service.env` (mode 600).
+`~/.config/containers/config/strata/service.env` (mode 600). The harness tab's
+per-session trusted workspaces (M9) mount from `~/.local/share/strata/workspaces`
+to `/data/workspaces` in every variant — place project dirs into that tree to
+share them with a session; nothing else on the host is visible to the agent.
 
 Upgrading Strata (last: 6f32ec0 / engine 0.1.39 -> 6674a00 / 0.1.40.4,
 2026-10-08; decode/prefill within noise of the old build, strata-both decode

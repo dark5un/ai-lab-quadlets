@@ -39,6 +39,8 @@ for m in "${members[@]}"; do
     grep -Eq '^AddDevice=nvidia.com/gpu=(all|[0-9]+)$' "$f" && err "$name: CDI device by index/all, pin by UUID"
     grep -q "Volume=%h/.local/share/strata/config-$variant:/data/config" "$f" \
         || err "$name: config volume is not config-$variant"
+    grep -q "Volume=%h/.local/share/strata/workspaces:/data/workspaces:Z" "$f" \
+        || err "$name: workspaces mount missing"
     conflicts=$(sed -n 's/^Conflicts=//p' "$f")
     for other in "${members[@]}"; do
         read -r oname _ _ <<<"$other"
@@ -103,6 +105,7 @@ for m in "${coders[@]}"; do
     grep -qx 'Exec=-c __CPUS_CODER__ ./docker-entrypoint.sh' "$f" || err "$name: not pinned to __CPUS_CODER__"
     cfg="config-${variant}"
     grep -q "Volume=%h/.local/share/strata/$cfg:/data/config" "$f" || err "$name: config volume is not $cfg"
+    grep -q "Volume=%h/.local/share/strata/workspaces:/data/workspaces:Z" "$f" || err "$name: workspaces mount missing"
     case "$variant" in *-128k) ctx=131072 ;; *-524k) ctx=524288 ;; *-1m) ctx=1048576 ;; *) ctx=262144 ;; esac
     grep -qx "Environment=CONTEXT=$ctx" "$f" || err "$name: CONTEXT is not $ctx"
     grep -q '^\[Install\]' "$f" && err "$name: has [Install]"
