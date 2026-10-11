@@ -9,7 +9,7 @@ Progress goes to stdout (one line per file) and a JSON state file.
   scripts/docling-batch.py [--src DIR]... [--out DIR] [--limit N]
                            [--max-mb MB] [--include-existing] [--dry-run]
 
-Defaults: src ~/Documents/DriveThruRPG, out ~/Documents/rpg-library/docling-out.
+Defaults: src ~/Documents/DriveThruRPG, out ~/.local/share/rag-library/docling-out.
 Requires docling-serve up (ai-lab docling cpu|4070ti).
 """
 import argparse, base64, json, os, sys, time, urllib.request, urllib.error
@@ -47,7 +47,7 @@ def convert(path: Path, timeout: int):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--src", action="append", default=None)
-    ap.add_argument("--out", default=str(HOME / "Documents/rpg-library/docling-out"))
+    ap.add_argument("--out", default=str(HOME / ".local/share/rag-library/docling-out"))
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--max-mb", type=float, default=0, help="skip PDFs larger than this")
     ap.add_argument("--include-existing", action="store_true",
