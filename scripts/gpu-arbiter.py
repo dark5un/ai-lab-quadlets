@@ -159,6 +159,15 @@ class Planner:
                 self.stop(s["name"])
         self.start(self.member("comfyui", variant))
 
+    def start_docling(self, variant):
+        """docling variants share ContainerName + port: one at a time, and the
+        4070 Ti variant goes through the normal GPU rules (R1/C3)."""
+        target = self.member("docling", variant)
+        for s in self.group("docling"):
+            if s["variant"] != variant:
+                self.stop(s["name"])
+        self.start_service(target)
+
     def start_exclusive(self, name):
         """R5: an exclusive service gets every card to itself."""
         if name in self.state:
@@ -240,6 +249,8 @@ class Planner:
             self.place_strata(s["variant"])
         elif s.get("group") == "comfyui":
             self.start_comfyui(s["variant"])
+        elif s.get("group") == "docling":
+            self.start_docling(s["variant"])
         else:
             self.start_service(name)
 
