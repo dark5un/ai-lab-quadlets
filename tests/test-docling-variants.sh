@@ -40,6 +40,8 @@ for m in "${members[@]}"; do
     grep -q 'Volume=docling-hf:/opt/app-root/src/.cache' "$f" || err "$name: docling-hf cache volume missing"
     grep -q 'Volume=%h/Documents:/mnt/documents:ro' "$f" || err "$name: ~/Documents ro mount missing"
     grep -qx 'Environment=DOCLING_SERVE_ENABLE_UI=1' "$f" || err "$name: UI not enabled"
+    grep -qx 'Environment=DOCLING_SERVE_MAX_SYNC_WAIT=3600' "$f" \
+        || err "$name: sync-wait cap not raised (big books 504 at the 120s default)"
     grep -qx 'RunInit=true' "$f" || err "$name: lacks RunInit=true"
     grep -qx 'SuccessExitStatus=143' "$f" || err "$name: lacks SuccessExitStatus=143"
     case "$variant" in

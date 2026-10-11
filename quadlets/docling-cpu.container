@@ -25,6 +25,10 @@ PublishPort=127.0.0.1:3108:5001/tcp
 Volume=docling-hf:/opt/app-root/src/.cache
 Volume=%h/Documents:/mnt/documents:ro
 Environment=DOCLING_SERVE_ENABLE_UI=1
+# The sync convert endpoints give up after DOCLING_SERVE_MAX_SYNC_WAIT
+# (default 120 s); big RPG books need far more. Batch clients wait on their
+# own side, so raise the server cap.
+Environment=DOCLING_SERVE_MAX_SYNC_WAIT=3600
 
 [Service]
 # A container killed by the stop signal exits 143; that is a clean stop.

@@ -63,6 +63,8 @@ def main():
     pdfs = []
     for s in srcs:
         for p in sorted(s.rglob("*.pdf")):
+            if p.name.startswith("._") or p.name.startswith("."):
+                continue   # AppleDouble junk from the DriveThruRPG sync
             if out in p.parents:
                 continue
             if a.max_mb and p.stat().st_size > a.max_mb * 1024 * 1024:
