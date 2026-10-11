@@ -25,7 +25,23 @@ def slug(rel: Path) -> str:
         s = s.replace(ch, "__" if ch == "/" else "_")
     return s
 
-def convert(path: Path, timeout: int):
+def mem_available_gb() -> float:
+    with open("/proc/meminfo") as f:
+        for line in f:
+            if line.startswith("MemAvailable:"):
+                return int(line.split()[1]) / 2**20
+    return 99.0
+
+def wait_for_headroom(min_gb: float, deadline: float):
+    """Block until MemAvailable >= min_gb (the box also runs strata at
+    ~60 GB RSS; never let the batch push it into swap)."""
+    while mem_available_gb() < min_gb:
+        if time.time() > deadline:
+            raise RuntimeError(f"no RAM headroom ({min_gb} GB) after waiting")
+        time.sleep(20)
+
+def convert(path: Path, timeout: int, min_gb: float):
+    wait_for_headroom(min_gb, time.time() + timeout)
     body = json.dumps({
         "sources": [{"kind": "file",
                      "base64_string": base64.b64encode(path.read_bytes()).decode(),
@@ -54,6 +70,10 @@ def main():
                     help="also convert PDFs already inside the out dir's source scan")
     ap.add_argument("--no-fallback", action="store_true",
                     help="skip the markitdown fallback pass for docling failures")
+    ap.add_argument("--jobs", type=int, default=4,
+                    help="concurrent conversions (match DOCLING_SERVE_ENG_LOC_NUM_WORKERS)")
+    ap.add_argument("--min-ram-gb", type=float, default=12.0,
+                    help="pause conversions while MemAvailable is below this")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--timeout", type=int, default=3600,
                     help="client wait per file; keep >= DOCLING_SERVE_MAX_SYNC_WAIT (3600)")
@@ -92,21 +112,32 @@ def main():
         return 0
 
     t0 = time.time(); ok = fail = 0
-    for i, (p, md) in enumerate(todo, 1):
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    lock = threading.Lock()
+
+    def one(i, p, md):
+        nonlocal ok, fail
         key = str(p)
         try:
-            text = convert(p, a.timeout)
+            text = convert(p, a.timeout, a.min_ram_gb)
             md.write_text(text)
-            state["done"][key] = {"out": str(md), "chars": len(text), "tool": "docling"}
-            state["failed"].pop(key, None)
-            ok += 1
+            with lock:
+                state["done"][key] = {"out": str(md), "chars": len(text), "tool": "docling"}
+                state["failed"].pop(key, None)
+                ok += 1
+                state_path.write_text(json.dumps(state, indent=1))
             print(f"[{i}/{len(todo)}] ok  {p.name} -> {md.name} ({len(text)} chars, "
                   f"{time.time()-t0:.0f}s elapsed)", flush=True)
         except Exception as e:
-            fail += 1
-            state["failed"][key] = {"error": str(e)[:300], "at": time.strftime("%F %T")}
+            with lock:
+                state["failed"][key] = {"error": str(e)[:300], "at": time.strftime("%F %T")}
+                fail += 1
+                state_path.write_text(json.dumps(state, indent=1))
             print(f"[{i}/{len(todo)}] FAIL {p.name}: {e}", flush=True)
-        state_path.write_text(json.dumps(state, indent=1))
+
+    with ThreadPoolExecutor(max_workers=max(1, a.jobs)) as ex:
+        list(ex.map(lambda t: one(*t), [(i, p, md) for i, (p, md) in enumerate(todo, 1)]))
 
     # Fallback tier: docling failures -> markitdown (host CLI, plain text
     # extraction; no layout/tables, but better than a missing document).

@@ -29,6 +29,9 @@ Environment=DOCLING_SERVE_ENABLE_UI=1
 # (default 120 s); big RPG books need far more. Batch clients wait on their
 # own side, so raise the server cap.
 Environment=DOCLING_SERVE_MAX_SYNC_WAIT=3600
+# 4 pipeline workers: the overnight batch runs concurrent conversions; the
+# 4070 Ti holds ~2 GB per pipeline (measured), so 4 fit beside strata's card.
+Environment=DOCLING_SERVE_ENG_LOC_NUM_WORKERS=4
 
 [Service]
 # A container killed by the stop signal exits 143; that is a clean stop.
