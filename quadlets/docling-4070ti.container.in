@@ -31,9 +31,11 @@ Environment=DOCLING_SERVE_ENABLE_UI=1
 # (default 120 s); big RPG books need far more. Batch clients wait on their
 # own side, so raise the server cap.
 Environment=DOCLING_SERVE_MAX_SYNC_WAIT=3600
-# 4 pipeline workers: the overnight batch runs concurrent conversions; the
-# 4070 Ti holds ~2 GB per pipeline (measured), so 4 fit on the card.
-Environment=DOCLING_SERVE_ENG_LOC_NUM_WORKERS=4
+# 1 pipeline worker + a container CPU cap: docling's OCR stage runs on CPU
+# providers and 4 workers pushed the package to 105C (crit). --cpus=8 keeps
+# the batch well below strata's own footprint. Raise only if temps allow.
+Environment=DOCLING_SERVE_ENG_LOC_NUM_WORKERS=1
+PodmanArgs=--cpus=8
 AddDevice=nvidia.com/gpu=all
 Environment=CUDA_VISIBLE_DEVICES=__GPU_4070TI_UUID__
 

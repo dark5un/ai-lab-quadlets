@@ -42,8 +42,10 @@ for m in "${members[@]}"; do
     grep -qx 'Environment=DOCLING_SERVE_ENABLE_UI=1' "$f" || err "$name: UI not enabled"
     grep -qx 'Environment=DOCLING_SERVE_MAX_SYNC_WAIT=3600' "$f" \
         || err "$name: sync-wait cap not raised (big books 504 at the 120s default)"
-    grep -qx 'Environment=DOCLING_SERVE_ENG_LOC_NUM_WORKERS=4' "$f" \
-        || err "$name: pipeline workers not set (batch needs concurrency)"
+    grep -qx 'Environment=DOCLING_SERVE_ENG_LOC_NUM_WORKERS=1' "$f" \
+        || err "$name: pipeline workers != 1 (4 workers hit 105C package temp)"
+    grep -qx 'PodmanArgs=--cpus=8' "$f" \
+        || err "$name: container CPU cap missing (thermal guard)"
     grep -qx 'RunInit=true' "$f" || err "$name: lacks RunInit=true"
     grep -qx 'SuccessExitStatus=143' "$f" || err "$name: lacks SuccessExitStatus=143"
     case "$variant" in

@@ -70,7 +70,7 @@ def main():
                     help="also convert PDFs already inside the out dir's source scan")
     ap.add_argument("--no-fallback", action="store_true",
                     help="skip the markitdown fallback pass for docling failures")
-    ap.add_argument("--jobs", type=int, default=4,
+    ap.add_argument("--jobs", type=int, default=1,
                     help="concurrent conversions (match DOCLING_SERVE_ENG_LOC_NUM_WORKERS)")
     ap.add_argument("--min-ram-gb", type=float, default=12.0,
                     help="pause conversions while MemAvailable is below this")
