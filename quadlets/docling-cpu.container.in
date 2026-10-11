@@ -29,10 +29,15 @@ Environment=DOCLING_SERVE_ENABLE_UI=1
 # (default 120 s); big RPG books need far more. Batch clients wait on their
 # own side, so raise the server cap.
 Environment=DOCLING_SERVE_MAX_SYNC_WAIT=3600
-# 1 pipeline worker + a container CPU cap: docling's OCR stage runs on CPU
-# providers and 4 workers pushed the package to 105C (crit). --cpus=8 keeps
-# the batch well below strata's own footprint. Raise only if temps allow.
+# 1 pipeline worker + CPU pinning: docling's OCR stage runs on CPU providers
+# and 4 workers pushed the package to 105C (crit). Pin to the 8 E-cores via
+# taskset (the cpuset cgroup controller is not delegated to the user slice,
+# so --cpuset-cpus fails; strata-coder pins the same way): strata's 5090
+# variants never use those cores, and the arbiter never runs the coder and
+# docling-4070ti at once. --cpus=8 keeps the quota equal to the pin.
 Environment=DOCLING_SERVE_ENG_LOC_NUM_WORKERS=1
+Entrypoint=/usr/bin/taskset
+Exec=-c __CPUS_CODER__ container-entrypoint docling-serve run
 PodmanArgs=--cpus=8
 
 [Service]

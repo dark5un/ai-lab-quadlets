@@ -44,8 +44,9 @@ for m in "${members[@]}"; do
         || err "$name: sync-wait cap not raised (big books 504 at the 120s default)"
     grep -qx 'Environment=DOCLING_SERVE_ENG_LOC_NUM_WORKERS=1' "$f" \
         || err "$name: pipeline workers != 1 (4 workers hit 105C package temp)"
-    grep -qx 'PodmanArgs=--cpus=8' "$f" \
-        || err "$name: container CPU cap missing (thermal guard)"
+    grep -qx 'Entrypoint=/usr/bin/taskset' "$f" && grep -qx 'Exec=-c __CPUS_CODER__ container-entrypoint docling-serve run' "$f" \
+        || err "$name: not pinned to the E-cores via taskset (thermal guard)"
+    grep -q 'PodmanArgs=--cpus=8' "$f" || err "$name: container CPU cap missing (thermal guard)"
     grep -qx 'RunInit=true' "$f" || err "$name: lacks RunInit=true"
     grep -qx 'SuccessExitStatus=143' "$f" || err "$name: lacks SuccessExitStatus=143"
     case "$variant" in
