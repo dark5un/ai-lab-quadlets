@@ -24,7 +24,8 @@ GPU rules when they do.
 │   ├── llama-cpp-4070ti      :11436      ├── sketchlab   :3102     │
 │   ├── rizzo                 :11437      ├── hyperframes :3103     │
 │   └── llama-cpp-both        :11438      ├── hermes      :3104 (opt-in)
-│                                         └── dsh 127.0.0.1:3105 (opt-in)
+│                                         ├── dsh 127.0.0.1:3105 (opt-in)
+│                                         └── docling 127.0.0.1:3108
 │  RTX 5090 32 GB + RTX 4070 Ti 12 GB, shared by the rules in        │
 │  docs/gpu-assignment.md. Caddy files are kept, not deployed.      │
 └──────────────────────────────────────────────────────────────────┘
@@ -45,6 +46,7 @@ GPU rules when they do.
 | `hyperframes` | `3103` | - | none | HyperFrames GCP Cloud Run worker (needs a GCS bucket; local renders: `scripts/hyperframes-render.sh`) |
 | `hermes` (opt-in) | `3104` | - | account | containerized Hermes gateway; this host runs Hermes natively instead |
 | `deepseek-harness` (opt-in) | `127.0.0.1:3105` | - | token | dsh agent runtime, host loopback only |
+| `docling-cpu` / `-4070ti` | `127.0.0.1:3108` | - / 4070 Ti | none | docling-serve document conversion API (the docling MCP's remote backend), loopback only |
 | `prometheus` | `127.0.0.1:3107` | - | none | metrics store; scrapes every service, OTLP receiver for Open WebUI; boot |
 | `grafana` | `3106` | - | account | dashboards (provisioned from `monitoring/`), LAN with login; on demand |
 | `node-exporter` | `127.0.0.1:9100` | - | none | host CPU/RAM/disk/net/temp; boot |
@@ -104,6 +106,7 @@ ai-lab status                    # every service: state, port, health
 ai-lab start open-webui          # start (GPU rules applied); --dry-run shows the plan
 ai-lab stop comfyui              # groups work: strata, comfyui
 ai-lab strata 5090               # 5090 | 4070ti | both | off
+ai-lab docling cpu               # docling-serve: cpu | 4070ti | off
 ai-lab url sketchlab             # browser URL
 ```
 
@@ -224,6 +227,7 @@ start|stop|toggle|strata` and the bar widget go through
 | llama-cpp-4070ti, rizzo | 4070 Ti |
 | llama-cpp-both (exclusive) | both (layer split, 5090 main) |
 | comfyui (`comfyui-5090` / `comfyui-4070ti`) | the card strata is NOT on (strata off: 4070 Ti) |
+| docling-4070ti | 4070 Ti |
 
 1. Starting a GPU service on the card strata occupies moves strata to the
    other card (strata-both drops to the other card). Strata off stays off.
@@ -273,6 +277,7 @@ Auth status mirrors the `"auth"` field in `services.json`
 | Rizzo | `http://<host-LAN-IP>:11437/v1/systemone` | none |
 | Strata (optional) | `http://<host-LAN-IP>:11434/v1` | API key |
 | HyperFrames API | `http://<host-LAN-IP>:3103` | none |
+| docling-serve | `http://127.0.0.1:3108` (loopback only; UI at `/ui`) | none |
 
 **LAN exposure decision (deliberate):** this stack runs on a trusted home LAN.
 The unauthenticated endpoints (ComfyUI, Sketch Lab, HyperFrames, Rizzo) are

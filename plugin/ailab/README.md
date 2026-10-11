@@ -27,6 +27,9 @@ service with a live state dot, its host port, health, and a START/STOP switch.
   - **GPU SERVICES**: LLAMA `OFF | 5090 | 4070 TI | BOTH` (single cards toggle
     independently via `bin/ai-lab toggle llama-cpp-<card>`, BOTH is the
     exclusive layer-split server, OFF runs `bin/ai-lab stop llama-cpp`), then
+    DOCLING `CPU | 4070 TI | OFF` (docling-serve, `bin/ai-lab docling <variant>`:
+    one variant at a time on 127.0.0.1:3108; the 4070 Ti pick goes through the
+    arbiter, hover shows the plan; status line + OPEN for the serve UI), then
     a row per other card service (rizzo, ComfyUI with its card or "card auto").
   - **APPS**: services without a card.
   Service rows (`content/ServiceRow.qml`) anchor OPEN and START/STOP to the

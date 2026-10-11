@@ -1,0 +1,39 @@
+# docling-serve (CUDA 13) on the RTX 4070 Ti.
+# Group "docling": one variant at a time (cpu / 4070ti share the container
+# name and host port 3108; Conflicts= keeps one). No [Install]: on demand via
+# `ai-lab docling cpu|4070ti|off` or the AI Lab bar widget.
+# GPU: pinned by UUID at the CUDA layer (CUDA_VISIBLE_DEVICES), the stack's
+# convention for non-strata services. Starting it while strata or the coder
+# holds the 4070 Ti goes through scripts/gpu-arbiter.py (R1/C3).
+# Loopback-only (127.0.0.1:3108); ~/Documents mounted read-only.
+
+[Unit]
+Description=docling-serve (RTX 4070 Ti)
+Wants=ai-network.service
+After=ai-network.service
+Conflicts=docling-cpu.service
+
+[Container]
+ContainerName=systemd-docling
+Image=quay.io/docling-project/docling-serve-cu130:v1.36.0
+# The app runs as PID 1 and ignores SIGTERM; catatonit forwards it.
+RunInit=true
+Network=ai.network
+PublishPort=127.0.0.1:3108:5001/tcp
+# Model weights land in the image user's cache: HF_HOME defaults to
+# /opt/app-root/src/.cache/huggingface and DOCLING_SERVE_ARTIFACTS_PATH is
+# /opt/app-root/src/.cache/docling/models (Containerfile). One named volume
+# (shared with the CPU variant) covers both.
+Volume=docling-hf:/opt/app-root/src/.cache
+Volume=%h/Documents:/mnt/documents:ro
+Environment=DOCLING_SERVE_ENABLE_UI=1
+AddDevice=nvidia.com/gpu=all
+Environment=CUDA_VISIBLE_DEVICES=__GPU_4070TI_UUID__
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=120

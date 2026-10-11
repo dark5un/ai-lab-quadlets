@@ -127,14 +127,48 @@ Item {
     readonly property var llamaLive:
         llamaVariants.filter(s => s.state === "running" || s.state === "starting")
 
+    // The docling group (docling-serve: cpu | 4070ti): one variant at a time,
+    // like comfyui's row but with an explicit selector (`ai-lab docling ...`).
+    readonly property var doclingVariants:
+        services.filter(s => s.installed && s.group === "docling")
+    readonly property var doclingRow: {
+        for (const s of doclingVariants)
+            if (s.state === "running" || s.state === "starting") return s;
+        return null;
+    }
+    readonly property var docling: doclingRow || doclingVariants[0] || null
+    readonly property bool doclingLive: doclingRow !== null
+    readonly property string doclingVariant: doclingRow ? doclingRow.variant : "off"
+    property string pendingDocling: ""
+    function switchDocling(variant) {
+        if (doclingProc.running) return;
+        svc.pendingDocling = variant;
+        doclingProc.running = true;
+        svc.services = svc.services.map(s =>
+            s.group === "docling"
+                ? Object.assign({}, s, { state: s.variant === variant ? "starting" : "stopped", health: "-" })
+                : s);
+    }
+    Process {
+        id: doclingProc
+        command: [(svc.pluginApi ? svc.pluginApi.pluginDir : "") + "/bin/ai-lab",
+                  "docling", svc.pendingDocling]
+        onExited: (code) => {
+            if (code !== 0) svc.lastError = "docling " + svc.pendingDocling + " failed (exit " + code + ")";
+            svc.refresh();
+        }
+    }
+
     readonly property int runningCount: {
-        let n = (strataLive ? 1 : 0) + (coderLive ? 1 : 0) + (llamaLive.length > 0 ? 1 : 0);
+        let n = (strataLive ? 1 : 0) + (coderLive ? 1 : 0) + (llamaLive.length > 0 ? 1 : 0)
+              + (doclingLive ? 1 : 0);
         for (const s of plainServices) if (s.state === "running") n += 1;
         return n;
     }
     readonly property int totalCount:
         plainServices.length + (strataVariants.length > 0 ? 1 : 0) + (coder ? 1 : 0)
         + (llamaVariants.length > 0 ? 1 : 0)
+        + (doclingVariants.length > 0 ? 1 : 0)
 
     readonly property int pollMs: {
         const sec = svc.settings ? (svc.settings.pollSec ?? 10) : 10;

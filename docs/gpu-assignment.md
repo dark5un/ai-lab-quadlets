@@ -7,7 +7,7 @@ it runs on. The registry (`services.json`, field `gpu`) is the source of truth;
 | card | UUID placeholder | services |
 |---|---|---|
 | RTX 5090 32 GB | `__GPU_5090_UUID__` | strata-5090, llama-cpp-5090, comfyui-5090 |
-| RTX 4070 Ti 12 GB | `__GPU_4070TI_UUID__` | strata-4070ti, llama-cpp-4070ti, comfyui-4070ti, rizzo |
+| RTX 4070 Ti 12 GB | `__GPU_4070TI_UUID__` | strata-4070ti, llama-cpp-4070ti, comfyui-4070ti, rizzo, docling-4070ti |
 | both | both placeholders | strata-both, llama-cpp-both (exclusive) |
 
 ## Rules (scripts/gpu-arbiter.py)

@@ -174,7 +174,7 @@ umask 022
 
 # ─── 4. Units ────────────────────────────────────────────────────────────────
 say "4/6 units in $QUADLET_DIR"
-UNITS=(ai llama-cpp-5090 llama-cpp-4070ti llama-cpp-both comfyui-5090 comfyui-4070ti rizzo open-webui sketchlab hyperframes prometheus grafana node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit)
+UNITS=(ai llama-cpp-5090 llama-cpp-4070ti llama-cpp-both comfyui-5090 comfyui-4070ti rizzo open-webui sketchlab hyperframes docling-cpu docling-4070ti prometheus grafana node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit)
 [ "$WITH_DSH" = 1 ] && UNITS+=(deepseek-harness)
 [ "$WITH_HERMES" = 1 ] && UNITS+=(hermes)
 "$ROOT/scripts/render-units.sh" "${UNITS[@]}"
@@ -224,7 +224,7 @@ say "6/6 images"
 if [ "$NO_IMAGES" = 1 ]; then
     echo "  skipped (--no-images)"
 else
-    IMAGES=(open-webui llama-cpp comfyui rizzo sketchlab hyperframes)
+    IMAGES=(open-webui llama-cpp comfyui rizzo sketchlab hyperframes docling)
     [ "$WITH_DSH" = 1 ] && IMAGES+=(deepseek-harness)
     [ "$WITH_HERMES" = 1 ] && IMAGES+=(hermes)
     "$ROOT/scripts/build-images.sh" $([ "$REBUILD" = 1 ] && echo --rebuild) "${IMAGES[@]}" \

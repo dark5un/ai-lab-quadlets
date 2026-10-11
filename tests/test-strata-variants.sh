@@ -113,7 +113,7 @@ for m in "${coders[@]}"; do
     grep -qx "Environment=CONTEXT=$ctx" "$f" || err "$name: CONTEXT is not $ctx"
     grep -q '^\[Install\]' "$f" && err "$name: has [Install]"
     conflicts=$(sed -n 's/^Conflicts=//p' "$f")
-    for u in strata-4070ti strata-4070ti-524k strata-4070ti-1m strata-both llama-cpp-4070ti rizzo comfyui-4070ti llama-cpp-both; do
+    for u in strata-4070ti strata-4070ti-524k strata-4070ti-1m strata-both llama-cpp-4070ti rizzo comfyui-4070ti llama-cpp-both docling-4070ti; do
         [[ " $conflicts " == *" $u.service "* ]] || err "$name: Conflicts= lacks $u.service"
     done
     for other in "${coders[@]}"; do

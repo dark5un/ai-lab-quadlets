@@ -94,6 +94,7 @@ for name in "${NAMES[@]}"; do
         rizzo) build rizzo "$ROOT/containers/rizzo-flow" -f "$ROOT/containers/rizzo-flow/Containerfile" ;;
         sketchlab) build sketchlab "$SKETCHLAB_REPO" -f "$SKETCHLAB_REPO/Dockerfile" ;;
         hyperframes) build hyperframes "$HYPERFRAMES_REPO" -f "$HYPERFRAMES_REPO/packages/gcp-cloud-run/Dockerfile" ;;
+        docling) pull docling-cpu; pull docling-4070ti ;;
         deepseek-harness) build deepseek-harness "$ROOT/containers/deepseek-harness" \
                               -f "$ROOT/containers/deepseek-harness/Containerfile" ;;
         *) echo "  ! unknown image '$name'"; fail=1 ;;

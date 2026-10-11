@@ -49,6 +49,10 @@ Item {
     readonly property string ctxCard: (strataCard === "5090" || strataCard === "4070ti") ? strataCard : "5090"
     readonly property var llamaVariants: service ? service.llamaVariants : []
     readonly property var llamaLive: service ? service.llamaLive : []
+    readonly property var doclingVariants: service ? service.doclingVariants : []
+    readonly property var docling: service ? service.docling : null
+    readonly property bool doclingLive: service ? service.doclingLive : false
+    readonly property string doclingVariant: service ? service.doclingVariant : "off"
     // Plain rows split by whether the service needs a card.
     readonly property var gpuRows: service ? service.plainServices.filter(r => r.gpu || r.name === "comfyui") : []
     readonly property var appRows: service ? service.plainServices.filter(r => !r.gpu && r.name !== "comfyui") : []
@@ -308,6 +312,100 @@ Item {
                     : root.llamaLive.map(v => (v.variant === "4070ti" ? "4070 Ti" : v.variant)
                                              + " :" + v.host_port + " " + root.stateText(v)).join("    ")
                 color: previewing ? Theme.gold : Theme.dim
+                font.family: Theme.mono
+                font.pixelSize: 10 * root.s
+                elide: Text.ElideRight
+            }
+
+            // ---- docling (docling-serve: CPU | 4070 Ti | OFF) --------------
+            Item {
+                id: docRow
+                visible: root.doclingVariants.length > 0
+                width: col.width
+                height: 24 * root.s
+
+                readonly property bool live: root.doclingLive
+                readonly property bool ready: live && root.docling.state === "running"
+                                              && String(root.docling.health).startsWith("up")
+
+                Rectangle {
+                    id: ddot
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 6 * root.s; height: width; radius: width / 2
+                    color: docRow.live ? Theme.accent : Theme.hair
+                }
+                Text {
+                    anchors.left: ddot.right
+                    anchors.leftMargin: 6 * root.s
+                    anchors.right: dopen.left
+                    anchors.rightMargin: 8 * root.s
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: docRow.live && root.docling
+                        ? ("docling :" + root.docling.host_port + "  " + root.stateText(root.docling)
+                           + "  · " + (root.doclingVariant === "4070ti" ? "4070 Ti" : root.doclingVariant))
+                        : "docling off"
+                    color: docRow.live ? Theme.bright : Theme.dim
+                    font.family: Theme.mono
+                    font.pixelSize: 10 * root.s
+                    elide: Text.ElideRight
+                }
+                // Same size and place as the strata rows' OPEN (right edge
+                // minus the selector column), so the OPEN buttons line up.
+                Rectangle {
+                    id: dopen
+                    anchors.right: parent.right
+                    anchors.rightMargin: 56 * root.s
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 50 * root.s; height: 22 * root.s
+                    radius: Theme.radius
+                    color: "transparent"
+                    border.width: 1
+                    border.color: docRow.ready ? Theme.border : Theme.hair
+                    Text {
+                        anchors.centerIn: parent
+                        text: "OPEN"
+                        color: docRow.ready ? Theme.bright : Theme.faint
+                        opacity: docRow.ready ? 1 : 0.45
+                        font.family: Theme.font
+                        font.pixelSize: 10 * root.s
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: docRow.ready
+                        cursorShape: docRow.ready ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        onClicked: if (root.service) root.service.launchNamed(root.docling.name)
+                    }
+                }
+            }
+
+            Segmented {
+                visible: root.doclingVariants.length > 0
+                width: col.width
+                s: root.s
+                label: "DOCLING"
+                labelWidth: root.labelW
+                options: [{ key: "off", label: "OFF", on: !root.doclingLive }]
+                    .concat(root.doclingVariants.map(v => ({
+                        key: v.variant,
+                        label: v.variant === "4070ti" ? "4070 TI" : v.variant.toUpperCase(),
+                        on: root.doclingLive && root.doclingVariant === v.variant
+                    })))
+                onPicked: (key) => {
+                    if (!root.service || key === root.doclingVariant) return;
+                    root.service.switchDocling(key);
+                }
+                onHovered: (key) => root.hover("docling:", key,
+                                               key === "" || key === root.doclingVariant ? null : ["docling", key])
+            }
+            // docling consequence preview (a 4070 Ti pick may move strata/coder).
+            Text {
+                visible: root.doclingVariants.length > 0
+                width: col.width
+                height: 14 * root.s
+                leftPadding: root.labelW * root.s
+                readonly property bool previewing: root.previewKey.startsWith("docling:") && root.previewText !== ""
+                text: previewing ? "→ " + root.previewText : ""
+                color: Theme.gold
                 font.family: Theme.mono
                 font.pixelSize: 10 * root.s
                 elide: Text.ElideRight

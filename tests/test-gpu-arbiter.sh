@@ -136,6 +136,19 @@ cases = [
         ["stop strata-5090-1m", "stop strata-coder-1m", "start strata-4070ti-1m", "start llama-cpp-5090"]),
     ("stop coder group", ["strata-5090", "strata-coder-1m"], "stop", "coder", ["stop strata-coder-1m"]),
     ("toggle coder group off", ["strata-coder-524k"], "toggle", "coder", ["stop strata-coder-524k"]),
+    # docling group: one variant at a time; the 4070 Ti variant obeys the card rules
+    ("docling cpu, no card rules", ["strata-5090-1m"], "start", "docling-cpu",
+        ["start docling-cpu"]),
+    ("docling cpu -> 4070ti", ["docling-cpu"], "start", "docling-4070ti",
+        ["stop docling-cpu", "start docling-4070ti"]),
+    ("docling 4070ti moves strata off the card", ["strata-4070ti"], "start", "docling-4070ti",
+        ["stop strata-4070ti", "start strata-5090", "start docling-4070ti"]),
+    ("docling 4070ti stops the coder (cannot move)", ["strata-5090-1m", "strata-coder"], "start", "docling-4070ti",
+        ["stop strata-coder", "start docling-4070ti"]),
+    ("docling 4070ti beside strata-5090", ["strata-5090-1m"], "start", "docling-4070ti",
+        ["start docling-4070ti"]),
+    ("docling group off", ["docling-4070ti"], "stop", "docling", ["stop docling-4070ti"]),
+    ("toggle docling group off", ["docling-cpu"], "toggle", "docling", ["stop docling-cpu"]),
 ]
 fail = 0
 for title, running, verb, name, want in cases:
@@ -153,6 +166,10 @@ except arb.ArbiterError:
     pass
 try:
     arb.plan(reg, set(), "start", "llama-cpp"); fail = 1; print("  FAIL bare 'llama-cpp' start must ask for a variant")
+except arb.ArbiterError:
+    pass
+try:
+    arb.plan(reg, set(), "start", "docling"); fail = 1; print("  FAIL bare 'docling' start must ask for a variant")
 except arb.ArbiterError:
     pass
 if fail:

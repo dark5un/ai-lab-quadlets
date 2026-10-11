@@ -53,7 +53,7 @@ for f in ai.network caddy.container comfyui.container hermes.container \
          llama-cpp-research.container llama-cpp-5090.container \
          llama-cpp-4070ti.container llama-cpp-both.container \
          llama-cpp-extra-*.container open-webui.container sketchlab.container \
-         hyperframes.container rizzo.container \
+         hyperframes.container rizzo.container docling-cpu.container docling-4070ti.container \
          prometheus.container grafana.container node-exporter.container \
          gpu-exporter.container podman-exporter.container \
          blackbox-exporter.container victorialogs.container \

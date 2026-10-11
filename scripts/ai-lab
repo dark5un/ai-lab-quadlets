@@ -14,6 +14,8 @@
 #                                     4070ti-1m|both|off
 #   ai-lab coder [128k|256k|524k|1m|off] live coder context, or switch the coder
 #                                     (strata-coder on the 4070 Ti, beside a 5090 variant)
+#   ai-lab docling [cpu|4070ti|off]   live docling variant, or switch
+#                                     docling-serve (CPU or the 4070 Ti)
 #   ai-lab strata duo [5090-VARIANT] [128k|256k|524k|1m]  a 5090 variant + the coder
 #                                     (Coder on the 4070 Ti, :11439) side by side
 #
@@ -185,6 +187,30 @@ cmd_coder() {  # coder [128k|256k|524k|1m|off] [--dry-run]
     exit 1
 }
 
+cmd_docling() {  # docling [cpu|4070ti|off] [--dry-run]
+    local want="${1:-}" name unit variant
+    if [ -z "$want" ]; then  # report the live variant
+        local live=off
+        while IFS=$'\t' read -r name unit variant; do
+            [ "$(svc_state "$unit")" = running ] && { live="$variant"; break; }
+        done < <(group_members docling)
+        echo "$live"
+        return
+    fi
+    if [ "$want" = off ]; then
+        arbiter stop docling "${2:-}"
+        return
+    fi
+    while IFS=$'\t' read -r name unit variant; do
+        if [ "$variant" = "$want" ]; then
+            arbiter start "$name" "${2:-}"
+            return
+        fi
+    done < <(group_members docling)
+    echo "ai-lab: unknown docling variant '$want' (cpu|4070ti|off)" >&2
+    exit 1
+}
+
 cmd_ports() {
     python3 -c "
 import json
@@ -247,5 +273,6 @@ case "${1:-status}" in
     restart) action restart "$2" ;;
     strata)  shift; cmd_strata "$@" ;;
     coder)   shift; cmd_coder "$@" ;;
-    *) echo "usage: ai-lab status [--json] | ports | url <name> | info [name] | start|stop|toggle <name> [--dry-run] | restart <name> | strata [5090|5090-524k|5090-1m|4070ti|4070ti-524k|4070ti-1m|both|duo [5090-variant] [256k|524k|1m]|off] [--dry-run] | coder [128k|256k|524k|1m|off] [--dry-run]" >&2; exit 1 ;;
+    docling) shift; cmd_docling "$@" ;;
+    *) echo "usage: ai-lab status [--json] | ports | url <name> | info [name] | start|stop|toggle <name> [--dry-run] | restart <name> | strata [5090|5090-524k|5090-1m|4070ti|4070ti-524k|4070ti-1m|both|duo [5090-variant] [256k|524k|1m]|off] [--dry-run] | coder [128k|256k|524k|1m|off] [--dry-run] | docling [cpu|4070ti|off] [--dry-run]" >&2; exit 1 ;;
 esac

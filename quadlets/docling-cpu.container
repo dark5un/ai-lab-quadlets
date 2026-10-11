@@ -1,0 +1,35 @@
+# docling-serve (CPU) — document conversion API behind the docling MCP.
+# Group "docling": one variant at a time (cpu / 4070ti share the container
+# name and host port 3108; Conflicts= keeps one). No [Install]: on demand via
+# `ai-lab docling cpu|4070ti|off` or the AI Lab bar widget.
+# Loopback-only (127.0.0.1:3108): the host's docling MCP is the only client;
+# no new exposure. ~/Documents is mounted read-only for conversions.
+
+[Unit]
+Description=docling-serve (CPU)
+Wants=ai-network.service
+After=ai-network.service
+Conflicts=docling-4070ti.service
+
+[Container]
+ContainerName=systemd-docling
+Image=quay.io/docling-project/docling-serve-cpu:v1.36.0
+# The app runs as PID 1 and ignores SIGTERM; catatonit forwards it.
+RunInit=true
+Network=ai.network
+PublishPort=127.0.0.1:3108:5001/tcp
+# Model weights land in the image user's cache: HF_HOME defaults to
+# /opt/app-root/src/.cache/huggingface and DOCLING_SERVE_ARTIFACTS_PATH is
+# /opt/app-root/src/.cache/docling/models (Containerfile). One named volume
+# covers both, so conversions after the first download need no network.
+Volume=docling-hf:/opt/app-root/src/.cache
+Volume=%h/Documents:/mnt/documents:ro
+Environment=DOCLING_SERVE_ENABLE_UI=1
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=120
