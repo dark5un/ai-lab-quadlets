@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Strata variants: exactly one may run; only the default variant
-# (strata-4070ti) starts at boot, the rest stay on demand.
+# (strata-5090-1m) starts at boot, the rest stay on demand.
 # Every quadlets/strata-*.container.in must
 #   - be registered in services.json under group "strata" with boot=false
-#     (strata-4070ti: boot=true),
+#     (strata-5090-1m: boot=true),
 #   - share ContainerName=systemd-strata and the registry's PublishPort,
 #   - list in Conflicts= every sibling variant and every registry service on
 #     its card(s) (the systemd backstop for the GPU rules; gpu-arbiter.py does
@@ -28,7 +28,7 @@ for m in "${members[@]}"; do
     f="$ROOT/quadlets/$name.container.in"
     [ -f "$f" ] || { err "$name: missing $f"; continue; }
     grep -qx 'ContainerName=systemd-strata' "$f" || err "$name: ContainerName is not systemd-strata"
-    if [ "$name" = strata-4070ti ]; then
+    if [ "$name" = strata-5090-1m ]; then
         [ "$boot" = true ] || err "$name: the default variant must have boot=true"
         grep -q '^\[Install\]' "$f" || err "$name: the default variant must have an [Install] section"
     else
