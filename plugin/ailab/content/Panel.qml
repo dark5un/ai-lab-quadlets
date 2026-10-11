@@ -325,7 +325,8 @@ Item {
                 height: 24 * root.s
 
                 readonly property bool live: root.doclingLive
-                readonly property bool ready: live && root.docling.state === "running"
+                readonly property bool ready: live && root.docling !== null
+                                              && root.docling.state === "running"
                                               && String(root.docling.health).startsWith("up")
 
                 Rectangle {
