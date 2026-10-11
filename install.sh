@@ -200,8 +200,8 @@ systemctl --user enable --now podman.socket >/dev/null 2>&1 || true
 # Monitoring configs are generated from services.json (registry = source of truth).
 python3 "$ROOT/scripts/render-prometheus.py" | sed 's/^/  /'
 # Boot tier (plan D1): monitoring units except grafana enable at boot, plus
-# the default strata variant (strata-4070ti).
-for u in prometheus node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit strata-4070ti; do
+# the default strata variant (strata-5090-1m).
+for u in prometheus node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit strata-5090-1m; do
     systemctl --user enable "$u.service" >/dev/null 2>&1 || true
 done
 systemctl --user daemon-reload
