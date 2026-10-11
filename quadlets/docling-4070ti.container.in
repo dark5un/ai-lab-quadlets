@@ -36,11 +36,11 @@ Environment=DOCLING_SERVE_MAX_SYNC_WAIT=3600
 # taskset (the cpuset cgroup controller is not delegated to the user slice,
 # so --cpuset-cpus fails; strata-coder pins the same way): strata's 5090
 # variants never use those cores, and the arbiter never runs the coder and
-# docling-4070ti at once. --cpus=8 keeps the quota equal to the pin.
+# docling-4070ti at once. --cpus=4: half the E-core cluster, the 8-CPU quota still hit 89C.
 Environment=DOCLING_SERVE_ENG_LOC_NUM_WORKERS=1
 Entrypoint=/usr/bin/taskset
 Exec=-c __CPUS_CODER__ container-entrypoint docling-serve run
-PodmanArgs=--cpus=8
+PodmanArgs=--cpus=4
 AddDevice=nvidia.com/gpu=all
 Environment=CUDA_VISIBLE_DEVICES=__GPU_4070TI_UUID__
 

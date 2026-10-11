@@ -46,7 +46,7 @@ for m in "${members[@]}"; do
         || err "$name: pipeline workers != 1 (4 workers hit 105C package temp)"
     grep -qx 'Entrypoint=/usr/bin/taskset' "$f" && grep -qx 'Exec=-c __CPUS_CODER__ container-entrypoint docling-serve run' "$f" \
         || err "$name: not pinned to the E-cores via taskset (thermal guard)"
-    grep -q 'PodmanArgs=--cpus=8' "$f" || err "$name: container CPU cap missing (thermal guard)"
+    grep -q 'PodmanArgs=--cpus=4' "$f" || err "$name: container CPU cap missing (thermal guard)"
     grep -qx 'RunInit=true' "$f" || err "$name: lacks RunInit=true"
     grep -qx 'SuccessExitStatus=143' "$f" || err "$name: lacks SuccessExitStatus=143"
     case "$variant" in
