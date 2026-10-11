@@ -12,7 +12,7 @@ Progress goes to stdout (one line per file) and a JSON state file.
 Defaults: src ~/Documents/DriveThruRPG, out ~/.local/share/rag-library/docling-out.
 Requires docling-serve up (ai-lab docling cpu|4070ti).
 """
-import argparse, base64, json, os, sys, time, urllib.request, urllib.error
+import argparse, base64, json, os, subprocess, sys, time, urllib.request, urllib.error
 from pathlib import Path
 
 SERVE = os.environ.get("DOCLING_SERVE_URL", "http://127.0.0.1:3108")
@@ -52,8 +52,11 @@ def main():
     ap.add_argument("--max-mb", type=float, default=0, help="skip PDFs larger than this")
     ap.add_argument("--include-existing", action="store_true",
                     help="also convert PDFs already inside the out dir's source scan")
+    ap.add_argument("--no-fallback", action="store_true",
+                    help="skip the markitdown fallback pass for docling failures")
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--timeout", type=int, default=900)
+    ap.add_argument("--timeout", type=int, default=3600,
+                    help="client wait per file; keep >= DOCLING_SERVE_MAX_SYNC_WAIT (3600)")
     a = ap.parse_args()
     srcs = [Path(s) for s in (a.src or [HOME / "Documents/DriveThruRPG"])]
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
@@ -94,7 +97,7 @@ def main():
         try:
             text = convert(p, a.timeout)
             md.write_text(text)
-            state["done"][key] = {"out": str(md), "chars": len(text)}
+            state["done"][key] = {"out": str(md), "chars": len(text), "tool": "docling"}
             state["failed"].pop(key, None)
             ok += 1
             print(f"[{i}/{len(todo)}] ok  {p.name} -> {md.name} ({len(text)} chars, "
@@ -104,6 +107,36 @@ def main():
             state["failed"][key] = {"error": str(e)[:300], "at": time.strftime("%F %T")}
             print(f"[{i}/{len(todo)}] FAIL {p.name}: {e}", flush=True)
         state_path.write_text(json.dumps(state, indent=1))
+
+    # Fallback tier: docling failures -> markitdown (host CLI, plain text
+    # extraction; no layout/tables, but better than a missing document).
+    # Files that stay failed after both tools are the marker candidates.
+    retry = [(p, md) for p, md in todo if str(p) in state["failed"]]
+    if retry and not a.no_fallback:
+        print(f"docling-batch: fallback pass with markitdown for {len(retry)} files", flush=True)
+        import shutil
+        mk = shutil.which("markitdown")
+        for p, md in retry:
+            key = str(p)
+            if not mk:
+                state["failed"][key]["fallback"] = "markitdown not installed"
+                continue
+            try:
+                r = subprocess.run([mk, "-o", str(md), str(p)],
+                                   capture_output=True, text=True, timeout=600)
+                if r.returncode == 0 and md.exists() and md.stat().st_size > 200:
+                    state["done"][key] = {"out": str(md), "chars": md.stat().st_size,
+                                          "tool": "markitdown"}
+                    del state["failed"][key]
+                    ok += 1; fail -= 1
+                    print(f"  fallback ok  {p.name} ({md.stat().st_size} chars)", flush=True)
+                else:
+                    state["failed"][key]["fallback"] = (r.stderr or "empty output")[:200]
+                    print(f"  fallback FAIL {p.name}", flush=True)
+            except Exception as e:
+                state["failed"][key]["fallback"] = str(e)[:200]
+            state_path.write_text(json.dumps(state, indent=1))
+
     print(f"docling-batch: done ok={ok} fail={fail} in {time.time()-t0:.0f}s", flush=True)
     return 0 if fail == 0 else 2
 
