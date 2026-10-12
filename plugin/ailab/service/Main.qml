@@ -210,6 +210,35 @@ Item {
         }
     }
 
+    // Dictation accel (voxtype): gpu = Vulkan variant pinned to the 4070 Ti,
+    // cpu = AVX2 variant (frees the card). Not a quadlet — a user drop-in on
+    // voxtype.service; `ai-lab dictation [gpu|cpu]` owns it.
+    property string dictationAccel: ""
+    property string pendingDictation: ""
+    function switchDictation(accel) {
+        if (dictProc.running || accel === svc.dictationAccel) return;
+        svc.pendingDictation = accel;
+        dictProc.running = true;
+        svc.dictationAccel = accel;  // optimistic; dictPollProc corrects it
+    }
+    Process {
+        id: dictProc
+        command: [(svc.pluginApi ? svc.pluginApi.pluginDir : "") + "/bin/ai-lab",
+                  "dictation", svc.pendingDictation]
+        onExited: (code) => {
+            if (code !== 0) svc.lastError = "dictation " + svc.pendingDictation + " failed (exit " + code + ")";
+            svc.refresh();
+        }
+    }
+    Process {
+        id: dictPollProc
+        command: [(svc.pluginApi ? svc.pluginApi.pluginDir : "") + "/bin/ai-lab", "dictation"]
+        stdout: StdioCollector { onStreamFinished: {
+            const t = dictPollProc.out.trim();
+            if (t === "gpu" || t === "cpu") svc.dictationAccel = t;
+        } }
+    }
+
     readonly property int runningCount: {
         let n = (strataLive ? 1 : 0) + (coderLive ? 1 : 0) + (llamaLive.length > 0 ? 1 : 0)
               + (doclingLive ? 1 : 0) + (mayaLive ? 1 : 0);
@@ -230,6 +259,7 @@ Item {
     function refresh() {
         if (pollProc.running) return;
         pollProc.running = true;
+        if (!dictPollProc.running) dictPollProc.running = true;
     }
 
     // Toggle one service; the next poll reflects the real state.

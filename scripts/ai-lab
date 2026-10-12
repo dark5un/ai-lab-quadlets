@@ -19,6 +19,9 @@
 #   ai-lab maya [256|512|1024|5090 [ctx]|both [ctx]|off]
 #                                     live Project Maya variant, or switch it
 #                                     (port 11440; fully exclusive vs strata)
+#   ai-lab dictation [gpu|cpu]        live dictation accel, or switch voxtype
+#                                     between the Vulkan (4070 Ti) and AVX2
+#                                     (CPU) variants via a user drop-in
 #   ai-lab strata duo [5090-VARIANT] [128k|256k|524k|1m]  a 5090 variant + the coder
 #                                     (Coder on the 4070 Ti, :11439) side by side
 #
@@ -255,6 +258,46 @@ cmd_maya() {  # maya [256|512|1024|5090 [256|512|1024]|both [256|512|1024]] [--d
     exit 1
 }
 
+cmd_dictation() {  # dictation [gpu|cpu] — voxtype accel variant switch.
+    # The Ryoku-shipped /usr/bin/voxtype symlink and the Hub's variant picker
+    # need root (pkexec); we override at the user level instead: a drop-in on
+    # voxtype.service (a user unit) pointing ExecStart at the chosen variant
+    # binary under /usr/lib/voxtype/. No sudo, survives ryoku updates (the
+    # drop-in is ours; the shipped unit only sets ExecStart=/usr/bin/voxtype).
+    # gpu   = voxtype-vulkan + whisper.gpu_device=2 (the 4070 Ti; device 0 is
+    #         the iGPU — 100x slower — and 1 is the 5090 strata owns).
+    # cpu   = voxtype-avx2 (no GPU at all; frees the 4070 Ti for whisper.cpp
+    #         or other services).
+    local dropin="$HOME/.config/systemd/user/voxtype.service.d/ryoku-ai-lab-accel.conf"
+    local want="${1:-}"
+    case "$want" in
+        ""|status)
+            if [ -f "$dropin" ]; then
+                grep -q 'voxtype-vulkan' "$dropin" && echo gpu || echo cpu
+            else
+                # no drop-in: follow the shipped symlink
+                readlink -f /usr/bin/voxtype 2>/dev/null | grep -q 'vulkan' && echo gpu || echo cpu
+            fi
+            return ;;
+        gpu|cpu) ;;
+        *) echo "ai-lab: dictation wants gpu|cpu" >&2; exit 1 ;;
+    esac
+    local bin
+    [ "$want" = gpu ] && bin=/usr/lib/voxtype/voxtype-vulkan || bin=/usr/lib/voxtype/voxtype-avx2
+    [ -x "$bin" ] || { echo "ai-lab: variant binary missing: $bin" >&2; exit 1; }
+    mkdir -p "$(dirname "$dropin")"
+    printf '# Managed by ai-lab dictation (ryoku-ai-lab-accel). Switch with:\n#   ai-lab dictation gpu|cpu\n[Service]\nExecStart=\nExecStart=%s daemon\n' "$bin" > "$dropin"
+    # The GPU pick must pin whisper to the 4070 Ti (Vulkan device order:
+    # 0=iGPU, 1=5090, 2=4070Ti). Re-apply every time: Hub > Dictation rewrites
+    # the [whisper] block and wipes this key.
+    if [ "$want" = gpu ]; then
+        voxtype config set whisper.gpu_device 2 >/dev/null 2>&1 || true
+    fi
+    systemctl --user daemon-reload
+    systemctl --user restart voxtype.service
+    echo "  dictation: $want ($bin)"
+}
+
 cmd_ports() {
     python3 -c "
 import json
@@ -319,5 +362,6 @@ case "${1:-status}" in
     coder)   shift; cmd_coder "$@" ;;
     docling) shift; cmd_docling "$@" ;;
     maya)    shift; cmd_maya "$@" ;;
-    *) echo "usage: ai-lab status [--json] | ports | url <name> | info [name] | start|stop|toggle <name> [--dry-run] | restart <name> | strata [5090|5090-524k|5090-1m|4070ti|4070ti-524k|4070ti-1m|both|duo [5090-variant] [256k|524k|1m]|off] [--dry-run] | coder [128k|256k|524k|1m|off] [--dry-run] | docling [cpu|4070ti|off] [--dry-run] | maya [256|512|1024|both [256|512|1024]|off] [--dry-run]" >&2; exit 1 ;;
+    dictation) shift; cmd_dictation "$@" ;;
+    *) echo "usage: ai-lab status [--json] | ports | url <name> | info [name] | start|stop|toggle <name> [--dry-run] | restart <name> | strata [5090|5090-524k|5090-1m|4070ti|4070ti-524k|4070ti-1m|both|duo [5090-variant] [256k|524k|1m]|off] [--dry-run] | coder [128k|256k|524k|1m|off] [--dry-run] | docling [cpu|4070ti|off] [--dry-run] | maya [256|512|1024|both [256|512|1024]|off] [--dry-run] | dictation [gpu|cpu]" >&2; exit 1 ;;
 esac

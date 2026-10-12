@@ -1,9 +1,9 @@
 {
   "id": "ailab",
   "name": "AI Lab",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "author": "dark5un <dark5un@users.noreply.github.com>",
-  "description": "Start/stop the ai-lab-quadlets stack from the bar; Strata gets a card selector (OFF / 5090 / 4070 Ti / BOTH), 5090 context chips (256K / 524K / 1M) and a CODER chip for the Coder beside it; Maya gets its own row (OFF / 5090 / BOTH cards, 256K / 512K / 1M contexts, fully exclusive vs strata); llama.cpp gets one row with GPU chips.",
+  "description": "Start/stop the ai-lab-quadlets stack from the bar; Strata gets a card selector (OFF / 5090 / 4070 Ti / BOTH), 5090 context chips (256K / 524K / 1M) and a CODER chip for the Coder beside it; Maya gets its own row (OFF / 5090 / BOTH cards, 256K / 512K / 1M contexts, fully exclusive vs strata); llama.cpp gets one row with GPU chips. Dictation row switches voxtype between the 4070 Ti (Vulkan) and CPU (AVX2) via a user drop-in.",
   "license": "MIT",
   "official": false,
   "hosts": [

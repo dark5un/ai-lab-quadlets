@@ -22,6 +22,9 @@ import Ryoku.PluginKit.Singletons
 //                                                         the context)
 //                 Fully exclusive: any maya start stops every strata instance
 //                 (and vice versa) — the hint line previews it.
+//   DICTATION     voxtype accel switch: 4070 TI (Vulkan, ~0.4 s/turn) | CPU
+//                 (AVX2, frees the card). A user drop-in on voxtype.service,
+//                 owned by `ai-lab dictation gpu|cpu`.
 //   GPU SERVICES  llama.cpp (OFF | 5090 | 4070 TI | BOTH; the single cards
 //                 toggle independently), then the other services that use a card.
 //   APPS          services without a card.
@@ -60,6 +63,7 @@ Item {
     readonly property var docling: service ? service.docling : null
     readonly property bool doclingLive: service ? service.doclingLive : false
     readonly property string doclingVariant: service ? service.doclingVariant : "off"
+    readonly property string dictationAccel: service ? service.dictationAccel : ""
 
     // Maya (exclusive GLM-5.3-Flash): variants "5090-256|512|1024" / "both-…",
     // the live one, and its card + context ("off" when stopped).
@@ -550,6 +554,23 @@ Item {
                 font.family: Theme.mono
                 font.pixelSize: 10 * root.s
                 elide: Text.ElideRight
+            }
+
+            // Dictation accel: where voxtype's whisper runs. GPU = Vulkan on
+            // the 4070 Ti (~0.4 s/turn); CPU = AVX2 (~3.6 s, frees the card).
+            Segmented {
+                width: col.width
+                s: root.s
+                label: "DICTATION"
+                labelWidth: root.labelW
+                options: [
+                    { key: "gpu", label: "4070 TI", on: root.dictationAccel === "gpu" },
+                    { key: "cpu", label: "CPU",     on: root.dictationAccel === "cpu" }
+                ]
+                onPicked: (key) => {
+                    if (!root.service || key === root.dictationAccel) return;
+                    root.service.switchDictation(key);
+                }
             }
 
             Repeater {
