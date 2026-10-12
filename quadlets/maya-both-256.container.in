@@ -1,0 +1,50 @@
+# Project Maya variant: RTX 5090 + 4070 Ti (layer split), Maya-S24, 256K context.
+# Rendered by scripts/render-units.sh (GPU UUIDs filled in from nvidia-smi).
+# One maya variant (maya-5090-*, maya-both-*) runs at a time: they share the
+# container name (clients use http://systemd-maya:8080) and host port 11440.
+# Maya is fully exclusive: starting any variant stops every strata instance,
+# coder, llama.cpp, ComfyUI, rizzo, docling and the legacy maya units first
+# (scripts/gpu-arbiter.py plans it; Conflicts= below is the backstop), and
+# any of those stopping maya first in turn. Maya pins nearly ALL free RAM
+# (~70 GB) for its expert tier, hence docling must not run beside it either.
+# No [Install]: on demand only. Start: ai-lab maya both 256
+# (or systemctl --user start maya-both-256).
+# The per-context config (maya-maya-both-256.json, --max-context patched)
+# is written by scripts/install-maya.sh into ~/src/project-maya, which is
+# bind-mounted at /opt/maya; the engine binary was compiled inside this CUDA
+# image (build/strata); models are bind-mounted where it expects.
+
+[Unit]
+Description=Project Maya GLM-5.3-Flash (RTX 5090 + 4070 Ti (layer split), Maya-S24, 256K context)
+Wants=ai-network.service
+After=ai-network.service
+Conflicts=maya-5090-256.service maya-5090-512.service maya-5090-1024.service maya-both-512.service maya-both-1024.service maya-both.service maya-5090.service strata-5090.service strata-5090-524k.service strata-5090-1m.service strata-4070ti.service strata-4070ti-524k.service strata-4070ti-1m.service strata-both.service strata-coder.service strata-coder-128k.service strata-coder-524k.service strata-coder-1m.service comfyui-5090.service comfyui-4070ti.service llama-cpp-5090.service llama-cpp-4070ti.service llama-cpp-both.service rizzo.service docling-4070ti.service docling-cpu.service
+StartLimitIntervalSec=20min
+StartLimitBurst=2
+
+[Container]
+ContainerName=systemd-maya
+Image=localhost/maya-runtime:latest
+Network=ai.network
+# both cards, 5090 (PCI 02:00) first as the main card, matching the config's gpu:[0,1].
+AddDevice=nvidia.com/gpu=all
+# CUDA sees the pinned card(s) only, so its numbering matches the config's gpu.
+Environment=CUDA_VISIBLE_DEVICES=__GPU_5090_UUID__,__GPU_4070TI_UUID__
+SecurityLabelDisable=true
+Volume=%h/src/project-maya:/opt/maya:Z
+Volume=%h/.local/share/maya/models:/opt/maya-data/models:Z
+Entrypoint=/usr/bin/taskset
+Exec=-c 0-23 /opt/maya/.venv/bin/python /opt/maya/maya.py --config /opt/maya/maya-maya-both-256.json --port 8080 --host 0.0.0.0
+PublishPort=0.0.0.0:11440:8080/tcp
+# podman gives SIGTERM only 10 s by default; maya saves its sessions on stop
+# (a 164K-token conversation takes ~15-30 s) — without this every stop ends
+# in SIGKILL, exit 137, and the unit shows "failed" after a clean switch.
+StopTimeout=120
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=1800
+TimeoutStopSec=180
