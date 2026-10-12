@@ -2,7 +2,7 @@ import QtQuick
 import Ryoku.PluginKit
 import Ryoku.PluginKit.Singletons
 
-// content/Panel.qml — the AI Lab panel, in three sections:
+// content/Panel.qml — the AI Lab panel, in four sections:
 //
 //   STRATA        status lines (main model, coder), then one labelled control
 //                 per decision:
@@ -15,6 +15,13 @@ import Ryoku.PluginKit.Singletons
 //                                                         beside a 5090 variant)
 //                 and a hint line that previews what a hovered choice starts and
 //                 stops (the arbiter's --dry-run).
+//   MAYA          Project Maya GLM-5.3-Flash (status + OPEN, :11440):
+//                   CARD     OFF | 5090 | BOTH             (5090 alone = S-v2 pack;
+//                                                         BOTH = layer split, S24)
+//                   CONTEXT  256K | 512K | 1M             (per card; a card keeps
+//                                                         the context)
+//                 Fully exclusive: any maya start stops every strata instance
+//                 (and vice versa) — the hint line previews it.
 //   GPU SERVICES  llama.cpp (OFF | 5090 | 4070 TI | BOTH; the single cards
 //                 toggle independently), then the other services that use a card.
 //   APPS          services without a card.
@@ -53,6 +60,17 @@ Item {
     readonly property var docling: service ? service.docling : null
     readonly property bool doclingLive: service ? service.doclingLive : false
     readonly property string doclingVariant: service ? service.doclingVariant : "off"
+
+    // Maya (exclusive GLM-5.3-Flash): variants "5090-256|512|1024" / "both-…",
+    // the live one, and its card + context ("off" when stopped).
+    readonly property var mayaVariants: service ? service.mayaVariants : []
+    readonly property var mayaLive: service ? service.mayaLive : null
+    readonly property string mayaVariant: service ? service.mayaVariant : "off"
+    readonly property string mayaCard: mayaVariant === "off" ? "off" : mayaVariant.split("-")[0]
+    readonly property string mayaCtx: mayaVariant === "off" ? "" : mayaVariant.split("-")[1]
+    function mayaCtxLabel(c) {
+        return c === "256" ? "256K" : c === "512" ? "512K" : c === "1024" ? "1M" : ""
+    }
     // Plain rows split by whether the service needs a card.
     readonly property var gpuRows: service ? service.plainServices.filter(r => r.gpu || r.name === "comfyui") : []
     readonly property var appRows: service ? service.plainServices.filter(r => !r.gpu && r.name !== "comfyui") : []
@@ -266,6 +284,128 @@ Item {
                 leftPadding: hintMetrics.advanceWidth + root.labelW * root.s <= width ? root.labelW * root.s : 0
                 TextMetrics { id: hintMetrics; font: strataHint.font; text: strataHint.text }
                 text: root.previewKey.startsWith("strata:") && root.previewText !== "" ? "→ " + root.previewText : ""
+                color: Theme.gold
+                font.family: Theme.mono
+                font.pixelSize: 10 * root.s
+                elide: Text.ElideRight
+            }
+        }
+
+        // ---- MAYA --------------------------------------------------------------
+        MicroLabel { label: "MAYA"; s: root.s; visible: root.mayaVariants.length > 0 }
+
+        Column {
+            visible: root.mayaVariants.length > 0
+            width: col.width
+            spacing: 4 * root.s
+
+            // Status line: like the strata main row (dot + text + OPEN).
+            Item {
+                readonly property bool live: root.mayaLive !== null
+                readonly property bool ready: live && root.mayaLive.state === "running"
+                                              && String(root.mayaLive.health).startsWith("up")
+                width: col.width
+                height: 24 * root.s
+
+                Rectangle {
+                    id: mdot
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 6 * root.s; height: width; radius: width / 2
+                    color: parent.live ? Theme.accent : Theme.hair
+                }
+                Text {
+                    anchors.left: mdot.right
+                    anchors.leftMargin: 6 * root.s
+                    anchors.right: mopen.left
+                    anchors.rightMargin: 8 * root.s
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: root.mayaLive !== null
+                        ? ("maya   " + root.cardLabel(root.mayaCard) + " · " + root.mayaCtxLabel(root.mayaCtx)
+                           + "  :" + root.mayaLive.host_port + "  " + root.strataState(root.mayaLive))
+                        : "maya   off"
+                    color: parent.live ? Theme.bright : Theme.dim
+                    font.family: Theme.mono
+                    font.pixelSize: 10 * root.s
+                    elide: Text.ElideRight
+                }
+                Rectangle {
+                    id: mopen
+                    anchors.right: parent.right
+                    anchors.rightMargin: 56 * root.s
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 50 * root.s; height: 22 * root.s
+                    radius: Theme.radius
+                    color: "transparent"
+                    border.width: 1
+                    border.color: parent.ready ? Theme.border : Theme.hair
+                    Text {
+                        anchors.centerIn: parent
+                        text: "OPEN"
+                        color: parent.ready ? Theme.bright : Theme.faint
+                        opacity: parent.ready ? 1 : 0.45
+                        font.family: Theme.font
+                        font.pixelSize: 10 * root.s
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        enabled: parent.ready
+                        cursorShape: parent.ready ? Qt.PointingHandCursor : Qt.ArrowCursor
+                        onClicked: if (root.service) root.service.launchNamed(root.mayaLive.name)
+                    }
+                }
+            }
+
+            Segmented {
+                width: col.width
+                s: root.s
+                label: "CARD"
+                labelWidth: root.labelW
+                options: [{ key: "off", label: "OFF", on: root.mayaCard === "off" }]
+                    .concat(["5090", "both"].filter(v => root.mayaVariants.some(m => m.variant.startsWith(v + "-"))).map(v => ({
+                        key: v,
+                        label: v === "5090" ? "5090" : "BOTH",
+                        on: root.mayaCard === v
+                    })))
+                onPicked: (key) => {
+                    if (!root.service || key === root.mayaCard) return;
+                    if (key === "off") root.service.stopMaya();
+                    else root.service.switchMaya(key, root.mayaCtx === "" ? "1024" : root.mayaCtx);   // keeps the context
+                }
+                onHovered: (key) => {
+                    const v = key === "" || key === "off" ? ""
+                        : root.service.mayaFor(key, root.mayaCtx === "" ? "1024" : root.mayaCtx);
+                    root.hover("maya:card-", key,
+                               v === "" || v === root.mayaVariant ? null : ["maya", v]);
+                }
+            }
+
+            Segmented {
+                width: col.width
+                s: root.s
+                label: "CONTEXT"
+                labelWidth: root.labelW
+                options: ["256", "512", "1024"].filter(c => root.service && root.service.mayaFor(root.mayaCard === "off" ? "5090" : root.mayaCard, c) !== "")
+                    .map(c => ({
+                        key: c, label: c === "256" ? "256K" : c === "512" ? "512K" : "1M",
+                        on: root.mayaCard !== "off" && root.mayaCtx === c
+                    }))
+                onPicked: (key) => {
+                    const v = root.service ? root.service.mayaFor(root.mayaCard === "off" ? "5090" : root.mayaCard, key) : "";
+                    if (v !== "" && v !== root.mayaVariant) root.service.switchMaya(root.mayaCard === "off" ? "5090" : root.mayaCard, key);
+                }
+                onHovered: (key) => {
+                    const card = root.mayaCard === "off" ? "5090" : root.mayaCard;
+                    const v = key === "" || !root.service ? "" : root.service.mayaFor(card, key);
+                    root.hover("maya:ctx-", key,
+                               v === "" || v === root.mayaVariant ? null : ["maya", v]);
+                }
+            }
+
+            Text {
+                id: mayaHint
+                width: col.width
+                height: 14 * root.s
+                text: root.previewKey.startsWith("maya:") && root.previewText !== "" ? "→ " + root.previewText : ""
                 color: Theme.gold
                 font.family: Theme.mono
                 font.pixelSize: 10 * root.s

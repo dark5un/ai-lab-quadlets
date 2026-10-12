@@ -159,9 +159,60 @@ Item {
         }
     }
 
+    // The maya group (maya-5090-256/-512/-1024, maya-both-256/-512/-1024):
+    // one at a time, fully exclusive. The variant names carry the context
+    // ("5090-1024" = the 5090 at 1M; "both-512" = both cards at 524K).
+    readonly property var mayaVariants:
+        services.filter(s => s.installed && s.group === "maya")
+    readonly property var mayaLive: {
+        for (const s of mayaVariants)
+            if (s.state === "running" || s.state === "starting") return s;
+        return null;
+    }
+    readonly property string mayaVariant: mayaLive ? mayaLive.variant : "off"
+    function mayaFor(card, ctx) {
+        const v = card + "-" + ctx;
+        return mayaVariants.some(s => s.variant === v) ? v : "";
+    }
+    property string pendingMaya: ""
+    function switchMaya(card, ctx) {
+        if (mayaProc.running) return;
+        svc.pendingMaya = card + "-" + ctx;
+        mayaProc.stopping = false;
+        mayaProc.running = true;
+        const want = svc.pendingMaya;
+        svc.services = svc.services.map(s =>
+            s.group === "maya"
+                ? Object.assign({}, s, { state: s.variant === want ? "starting" : "stopped", health: "-" })
+                : s);
+    }
+    function stopMaya() {
+        if (mayaProc.running) return;
+        svc.pendingMaya = "off";
+        mayaProc.stopping = true;
+        mayaProc.running = true;
+        svc.services = svc.services.map(s =>
+            s.group === "maya"
+                ? Object.assign({}, s, { state: "stopped", health: "-" })
+                : s);
+    }
+    Process {
+        id: mayaProc
+        property bool stopping: false
+        command: [(svc.pluginApi ? svc.pluginApi.pluginDir : "") + "/bin/ai-lab",
+                  "maya",
+                  mayaProc.stopping ? "off" : svc.pendingMaya.split("-")[0],
+                  mayaProc.stopping ? "" : svc.pendingMaya.split("-")[1]]
+        onExited: (code) => {
+            if (code !== 0) svc.lastError = "maya " + (mayaProc.stopping ? "off" : svc.pendingMaya)
+                                 + " failed (exit " + code + ")";
+            svc.refresh();
+        }
+    }
+
     readonly property int runningCount: {
         let n = (strataLive ? 1 : 0) + (coderLive ? 1 : 0) + (llamaLive.length > 0 ? 1 : 0)
-              + (doclingLive ? 1 : 0);
+              + (doclingLive ? 1 : 0) + (mayaLive ? 1 : 0);
         for (const s of plainServices) if (s.state === "running") n += 1;
         return n;
     }
@@ -169,6 +220,7 @@ Item {
         plainServices.length + (strataVariants.length > 0 ? 1 : 0) + (coder ? 1 : 0)
         + (llamaVariants.length > 0 ? 1 : 0)
         + (doclingVariants.length > 0 ? 1 : 0)
+        + (mayaVariants.length > 0 ? 1 : 0)
 
     readonly property int pollMs: {
         const sec = svc.settings ? (svc.settings.pollSec ?? 10) : 10;
@@ -307,9 +359,10 @@ Item {
             const stops = [], starts = [];
             for (const line of previewProc.out.split("\n")) {
                 const m = line.match(/would (stop|start): (\S+)/);
-                // "strata-4070ti-1m" -> "4070ti-1m", "strata-coder-524k" -> "coder-524k":
-                // the line sits under the STRATA controls, and must fit one row.
-                if (m) (m[1] === "stop" ? stops : starts).push(m[2].replace(/^strata-/, ""));
+                // "strata-4070ti-1m" -> "4070ti-1m", "strata-coder-524k" -> "coder-524k",
+                // "maya-both-1024" -> "both-1024": the line sits under the group's
+                // controls, and must fit one row.
+                if (m) (m[1] === "stop" ? stops : starts).push(m[2].replace(/^(strata|maya)-/, ""));
             }
             previewProc.out = "";
             const parts = [];
