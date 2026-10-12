@@ -36,6 +36,7 @@ GPU rules when they do.
 | Service (unit) | Port | Card | Auth | Description |
 |---|---|---|---|---|
 | `strata-5090` / `-4070ti` / `-both` | `11434` | per variant | API key | Strata (Qwen) OpenAI-compatible API, one variant at a time |
+| `maya-5090-256` / `-512` / `-1024`, `maya-both-256` / `-512` / `-1024` | `11440` | per variant (exclusive) | none by default | Project Maya (GLM-5.3-Flash) dashboard + OpenAI/Anthropic API, one variant at a time |
 | `llama-cpp-5090` | `11435` | 5090 | API key | llama.cpp router, 262K context default |
 | `llama-cpp-4070ti` | `11436` | 4070 Ti | API key | llama.cpp router, 65K context default |
 | `llama-cpp-both` | `11438` | both (exclusive) | API key | llama.cpp router, layer split over both cards |
@@ -214,6 +215,44 @@ CDI spec is `/var/run/cdi/nvidia.yaml`, regenerated every boot by
 /dev/nvidiaN minors reshuffle, which is why the other services pin with
 `CUDA_VISIBLE_DEVICES=<uuid>` instead.
 
+### Project Maya: GPU variants and context sizes
+
+Maya (GLM-5.3-Flash, the Project Maya quant family) runs as one variant at a
+time on port 11440 with the container name `systemd-maya`. A card and a
+context make the variant; every variant is fully exclusive — starting any
+maya stops every strata instance (and vice versa), because Maya pins nearly
+all free RAM (~70 GB) for its expert tier and fills the card(s) it runs on.
+
+| variant | GPU(s) | context | pack |
+|---|---|---|---|
+| `maya-5090-256`, `-512`, `-1024` | RTX 5090 32 GB | 256K / 512K / 1M | Maya-S-v2 IQ2_XXS |
+| `maya-both-256`, `-512`, `-1024` | 5090 + 4070 Ti (layer split) | 256K / 512K / 1M | Maya-S24 |
+
+There is no 4070 Ti variant: the S-packs' working set (~43 GB) does not fit
+12 GB. Measured on this box (v1.1.2): maya-both S24 30-37 tok/s, expert cache
+67-70%; maya-5090 S-v2 ~29 tok/s. S24 keeps ~1.5 GB less on-GPU, so the 5090
+alone holds more experts; at 1M the S24 split needs the 4070 Ti's ~11.5 GB.
+
+`./scripts/install-maya.sh` writes the per-context configs
+(`~/src/project-maya/maya-maya-<variant>.json`, copies of the installed base
+configs with only `--max-context` patched) and renders the units with the GPU
+UUIDs. Nothing starts at boot. Switch with the AI Lab bar widget or:
+
+```bash
+./scripts/ai-lab maya 512           # the 5090 at 512K (S-v2)
+./scripts/ai-lab maya both 1024     # both cards at 1M (S24)
+./scripts/ai-lab maya off           # stop the group
+./scripts/ai-lab maya               # prints the live variant, e.g. both-1024
+```
+
+The units set `StopTimeout=120`: Maya saves its sessions on stop (a 164K-token
+conversation takes ~15-30 s), and podman's 10 s default SIGTERM window would
+end every switch in SIGKILL (exit 137, unit "failed"). The engine binary is
+compiled inside the `localhost/maya-runtime:latest` container from the
+bind-mounted `~/src/project-maya` checkout (`./setup.sh --setup --rebuild`
+there); after a `git pull` in that repo, rebuild in-container and the next
+variant start picks it up.
+
 ### GPU rules
 
 Strata has priority: it is the only service that owns a card. `ai-lab
@@ -226,6 +265,7 @@ start|stop|toggle|strata` and the bar widget go through
 | llama-cpp-5090 | 5090 |
 | llama-cpp-4070ti, rizzo | 4070 Ti |
 | llama-cpp-both (exclusive) | both (layer split, 5090 main) |
+| maya-* (exclusive) | 5090 or both; any maya start stops every strata instance and vice versa |
 | comfyui (`comfyui-5090` / `comfyui-4070ti`) | the card strata is NOT on (strata off: 4070 Ti) |
 | docling-4070ti | 4070 Ti |
 

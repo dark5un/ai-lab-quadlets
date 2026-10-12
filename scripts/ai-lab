@@ -16,6 +16,9 @@
 #                                     (strata-coder on the 4070 Ti, beside a 5090 variant)
 #   ai-lab docling [cpu|4070ti|off]   live docling variant, or switch
 #                                     docling-serve (CPU or the 4070 Ti)
+#   ai-lab maya [256|512|1024|5090 [ctx]|both [ctx]|off]
+#                                     live Project Maya variant, or switch it
+#                                     (port 11440; fully exclusive vs strata)
 #   ai-lab strata duo [5090-VARIANT] [128k|256k|524k|1m]  a 5090 variant + the coder
 #                                     (Coder on the 4070 Ti, :11439) side by side
 #
@@ -211,6 +214,47 @@ cmd_docling() {  # docling [cpu|4070ti|off] [--dry-run]
     exit 1
 }
 
+# maya: 256|512|1024 -> the 5090 variant (variant 5090-<ctx>, S-v2 pack); "both"
+# or "5090 [ctx]" -> that card explicitly. All variants are exclusive: the
+# arbiter stops every strata instance (and every other GPU service) first,
+# and Conflicts= in the units is the backstop.
+cmd_maya() {  # maya [256|512|1024|5090 [256|512|1024]|both [256|512|1024]] [--dry-run] | maya off
+    local want="${1:-}" card ctx="" name unit variant dry=""
+    # the dry-run flag sits at any later position (both wants take a context too)
+    local a
+    for a in "${@:2}"; do
+        case "$a" in --dry-run) dry="--dry-run" ;; 256|512|1024) ctx="$a" ;; esac
+    done
+    if [ -z "$want" ]; then  # report the live variant ("both-1024", "5090-512", "off")
+        local live=off
+        while IFS=$'\t' read -r name unit variant; do
+            [ "$(svc_state "$unit")" = running ] && { live="$variant"; break; }
+        done < <(group_members maya)
+        echo "$live"
+        return
+    fi
+    case "$want" in
+        off)
+            arbiter stop maya $dry
+            return ;;
+        both|5090)
+            card="$want" ;;
+        256|512|1024)
+            card=5090; ctx="$want" ;;
+        *)
+            echo "ai-lab: unknown maya target '$want' (256|512|1024|5090 [ctx]|both [ctx]|off)" >&2; exit 1 ;;
+    esac
+    [ -z "$ctx" ] && ctx=1024   # the default context (the running S24 default)
+    while IFS=$'\t' read -r name unit variant; do
+        if [ "$variant" = "$card-$ctx" ]; then
+            arbiter start "$name" $dry
+            return
+        fi
+    done < <(group_members maya)
+    echo "ai-lab: unknown maya variant '$card-$ctx' ($(group_members maya | cut -f3 | tr '\n' '|')|off)" >&2
+    exit 1
+}
+
 cmd_ports() {
     python3 -c "
 import json
@@ -274,5 +318,6 @@ case "${1:-status}" in
     strata)  shift; cmd_strata "$@" ;;
     coder)   shift; cmd_coder "$@" ;;
     docling) shift; cmd_docling "$@" ;;
-    *) echo "usage: ai-lab status [--json] | ports | url <name> | info [name] | start|stop|toggle <name> [--dry-run] | restart <name> | strata [5090|5090-524k|5090-1m|4070ti|4070ti-524k|4070ti-1m|both|duo [5090-variant] [256k|524k|1m]|off] [--dry-run] | coder [128k|256k|524k|1m|off] [--dry-run] | docling [cpu|4070ti|off] [--dry-run]" >&2; exit 1 ;;
+    maya)    shift; cmd_maya "$@" ;;
+    *) echo "usage: ai-lab status [--json] | ports | url <name> | info [name] | start|stop|toggle <name> [--dry-run] | restart <name> | strata [5090|5090-524k|5090-1m|4070ti|4070ti-524k|4070ti-1m|both|duo [5090-variant] [256k|524k|1m]|off] [--dry-run] | coder [128k|256k|524k|1m|off] [--dry-run] | docling [cpu|4070ti|off] [--dry-run] | maya [256|512|1024|both [256|512|1024]|off] [--dry-run]" >&2; exit 1 ;;
 esac

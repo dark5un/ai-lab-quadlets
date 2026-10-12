@@ -104,6 +104,15 @@ for svc in llama-cpp-5090 llama-cpp-4070ti llama-cpp-both sketchlab grafana; do 
 say "3/6 strata (scripts/install-strata.sh)"
 AI_LAB_NO_RELOAD=1 "$ROOT/scripts/install-strata.sh" | sed 's/^/  /'
 
+# Project Maya: units + per-context configs, only when the maya checkout with
+# its installed base configs is here (maya setup is run by hand; see README).
+if [ -f "$HOME/src/project-maya/maya-maya-s24.json" ] && [ -f "$HOME/src/project-maya/maya-maya-s-v2-iq2_xxs.json" ]; then
+    say "3/6 maya (scripts/install-maya.sh)"
+    "$ROOT/scripts/install-maya.sh" | sed 's/^/  /'
+else
+    echo "  maya: skipped (no ~/src/project-maya base configs; run maya setup first, then scripts/install-maya.sh)"
+fi
+
 # Managed lines, rewritten on every run from the live keys (values never printed).
 set_kv() {  # set_kv <file> <KEY> <value>
     python3 - "$@" <<'EOF'
