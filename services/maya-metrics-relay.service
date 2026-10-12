@@ -1,0 +1,14 @@
+# maya-metrics-relay: turns Project Maya's JSON /metrics (127.0.0.1:11440)
+# into text format for node-exporter's textfile collector. Maya serves JSON
+# only; Prometheus needs text, so this relay runs every 15 s. It holds no GPU
+# and talks to no model control plane: a pure read. When maya is down the
+# relay removes maya.prom, so the series go stale instead of frozen.
+
+[Unit]
+Description=Project Maya metrics relay (JSON /metrics -> textfile)
+# No maya unit dependency: the relay must never start a model. It reads
+# 127.0.0.1:11440 when maya happens to be up and cleans up when it is not.
+
+[Service]
+Type=oneshot
+ExecStart=%h/workspace/github.com/dark5un/ai-lab-quadlets/scripts/maya-metrics-relay.py

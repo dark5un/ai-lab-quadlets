@@ -1,0 +1,13 @@
+# 15 s cadence: Prometheus scrapes node-exporter every 30 s, so the relay
+# must be fresher than the scrape. OnBootSec=15s so a maya that starts at
+# boot is picked up immediately.
+[Unit]
+Description=Run the Project Maya metrics relay every 15 s
+
+[Timer]
+OnBootSec=15s
+OnUnitActiveSec=15s
+AccuracySec=1s
+
+[Install]
+WantedBy=default.target

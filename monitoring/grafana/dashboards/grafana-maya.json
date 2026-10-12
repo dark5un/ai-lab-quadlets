@@ -1,0 +1,428 @@
+{
+ "title": "Project Maya (GLM-5.3-Flash)",
+ "uid": "maya-serving",
+ "tags": [
+  "maya",
+  "llm",
+  "glm"
+ ],
+ "timezone": "",
+ "schemaVersion": 39,
+ "version": 1,
+ "refresh": "30s",
+ "time": {
+  "from": "now-6h",
+  "to": "now"
+ },
+ "editable": true,
+ "templating": {
+  "list": []
+ },
+ "panels": [
+  {
+   "type": "row",
+   "title": "Maya serving",
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 0
+   },
+   "id": 2,
+   "panels": []
+  },
+  {
+   "type": "stat",
+   "title": "Up",
+   "gridPos": {
+    "h": 4,
+    "w": 3,
+    "x": 0,
+    "y": 1
+   },
+   "id": 3,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max(maya:up{job=\"node\"})",
+     "legendFormat": ""
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "type": "stat",
+   "title": "Context",
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 3,
+    "y": 1
+   },
+   "id": 4,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max(maya:engine_max_context{job=\"node\"})",
+     "legendFormat": ""
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "short"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "type": "stat",
+   "title": "State",
+   "gridPos": {
+    "h": 4,
+    "w": 4,
+    "x": 7,
+    "y": 1
+   },
+   "id": 5,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "maya:live_state{job=\"node\"}",
+     "legendFormat": "{{state}}"
+    }
+   ],
+   "options": {
+    "reduceOptions": {
+     "calcs": [
+      "lastNotNull"
+     ]
+    }
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Decode tok/s",
+   "gridPos": {
+    "h": 4,
+    "w": 7,
+    "x": 11,
+    "y": 1
+   },
+   "id": 6,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max(maya:tier_tok_s{job=\"node\"})",
+     "legendFormat": "tier"
+    },
+    {
+     "refId": "B",
+     "expr": "max(maya:live_tok_s{job=\"node\"})",
+     "legendFormat": "live"
+    }
+   ]
+  },
+  {
+   "type": "timeseries",
+   "title": "Expert VRAM hit",
+   "gridPos": {
+    "h": 4,
+    "w": 6,
+    "x": 18,
+    "y": 1
+   },
+   "id": 7,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max(maya:tier_vram_hit{job=\"node\"})",
+     "legendFormat": "hit ratio"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percentunit"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "type": "row",
+   "title": "Experts & cache",
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 5
+   },
+   "id": 8,
+   "panels": []
+  },
+  {
+   "type": "timeseries",
+   "title": "Experts fetched from RAM / token",
+   "gridPos": {
+    "h": 7,
+    "w": 12,
+    "x": 0,
+    "y": 6
+   },
+   "id": 9,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max(maya:tier_ram_fetch{job=\"node\"})",
+     "legendFormat": "ram fetch"
+    }
+   ]
+  },
+  {
+   "type": "timeseries",
+   "title": "GPU memory (both cards)",
+   "gridPos": {
+    "h": 7,
+    "w": 12,
+    "x": 12,
+    "y": 6
+   },
+   "id": 10,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max(maya:gpu_mem_used_bytes{job=\"node\"})",
+     "legendFormat": "used"
+    },
+    {
+     "refId": "B",
+     "expr": "max(maya:gpu_mem_total_bytes{job=\"node\"})",
+     "legendFormat": "total"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "bytes"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "type": "row",
+   "title": "Throughput (counters)",
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 13
+   },
+   "id": 11,
+   "panels": []
+  },
+  {
+   "type": "timeseries",
+   "title": "Requests / min",
+   "gridPos": {
+    "h": 7,
+    "w": 8,
+    "x": 0,
+    "y": 14
+   },
+   "id": 12,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(rate(maya:totals_requests{job=\"node\"}[5m])) * 60",
+     "legendFormat": "req/min"
+    }
+   ]
+  },
+  {
+   "type": "timeseries",
+   "title": "Prompt tokens / s",
+   "gridPos": {
+    "h": 7,
+    "w": 8,
+    "x": 8,
+    "y": 14
+   },
+   "id": 13,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(rate(maya:totals_prompt_tokens{job=\"node\"}[5m]))",
+     "legendFormat": "prompt tok/s"
+    }
+   ]
+  },
+  {
+   "type": "timeseries",
+   "title": "Output tokens / s",
+   "gridPos": {
+    "h": 7,
+    "w": 8,
+    "x": 16,
+    "y": 14
+   },
+   "id": 14,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(rate(maya:totals_output_tokens{job=\"node\"}[5m]))",
+     "legendFormat": "output tok/s"
+    }
+   ]
+  },
+  {
+   "type": "row",
+   "title": "Machine (as Maya sees it)",
+   "collapsed": false,
+   "gridPos": {
+    "h": 1,
+    "w": 24,
+    "x": 0,
+    "y": 21
+   },
+   "id": 15,
+   "panels": []
+  },
+  {
+   "type": "timeseries",
+   "title": "GPU util %",
+   "gridPos": {
+    "h": 7,
+    "w": 8,
+    "x": 0,
+    "y": 22
+   },
+   "id": 16,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max(maya:gpu_util_percent{job=\"node\"})",
+     "legendFormat": "util"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "percent"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "RAM used",
+   "gridPos": {
+    "h": 7,
+    "w": 8,
+    "x": 8,
+    "y": 22
+   },
+   "id": 17,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "max(maya:ram_used_bytes{job=\"node\"})",
+     "legendFormat": "used"
+    },
+    {
+     "refId": "B",
+     "expr": "max(maya:ram_total_bytes{job=\"node\"})",
+     "legendFormat": "total"
+    }
+   ],
+   "fieldConfig": {
+    "defaults": {
+     "unit": "bytes"
+    },
+    "overrides": []
+   }
+  },
+  {
+   "type": "timeseries",
+   "title": "Prefill vs decode seconds",
+   "gridPos": {
+    "h": 7,
+    "w": 8,
+    "x": 16,
+    "y": 22
+   },
+   "id": 18,
+   "datasource": {
+    "type": "prometheus",
+    "uid": "prometheus"
+   },
+   "targets": [
+    {
+     "refId": "A",
+     "expr": "sum(rate(maya:totals_prompt_ms{job=\"node\"}[5m])) / 1000",
+     "legendFormat": "prefill s/s"
+    },
+    {
+     "refId": "B",
+     "expr": "sum(rate(maya:totals_decode_ms{job=\"node\"}[5m])) / 1000",
+     "legendFormat": "decode s/s"
+    }
+   ]
+  }
+ ],
+ "annotations": {
+  "list": []
+ },
+ "links": []
+}

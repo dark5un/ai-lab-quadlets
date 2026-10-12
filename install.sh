@@ -208,6 +208,12 @@ systemctl --user reset-failed podman-user-wait-network-online.service >/dev/null
 systemctl --user enable --now podman.socket >/dev/null 2>&1 || true
 # Monitoring configs are generated from services.json (registry = source of truth).
 python3 "$ROOT/scripts/render-prometheus.py" | sed 's/^/  /'
+# Project Maya serves JSON-only /metrics: the relay turns it into text for
+# node-exporter's textfile collector (a pure read; it never starts a model).
+install -m 644 "$ROOT/services/maya-metrics-relay.service" "$HOME/.config/systemd/user/"
+install -m 644 "$ROOT/services/maya-metrics-relay.timer" "$HOME/.config/systemd/user/"
+systemctl --user enable --now maya-metrics-relay.timer >/dev/null 2>&1 || true
+echo "  ✓ maya-metrics-relay.timer (15 s, on demand with maya)"
 # Boot tier (plan D1): monitoring units except grafana enable at boot, plus
 # the default strata variant (strata-5090-1m).
 for u in prometheus node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit strata-5090-1m; do
