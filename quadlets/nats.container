@@ -1,0 +1,28 @@
+# NATS (duplex-bus event bus, research E5). Adopted 2026-10-13 from
+# ~/workspace/research/duplex-bus/quadlets/nats.container (plan
+# ~/Documents/plans/duplex-bus-experiments-plan.md). New service = user
+# approval gate: NOT started until the user runs `ai-lab start nats`.
+# JetStream gives the durable, replayable event log the plan needs.
+# Loopback-only (127.0.0.1:4222 client, :8222 monitoring). No GPU.
+
+[Unit]
+Description=NATS (duplex-bus event bus, research)
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-nats
+Image=docker.io/library/nats:2.10-alpine
+Network=ai.network
+# monitoring port first: the registry health check hits host_port + /healthz
+PublishPort=127.0.0.1:8222:8222/tcp
+PublishPort=127.0.0.1:4222:4222/tcp
+Volume=%h/.local/share/nats:/data:z
+# Exec appends to the image entrypoint (nats-server): flags only.
+Exec=-js -sd /data -m 8222
+
+[Service]
+SuccessExitStatus=143
+Restart=on-failure
+StopTimeout=10
+# No install section by design: on-demand only (ai-lab convention).

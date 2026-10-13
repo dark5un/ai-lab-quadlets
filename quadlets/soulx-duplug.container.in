@@ -1,0 +1,39 @@
+# SoulX-Duplug streaming turn controller (duplex-bus E1). Adopted 2026-10-13
+# from ~/workspace/research/duplex-bus/quadlets/. New service = user approval
+# gate: NOT started until the user runs `ai-lab start soulx-duplug`.
+# Weights: ~/.local/share/ai-lab/models/soulx-duplug (pre-seeded, local-path
+# loading verified in reviews/soulx-duplug.md). Cascade ASR patched to
+# SenseVoiceSmall on CPU (src/SoulX-Duplug model/asr.py, service/model.py,
+# config/config.yaml) so the GPU footprint stays ~5.5-6.5 GB fp32 and
+# coexists with whisper-vulkan (1.8 GB) + piper on the 12 GB 4070 Ti.
+# Image built locally: podman build -t localhost/soulx-duplug:latest
+# src/SoulX-Duplug (no official image). Conflicts= the other heavyweight
+# duplex units; one at a time.
+
+[Unit]
+Description=SoulX-Duplug streaming turn controller (duplex-bus E1)
+Wants=ai-network.service
+After=ai-network.service
+Conflicts=personaplex.service minicpmo-omni.service strata-4070ti.service strata-4070ti-524k.service strata-4070ti-1m.service strata-both.service strata-coder.service strata-coder-128k.service strata-coder-524k.service strata-coder-1m.service comfyui-4070ti.service llama-cpp-4070ti.service llama-cpp-both.service rizzo.service docling-4070ti.service
+
+[Container]
+ContainerName=systemd-soulx-duplug
+Image=localhost/soulx-duplug:latest
+Network=ai.network
+PublishPort=127.0.0.1:8000:8000/tcp
+Volume=%h/.local/share/ai-lab/models/soulx-duplug/pretrained_models:/app/pretrained_models:ro,Z
+Volume=%h/.cache/modelscope:/home/containeruser/.cache/modelscope:z
+AddDevice=nvidia.com/gpu=all
+Environment=CUDA_VISIBLE_DEVICES=__GPU_4070TI_UUID__
+SecurityLabelDisable=true
+UserNS=keep-id
+PodmanArgs=--user=root --security-opt label=disable
+Environment=MODELSCOPE_CACHE=/home/containeruser/.cache/modelscope
+Environment=HF_HUB_OFFLINE=1
+Environment=TRANSFORMERS_OFFLINE=1
+
+[Service]
+SuccessExitStatus=143
+Restart=on-failure
+StopTimeout=15
+# No install section by design: on-demand only (ai-lab convention).

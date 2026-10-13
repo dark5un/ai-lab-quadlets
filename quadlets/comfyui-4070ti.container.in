@@ -11,7 +11,7 @@
 Description=ComfyUI (RTX 4070 Ti)
 Wants=ai-network.service
 After=ai-network.service
-Conflicts=comfyui-5090.service
+Conflicts=comfyui-5090.service soulx-duplug.service personaplex.service minicpmo-omni.service
 
 [Container]
 ContainerName=systemd-comfyui

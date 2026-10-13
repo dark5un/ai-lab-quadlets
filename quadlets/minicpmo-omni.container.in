@@ -1,0 +1,43 @@
+# MiniCPM-o 4.5 llama.cpp-omni full-duplex server (duplex-bus E3). Adopted
+# 2026-10-13 from ~/workspace/research/duplex-bus/quadlets/. New service =
+# user approval gate: NOT started until the user runs `ai-lab start
+# minicpmo-omni`.
+# Binary built on host in src/llama.cpp-omni/build (cmake 4.4.4, CUDA 12.4;
+# duplex sanity PASS on the 4070 Ti 2026-10-12, ~43 ms/chunk). Components
+# AUTO-DETECT from the -m path's sibling dirs (audio/, tts/, vision/,
+# token2wav-gguf/). VRAM ~10-10.5 GB: whisper-vulkan + piper must be paused
+# (user decision, model-service rule) — the arbiter stops strata/coder on the
+# card; voxtype is not a registry service so Conflicts= cannot cover it.
+# WARNING (reviews/minicpm-o.md): the omni server binds 0.0.0.0 hardcoded —
+# loopback-only PublishPort + internal ai.network is the containment.
+
+[Unit]
+Description=MiniCPM-o 4.5 llama.cpp-omni full-duplex server (duplex-bus E3)
+Wants=ai-network.service
+After=ai-network.service
+Conflicts=soulx-duplug.service personaplex.service strata-4070ti.service strata-4070ti-524k.service strata-4070ti-1m.service strata-both.service strata-coder.service strata-coder-128k.service strata-coder-524k.service strata-coder-1m.service comfyui-4070ti.service llama-cpp-4070ti.service llama-cpp-both.service rizzo.service docling-4070ti.service
+
+[Container]
+ContainerName=systemd-minicpmo-omni
+# Host-built binaries mounted read-only; CUDA runtime comes from the image.
+Image=docker.io/nvidia/cuda:12.4.1-runtime-ubuntu22.04
+Network=ai.network
+PublishPort=127.0.0.1:9060:9060/tcp
+Volume=%h/workspace/research/duplex-bus/src/llama.cpp-omni/build:/app/build:ro,Z
+Volume=%h/.local/share/ai-lab/models/minicpmo-4_5-gguf:/models:ro,Z
+AddDevice=nvidia.com/gpu=all
+Environment=CUDA_VISIBLE_DEVICES=__GPU_4070TI_UUID__
+SecurityLabelDisable=true
+UserNS=keep-id
+Environment=LD_LIBRARY_PATH=/app/build/bin
+Entrypoint=/app/build/bin/llama-omni-server
+Exec=-m /models/MiniCPM-o-4_5-Q4_K_M.gguf -ngl 99 --ctx-size 8192 \
+     --repeat-penalty 1.05 --temp 0.7 --port 9060
+# pipecat seam: WS /backend, session.init mode="full_duplex", base64 PCM
+# audio_delta events (ws_handler.cpp:722-747) — NOT OpenAI-compat.
+
+[Service]
+SuccessExitStatus=143
+Restart=on-failure
+StopTimeout=15
+# No install section by design: on-demand only (ai-lab convention).

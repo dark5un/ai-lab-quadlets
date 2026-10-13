@@ -1,0 +1,47 @@
+# PersonaPlex 7B 4-bit full-duplex server (duplex-bus E2). Adopted 2026-10-13
+# from ~/workspace/research/duplex-bus/quadlets/. New service = user approval
+# gate: NOT started until the user runs `ai-lab start personaplex`.
+# Path: community quant (reviews/personaplex-quant-path.md) — cookertron fork
+# code + brianmatzelle pre-quantized model_bnb_4bit.pt (~8 GB VRAM on the
+# 4070 Ti). Image built + import-validated locally:
+#   podman build -t localhost/personaplex-quant:latest src/cookertron-ppx
+# (three fork defects fixed in our Dockerfile; see STATUS.md).
+# No certs: --ssl omitted -> plain WS on loopback only. HF_HUB_OFFLINE=1 kills
+# the fork's one unconditional counter-fetch.
+
+[Unit]
+Description=PersonaPlex 7B 4-bit full-duplex server (duplex-bus E2)
+Wants=ai-network.service
+After=ai-network.service
+Conflicts=soulx-duplug.service minicpmo-omni.service strata-4070ti.service strata-4070ti-524k.service strata-4070ti-1m.service strata-both.service strata-coder.service strata-coder-128k.service strata-coder-524k.service strata-coder-1m.service comfyui-4070ti.service llama-cpp-4070ti.service llama-cpp-both.service rizzo.service docling-4070ti.service
+
+[Container]
+ContainerName=systemd-personaplex
+Image=localhost/personaplex-quant:latest
+Network=ai.network
+PublishPort=127.0.0.1:8998:8998/tcp
+Volume=%h/.local/share/ai-lab/models/personaplex-4bit:/models/ppx:ro,Z
+Volume=%h/.local/share/ai-lab/models/moshiko-bf16:/models/moshiko:ro,Z
+AddDevice=nvidia.com/gpu=all
+Environment=CUDA_VISIBLE_DEVICES=__GPU_4070TI_UUID__
+SecurityLabelDisable=true
+UserNS=keep-id
+Environment=HF_HUB_OFFLINE=1
+Entrypoint=/app/moshi/.venv/bin/python
+# -m moshi.server + local weight paths (mimi checkpoint + spm tokenizer live
+# in the moshiko-bf16 repo):
+Exec=-m moshi.server --moshi-weight /models/ppx/model_bnb_4bit.pt --quantize 4bit \
+     --mimi-weight /models/moshiko/tokenizer-e351c8d8-checkpoint125.safetensors \
+     --tokenizer /models/moshiko/tokenizer_spm_32k_3.model \
+     --voice-prompt-dir /models/ppx/voices \
+     --static none --host 0.0.0.0 --port 8998
+# client connects: ws://127.0.0.1:8998/api/chat?text_prompt=...&voice_prompt=pxvoice.wav
+# (voice prompt WAV synthesized locally from piper ryan-high —
+#  testdata/make_voice_prompt.py; lives in models/personaplex-4bit/voices/)
+
+[Service]
+SuccessExitStatus=143
+Restart=on-failure
+StopTimeout=15
+TimeoutStartSec=300
+# No install section by design: on-demand only (ai-lab convention).

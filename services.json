@@ -636,6 +636,65 @@
       "group": "monitoring",
       "image_digest": "docker.io/fluent/fluent-bit@sha256:6806769c10acf11b41d14083b3101a24433b4ca113a1ab7a6b1a1b7cad86a7e8",
       "note": "reads px's user journal (read-only) and pushes to victorialogs; MUST NOT use --userns=keep-id (the journal ACL grants px, and container root maps to px; keep-id makes it nobody and the input silently reads 0 records); 4.2+ required (4.0 cannot read this ZSTD journal, systemd 262); no host port"
+    },
+    {
+      "name": "nats",
+      "unit": "nats.service",
+      "container": "systemd-nats",
+      "host_port": 8222,
+      "container_port": 8222,
+      "bind": "127.0.0.1",
+      "health": "/healthz",
+      "tier": "opt-in",
+      "image": "docker.io/library/nats:2.10-alpine",
+      "boot": false,
+      "auth": "none",
+      "note": "duplex-bus E5 event bus (JetStream on, /data volume); client port 127.0.0.1:4222; research interlude, see ~/Documents/plans/duplex-bus-experiments-plan.md"
+    },
+    {
+      "name": "soulx-duplug",
+      "unit": "soulx-duplug.service",
+      "container": "systemd-soulx-duplug",
+      "host_port": 8000,
+      "container_port": 8000,
+      "bind": "127.0.0.1",
+      "health": "/",
+      "tier": "opt-in",
+      "image": "localhost/soulx-duplug:latest",
+      "boot": false,
+      "auth": "none",
+      "gpu": "4070ti",
+      "note": "duplex-bus E1 turn-controller WS (ws://127.0.0.1:8000/turn); ASR patched to SenseVoice CPU so it coexists with voxtype; ~5.5-6.5 GB VRAM fp32; built from ~/workspace/research/duplex-bus/src/SoulX-Duplug"
+    },
+    {
+      "name": "personaplex",
+      "unit": "personaplex.service",
+      "container": "systemd-personaplex",
+      "host_port": 8998,
+      "container_port": 8998,
+      "bind": "127.0.0.1",
+      "health": "/",
+      "tier": "opt-in",
+      "image": "localhost/personaplex-quant:latest",
+      "boot": false,
+      "auth": "none",
+      "gpu": "4070ti",
+      "note": "duplex-bus E2 PersonaPlex 7B bnb-4bit full-duplex WS (ws://127.0.0.1:8998/api/chat); community quant path (cookertron fork, patched build); ~8 GB VRAM, pause voxtype if tight"
+    },
+    {
+      "name": "minicpmo-omni",
+      "unit": "minicpmo-omni.service",
+      "container": "systemd-minicpmo-omni",
+      "host_port": 9060,
+      "container_port": 9060,
+      "bind": "127.0.0.1",
+      "health": "/",
+      "tier": "opt-in",
+      "image": "docker.io/nvidia/cuda:12.4.1-runtime-ubuntu22.04",
+      "boot": false,
+      "auth": "none",
+      "gpu": "4070ti",
+      "note": "duplex-bus E3 MiniCPM-o 4.5 llama.cpp-omni full-duplex WS (ws://127.0.0.1:9060/backend); host-built binary mounted; ~10-10.5 GB VRAM: pause voxtype first; server binds 0.0.0.0 inside the container - loopback PublishPort only"
     }
   ]
 }
