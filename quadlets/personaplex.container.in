@@ -54,6 +54,6 @@ Exec=-c "rm -f /app/moshi/.venv/lib/python3.12/site-packages/__editable__.moshi_
 [Service]
 SuccessExitStatus=143
 Restart=on-failure
-StopTimeout=15
+TimeoutStopSec=15
 TimeoutStartSec=300
 # No install section by design: on-demand only (ai-lab convention).

@@ -39,5 +39,5 @@ Exec=-m /models/MiniCPM-o-4_5-Q4_K_M.gguf -ngl 99 --ctx-size 8192 \
 [Service]
 SuccessExitStatus=143
 Restart=on-failure
-StopTimeout=15
+TimeoutStopSec=15
 # No install section by design: on-demand only (ai-lab convention).

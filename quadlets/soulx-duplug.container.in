@@ -35,5 +35,5 @@ Environment=TRANSFORMERS_OFFLINE=1
 [Service]
 SuccessExitStatus=143
 Restart=on-failure
-StopTimeout=15
+TimeoutStopSec=15
 # No install section by design: on-demand only (ai-lab convention).
