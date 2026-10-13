@@ -230,12 +230,17 @@ done
 # Batch slots last: after the derive, so 524K/1M configs (copied from the 256K
 # one) get their own value — 1 = no "parallel" key (slots at those windows cost
 # 6-12 GB pinned RAM each and the 12 GB card's VRAM is already full).
+# 2026-10-13 (user): 5090 variants run parallel 2 — the voice stack makes
+# strata a multi-client server now (conversation turns + captioner calls +
+# this agent's own session), so two decode slots instead of queueing.
 # 2026-10-10 (user): all non-coder variants run parallel 1 — one conversation
 # at a time, queue instead of slots. Coder variants keep their tuned values
 # (256K: 2, 128K: 4, 524K/1M: 1 — see plans/strata-coder-parallelism-plan.md).
-set_parallel "$DATA_DIR/config-5090" 1
-set_parallel "$DATA_DIR/config-5090-524k" 1
-set_parallel "$DATA_DIR/config-5090-1m" 1
+# NOTE: slots take VRAM from the expert cache; if the 1M variant's hit rate
+# collapses under load, drop -1m back to 1 (coder 256K parallel-4 lesson).
+set_parallel "$DATA_DIR/config-5090" 2
+set_parallel "$DATA_DIR/config-5090-524k" 2
+set_parallel "$DATA_DIR/config-5090-1m" 2
 set_parallel "$DATA_DIR/config-4070ti" 1
 set_parallel "$DATA_DIR/config-4070ti-524k" 1
 set_parallel "$DATA_DIR/config-4070ti-1m" 1
