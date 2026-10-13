@@ -21,7 +21,7 @@ ContainerName=systemd-soulx-duplug
 Image=localhost/soulx-duplug:latest
 Network=ai.network
 PublishPort=127.0.0.1:8000:8000/tcp
-Volume=%h/.local/share/ai-lab/models/soulx-duplug/pretrained_models:/app/pretrained_models:ro,Z
+Volume=%h/.local/share/ai-lab/models/soulx-duplug:/app/pretrained_models:ro,Z
 Volume=%h/.cache/modelscope:/home/containeruser/.cache/modelscope:z
 AddDevice=nvidia.com/gpu=all
 Environment=CUDA_VISIBLE_DEVICES=__GPU_4070TI_UUID__

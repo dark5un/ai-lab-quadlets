@@ -26,15 +26,27 @@ AddDevice=nvidia.com/gpu=all
 Environment=CUDA_VISIBLE_DEVICES=__GPU_4070TI_UUID__
 SecurityLabelDisable=true
 UserNS=keep-id
+# the fork's uv venv lives under /root (python symlink) -> run as root
+PodmanArgs=--user=root --security-opt label=disable
 Environment=HF_HUB_OFFLINE=1
-Entrypoint=/app/moshi/.venv/bin/python
-# -m moshi.server + local weight paths (mimi checkpoint + spm tokenizer live
-# in the moshiko-bf16 repo):
-Exec=-m moshi.server --moshi-weight /models/ppx/model_bnb_4bit.pt --quantize 4bit \
-     --mimi-weight /models/moshiko/tokenizer-e351c8d8-checkpoint125.safetensors \
-     --tokenizer /models/moshiko/tokenizer_spm_32k_3.model \
-     --voice-prompt-dir /models/ppx/voices \
-     --static none --host 0.0.0.0 --port 8998
+# DEFECT FOUND 2026-10-13 (live run): the cookertron fork's --quantize 4bit
+# path RE-QUANTIZES from floats and crashes on the pre-quantized checkpoint
+# (uint8 + quant_state keys). The brianmatzelle repo ships its own patched
+# moshi package (mounted at /models/ppx/moshi) with auto-detecting
+# pre-quantized loading (_load_prequantized_weights, loaders.py:383) and a
+# --quantize-4bit flag. Two shadowing traps to defeat so `import moshi`
+# resolves to it: (1) the fork's EDITABLE install (.pth meta-path finder) ->
+# removed at start; (2) WORKDIR=/app contains a `moshi/` dir that shadows
+# PYTHONPATH when cwd is on sys.path -> cd /tmp first.
+Entrypoint=/bin/bash
+Volume=%h/workspace/research/duplex-bus/src/ppx-moshi-patched:/models/ppx-patched:ro,Z
+# patched copy of the brianmatzelle moshi pkg (counter-fetch removed, see above)
+Environment=PYTHONPATH=/models/ppx-patched
+# warmup torch.compile needs a C compiler the runtime image lacks;
+# NO_TORCH_COMPILE is honored by the package's utils/compile.py:62.
+# Measure RTF with it; if too slow, bake gcc into the image instead.
+Environment=NO_TORCH_COMPILE=1
+Exec=-c "rm -f /app/moshi/.venv/lib/python3.12/site-packages/__editable__.moshi_personaplex-0.1.0.pth; cd /tmp && exec /app/moshi/.venv/bin/python -m moshi.server --moshi-weight /models/ppx/model_bnb_4bit.pt --quantize-4bit --mimi-weight /models/moshiko/tokenizer-e351c8d8-checkpoint125.safetensors --tokenizer /models/moshiko/tokenizer_spm_32k_3.model --voice-prompt-dir /models/ppx/voices --static none --host 0.0.0.0 --port 8998"
 # client connects: ws://127.0.0.1:8998/api/chat?text_prompt=...&voice_prompt=pxvoice.wav
 # (voice prompt WAV synthesized locally from piper ryan-high —
 #  testdata/make_voice_prompt.py; lives in models/personaplex-4bit/voices/)
