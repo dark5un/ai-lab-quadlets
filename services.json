@@ -690,7 +690,7 @@
       "bind": "127.0.0.1",
       "health": "/",
       "tier": "opt-in",
-      "image": "docker.io/nvidia/cuda:12.4.1-runtime-ubuntu22.04",
+      "image": "localhost/minicpmo-omni-runtime:latest",
       "boot": false,
       "auth": "none",
       "gpu": "4070ti",

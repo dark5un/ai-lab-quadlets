@@ -20,7 +20,7 @@ Conflicts=soulx-duplug.service personaplex.service strata-4070ti.service strata-
 [Container]
 ContainerName=systemd-minicpmo-omni
 # Host-built binaries mounted read-only; CUDA runtime comes from the image.
-Image=docker.io/nvidia/cuda:12.4.1-runtime-ubuntu22.04
+Image=localhost/minicpmo-omni-runtime:latest
 Network=ai.network
 PublishPort=127.0.0.1:9060:9060/tcp
 Volume=%h/workspace/research/duplex-bus/src/llama.cpp-omni/build:/app/build:ro,Z
