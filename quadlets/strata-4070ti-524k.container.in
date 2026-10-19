@@ -28,8 +28,11 @@ Network=ai.network
 # the numbering inside it; GPU=0 is that card.
 AddDevice=nvidia.com/gpu=__GPU_4070TI_UUID__
 SecurityLabelDisable=true
-# Shared settings + API key (FAMILY, MODEL, VISION, LOW_RAM, API_KEY).
+# Shared settings + API key (FAMILY, MODEL, VISION, API_KEY).
 EnvironmentFile=%h/.config/containers/config/strata/service.env
+Environment=PRESET=strata-4070ti-524k
+Environment=MODEL_PATH=/data/models
+Environment=PARALLEL=1
 # Per-variant settings. CONTEXT/KV only matter at the first setup, which
 # writes config-4070ti-524k/strata-<quant>.json; install-strata.sh derives it
 # from config-4070ti's 256K json (same model; context + YaRN args only).
@@ -63,6 +66,9 @@ Volume=%h/.local/share/strata/harness:/data/harness:Z
 # here — place project dirs into this tree to share them with a session.
 Volume=%h/.local/share/strata/workspaces:/data/workspaces:Z
 Volume=%h/.local/share/strata/config-4070ti-524k:/data/config:Z
+Volume=%h/.local/share/strata/state:/data/state:Z
+Volume=%h/.local/share/strata/install:/data/install:Z
+Volume=%h/.local/share/strata/home:/data/home:Z
 PublishPort=0.0.0.0:11434:8080/tcp
 
 [Service]

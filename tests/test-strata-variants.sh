@@ -72,13 +72,22 @@ EOF
     # 5090 variants run beside strata-coder: pinned, and context per variant.
     case "$variant" in
         5090*)
-            grep -qx 'Entrypoint=/usr/bin/taskset' "$f" && grep -qx 'Exec=-c __CPUS_MAIN__ ./docker-entrypoint.sh' "$f" \
+            grep -qx 'Entrypoint=/usr/bin/taskset' "$f" && grep -qx 'Exec=-c __CPUS_MAIN__ /opt/strata/entrypoint.sh run' "$f" \
                 || err "$name: not pinned to __CPUS_MAIN__"
             ;;
     esac
     # Context per variant: the suffix names it (none = 256K).
     case "$variant" in *-524k) ctx=524288 ;; *-1m) ctx=1048576 ;; *) ctx=262144 ;; esac
     grep -qx "Environment=CONTEXT=$ctx" "$f" || err "$name: CONTEXT is not $ctx"
+    # 0.2.0 launch interface: named preset per variant, old model files via
+    # MODEL_PATH, per-variant PARALLEL, and the state dirs persisted.
+    grep -qx "Environment=PRESET=$name" "$f" || err "$name: PRESET is not $name"
+    grep -qx 'Environment=MODEL_PATH=/data/models' "$f" || err "$name: MODEL_PATH missing"
+    case "$variant" in 5090*) par=2 ;; *) par=1 ;; esac
+    grep -qx "Environment=PARALLEL=$par" "$f" || err "$name: PARALLEL is not $par"
+    for d in state install home; do
+        grep -q "Volume=%h/.local/share/strata/$d:/data/$d:Z" "$f" || err "$name: /data/$d not persisted"
+    done
     case "$variant" in 4070ti*|both)
         for c in strata-coder strata-coder-128k strata-coder-524k strata-coder-1m; do
             [[ " $conflicts " == *" $c.service "* ]] || err "$name: Conflicts= lacks $c.service"
@@ -104,13 +113,21 @@ for m in "${coders[@]}"; do
     grep -qx 'ContainerName=systemd-strata-coder' "$f" || err "$name: ContainerName"
     grep -qx "PublishPort=0.0.0.0:$cport:8080/tcp" "$f" || err "$name: PublishPort != registry $cport"
     grep -qx 'AddDevice=nvidia.com/gpu=__GPU_4070TI_UUID__' "$f" || err "$name: device"
-    grep -qx 'Exec=-c __CPUS_CODER__ ./docker-entrypoint.sh' "$f" || err "$name: not pinned to __CPUS_CODER__"
+    grep -qx 'Exec=-c __CPUS_CODER__ /opt/strata/entrypoint.sh run' "$f" || err "$name: not pinned to __CPUS_CODER__"
     cfg="config-${variant}"
     grep -q "Volume=%h/.local/share/strata/$cfg:/data/config" "$f" || err "$name: config volume is not $cfg"
     grep -q "Volume=%h/.local/share/strata/workspaces:/data/workspaces:Z" "$f" || err "$name: workspaces mount missing"
     grep -qx 'Environment=STRATA_HARNESS_ROOTS=/data/workspaces' "$f" || err "$name: STRATA_HARNESS_ROOTS default missing"
     case "$variant" in *-128k) ctx=131072 ;; *-524k) ctx=524288 ;; *-1m) ctx=1048576 ;; *) ctx=262144 ;; esac
     grep -qx "Environment=CONTEXT=$ctx" "$f" || err "$name: CONTEXT is not $ctx"
+    grep -qx "Environment=PRESET=$name" "$f" || err "$name: PRESET is not $name"
+    grep -qx 'Environment=MODEL_PATH=/data/models' "$f" || err "$name: MODEL_PATH missing"
+    case "$variant" in *-128k) par=4 ;; *-524k|*-1m) par=1 ;; *) par=2 ;; esac
+    grep -qx "Environment=PARALLEL=$par" "$f" || err "$name: PARALLEL is not $par"
+    grep -qx 'Environment=STRATA_SET=pool-workers=7' "$f" || err "$name: pool-workers pin missing"
+    for d in state install home; do
+        grep -q "Volume=%h/.local/share/strata/$d:/data/$d:Z" "$f" || err "$name: /data/$d not persisted"
+    done
     grep -q '^\[Install\]' "$f" && err "$name: has [Install]"
     conflicts=$(sed -n 's/^Conflicts=//p' "$f")
     for u in strata-4070ti strata-4070ti-524k strata-4070ti-1m strata-both llama-cpp-4070ti rizzo comfyui-4070ti llama-cpp-both docling-4070ti; do

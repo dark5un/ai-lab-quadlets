@@ -25,6 +25,9 @@ Network=ai.network
 PublishPort=127.0.0.1:9060:9060/tcp
 Volume=%h/workspace/research/duplex-bus/src/llama.cpp-omni/build:/app/build:ro,Z
 Volume=%h/.local/share/ai-lab/models/minicpmo-4_5-gguf:/models:ro,Z
+# E3 duplex fixtures (28 audio+video frames) + writable output dir for decode
+Volume=%h/workspace/research/duplex-bus/src/llama.cpp-omni/tools/omni/assets:/app/assets:ro,Z
+Volume=%h/workspace/research/duplex-bus/testdata/e3_out:/app/output:z
 AddDevice=nvidia.com/gpu=all
 Environment=CUDA_VISIBLE_DEVICES=__GPU_4070TI_UUID__
 SecurityLabelDisable=true

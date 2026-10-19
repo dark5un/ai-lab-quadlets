@@ -32,11 +32,15 @@ SecurityLabelDisable=true
 # all but the last 8). Setup's --pool-workers (15 here) must stay below the
 # pinned core count: workers == cores halves decode (spin-waiting workers).
 Entrypoint=/usr/bin/taskset
-Exec=-c __CPUS_MAIN__ ./docker-entrypoint.sh
-# Shared settings + API key (FAMILY, MODEL, VISION, LOW_RAM, API_KEY).
+Exec=-c __CPUS_MAIN__ /opt/strata/entrypoint.sh run
+# Shared settings + API key (FAMILY, MODEL, VISION, API_KEY).
 EnvironmentFile=%h/.config/containers/config/strata/service.env
-# Per-variant settings. CONTEXT/KV only matter at the first setup, which
-# writes config-5090-524k/strata-iq3_s.json; delete that json to re-run setup.
+Environment=PRESET=strata-5090-524k
+Environment=MODEL_PATH=/data/models
+Environment=PARALLEL=2
+# Per-variant settings. The 0.2.0 image saves these choices as the preset
+# named in PRESET= (under /data/config = config-<v>); delete that preset to
+# re-run setup, or change a value here and it re-saves on the next start.
 Environment=GPU=0
 Environment=CONTEXT=524288
 Environment=KV=int8
@@ -63,6 +67,9 @@ Volume=%h/.local/share/strata/harness:/data/harness:Z
 # here — place project dirs into this tree to share them with a session.
 Volume=%h/.local/share/strata/workspaces:/data/workspaces:Z
 Volume=%h/.local/share/strata/config-5090-524k:/data/config:Z
+Volume=%h/.local/share/strata/state:/data/state:Z
+Volume=%h/.local/share/strata/install:/data/install:Z
+Volume=%h/.local/share/strata/home:/data/home:Z
 PublishPort=0.0.0.0:11434:8080/tcp
 
 [Service]
