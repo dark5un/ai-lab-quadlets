@@ -82,10 +82,11 @@ EOF
     # 0.2.0 launch interface: named preset per variant, old model files via
     # MODEL_PATH, per-variant PARALLEL, and the state dirs persisted.
     grep -qx "Environment=PRESET=$name" "$f" || err "$name: PRESET is not $name"
-    grep -qx 'Environment=MODEL_PATH=/data/models' "$f" || err "$name: MODEL_PATH missing"
+    case "$variant" in 5090*) quant=IQ3_S ;; *) quant=IQ3_XXS ;; esac
+    grep -qx "Environment=MODEL_PATH=/data/models/$quant" "$f" || err "$name: MODEL_PATH is not /data/models/$quant"
     case "$variant" in 5090*) par=2 ;; *) par=1 ;; esac
     grep -qx "Environment=PARALLEL=$par" "$f" || err "$name: PARALLEL is not $par"
-    for d in state install home; do
+    for d in state install home Strata-data; do
         grep -q "Volume=%h/.local/share/strata/$d:/data/$d:Z" "$f" || err "$name: /data/$d not persisted"
     done
     case "$variant" in 4070ti*|both)
@@ -121,11 +122,11 @@ for m in "${coders[@]}"; do
     case "$variant" in *-128k) ctx=131072 ;; *-524k) ctx=524288 ;; *-1m) ctx=1048576 ;; *) ctx=262144 ;; esac
     grep -qx "Environment=CONTEXT=$ctx" "$f" || err "$name: CONTEXT is not $ctx"
     grep -qx "Environment=PRESET=$name" "$f" || err "$name: PRESET is not $name"
-    grep -qx 'Environment=MODEL_PATH=/data/models' "$f" || err "$name: MODEL_PATH missing"
+    grep -qx 'Environment=MODEL_PATH=/data/models/coder-IQ1_M' "$f" || err "$name: MODEL_PATH is not /data/models/coder-IQ1_M"
     case "$variant" in *-128k) par=4 ;; *-524k|*-1m) par=1 ;; *) par=2 ;; esac
     grep -qx "Environment=PARALLEL=$par" "$f" || err "$name: PARALLEL is not $par"
     grep -qx 'Environment=STRATA_SET=pool-workers=7' "$f" || err "$name: pool-workers pin missing"
-    for d in state install home; do
+    for d in state install home Strata-data; do
         grep -q "Volume=%h/.local/share/strata/$d:/data/$d:Z" "$f" || err "$name: /data/$d not persisted"
     done
     grep -q '^\[Install\]' "$f" && err "$name: has [Install]"

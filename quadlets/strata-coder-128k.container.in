@@ -39,7 +39,7 @@ Exec=-c __CPUS_CODER__ /opt/strata/entrypoint.sh run
 # Shared API key etc.; FAMILY/MODEL override service.env (Environment= wins).
 EnvironmentFile=%h/.config/containers/config/strata/service.env
 Environment=PRESET=strata-coder-128k
-Environment=MODEL_PATH=/data/models
+Environment=MODEL_PATH=/data/models/coder-IQ1_M
 Environment=PARALLEL=4
 Environment=STRATA_SET=pool-workers=7
 Environment=FAMILY=coder
@@ -66,6 +66,7 @@ Volume=%h/.local/share/strata/harness:/data/harness:Z
 # M9 trusted workspaces: the agent tab's per-session trusted folders live
 # here — place project dirs into this tree to share them with a session.
 Volume=%h/.local/share/strata/workspaces:/data/workspaces:Z
+Volume=%h/.local/share/strata/Strata-data:/data/Strata-data:Z
 Volume=%h/.local/share/strata/config-coder-128k:/data/config:Z
 Volume=%h/.local/share/strata/state:/data/state:Z
 Volume=%h/.local/share/strata/install:/data/install:Z

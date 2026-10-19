@@ -33,7 +33,7 @@ SecurityLabelDisable=true
 # Shared settings + API key (FAMILY, MODEL, VISION, API_KEY).
 EnvironmentFile=%h/.config/containers/config/strata/service.env
 Environment=PRESET=strata-both
-Environment=MODEL_PATH=/data/models
+Environment=MODEL_PATH=/data/models/IQ3_XXS
 Environment=PARALLEL=1
 # Per-variant settings. CONTEXT/KV only matter at the first setup, which
 # writes config-both/strata-<quant>.json; delete that json to re-run setup.
@@ -64,6 +64,7 @@ Volume=%h/.local/share/strata/harness:/data/harness:Z
 # M9 trusted workspaces: the agent tab's per-session trusted folders live
 # here — place project dirs into this tree to share them with a session.
 Volume=%h/.local/share/strata/workspaces:/data/workspaces:Z
+Volume=%h/.local/share/strata/Strata-data:/data/Strata-data:Z
 Volume=%h/.local/share/strata/config-both:/data/config:Z
 Volume=%h/.local/share/strata/state:/data/state:Z
 Volume=%h/.local/share/strata/install:/data/install:Z

@@ -36,7 +36,7 @@ Exec=-c __CPUS_MAIN__ /opt/strata/entrypoint.sh run
 # Shared settings + API key (FAMILY, MODEL, VISION, API_KEY).
 EnvironmentFile=%h/.config/containers/config/strata/service.env
 Environment=PRESET=strata-5090
-Environment=MODEL_PATH=/data/models
+Environment=MODEL_PATH=/data/models/IQ3_S
 Environment=PARALLEL=2
 # Per-variant settings. The 0.2.0 image saves these choices as the preset
 # named in PRESET= (under /data/config = config-<v>); delete that preset to
@@ -64,6 +64,7 @@ Volume=%h/.local/share/strata/harness:/data/harness:Z
 # M9 trusted workspaces: the agent tab's per-session trusted folders live
 # here — place project dirs into this tree to share them with a session.
 Volume=%h/.local/share/strata/workspaces:/data/workspaces:Z
+Volume=%h/.local/share/strata/Strata-data:/data/Strata-data:Z
 Volume=%h/.local/share/strata/config-5090:/data/config:Z
 Volume=%h/.local/share/strata/state:/data/state:Z
 Volume=%h/.local/share/strata/install:/data/install:Z
