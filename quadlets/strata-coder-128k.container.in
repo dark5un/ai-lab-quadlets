@@ -77,5 +77,5 @@ PublishPort=0.0.0.0:11439:8080/tcp
 SuccessExitStatus=143
 Restart=on-failure
 RestartSec=30
-TimeoutStartSec=1800
+TimeoutStartSec=3600
 TimeoutStopSec=120
