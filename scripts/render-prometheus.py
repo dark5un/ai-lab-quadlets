@@ -152,9 +152,6 @@ for s in REG["services"]:
         continue
     probe_targets.append({"targets": [f"http://{container_dns(s)}{path}"],
                           "labels": {"ai_service": s["name"]}})
-w(os.path.join(CONF, "blackbox/blackbox.yml"),
-  json.dumps({"modules": bb_modules}, indent=1).replace('"modules"', "modules")
-  .replace('{\n  "prober"', "prober"), mode=0o644) if False else None
 # YAML by hand (no yaml dep guaranteed on the host):
 lines = ["modules:"]
 for k, v in bb_modules.items():

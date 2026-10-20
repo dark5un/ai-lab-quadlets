@@ -167,6 +167,7 @@ echo "  sketchlab: /v1 proxy key = strata key"
 # are managed the same way.
 OV_ROOT="$(env_get "$CONF/openviking/service.env" OPENVIKING_ROOT_API_KEY)"
 [ -n "$OV_ROOT" ] || { echo "  ! openviking root key missing (scripts/generate-secrets.sh)" >&2; exit 1; }
+mkdir -p "$DATA/ai-lab/openviking" && chmod 700 "$DATA/ai-lab/openviking"  # first-run render target (dirs step runs later)
 tmp="$DATA/ai-lab/openviking/ov.conf.tmp"
 # the template header is shell comments; strip them (the entrypoint json.loads
 # the file, comments are fatal) and substitute the live keys.
@@ -179,6 +180,10 @@ if [ -f "$HC" ]; then
     set_kv "$HC" LLM_OPENAI_API_KEY "$STRATA_KEY"
     set_kv "$HC" EMBEDDING_API_KEY "$LLAMA_KEY"
     echo "  honcho: strata LLM + llama.cpp embedding keys (managed lines)"
+if ! ls "$DATA"/ai-lab/embeddings/models/*/*.gguf >/dev/null 2>&1; then
+    echo "  ~ embeddings: no GGUF under ~/.local/share/ai-lab/embeddings/models/<id>/ - first start crash-loops until:" >&2
+    echo "    hf download ggml-org/bge-m3-Q8_0-GGUF bge-m3-q8_0.gguf --local-dir ~/.local/share/ai-lab/embeddings/models/bge-m3" >&2
+fi
 fi
 DSH="$CONF/deepseek-harness/service.env"
 if [ "$WITH_DSH" = 1 ] || [ -f "$DSH" ]; then
@@ -224,6 +229,10 @@ for s in json.load(open(reg))["services"]:
     if new != txt:
         p.write_text(new)
         print("  pinned %s -> digest" % s["name"])
+    else:
+        cur=[l.split("=",1)[1].strip() for l in txt.splitlines() if l.startswith("Image=")]
+        if cur and not any(c == dg or c == s["image"] for c in cur):
+            print("  ! %s: Image=%s differs from registry image %s; left unpinned" % (s["name"], cur[0], s["image"]))
 PY
 
 LEGACY=(llama-cpp-main llama-cpp-research llama-cpp-cpu comfyui comfyui-cpu strata caddy)
