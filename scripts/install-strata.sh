@@ -44,11 +44,36 @@ if [[ "$REBUILD" == 1 ]] || ! podman image exists "$IMAGE"; then
     printf 'Building %s from %s (CUDA %s)...\n' "$IMAGE" "$STRATA_REPO" "$CUDA_ARCHS"
     # 0.2.0 Dockerfile: the base images are build ARGs (CUDA_IMAGE, RUNTIME_BASE);
     # podman has no short-name alias for nvidia/cuda, so qualify both via
-    # --build-arg and build the upstream Dockerfile as-is (no temp copy, no sed).
+    # --build-arg.
+    # 0.2.1 WORKAROUND (upstream bug on the source-Dockerfile path):
+    # packaging/package_terminal.py calls `git rev-parse HEAD` unconditionally,
+    # but the terminal stage installs no git and .containerignore drops .git,
+    # so the build dies with FileNotFoundError: 'git'. Patch a temp copy of the
+    # Dockerfile (add git to the terminal-stage apt line) and a temp ignorefile
+    # that keeps .git in the context. If the pattern no longer matches, say so
+    # LOUDLY instead of silently skipping (upstream may have fixed or moved it).
+    DOCKERFILE="$STRATA_REPO/Dockerfile"
+    BUILD_ARGS=()
+    if grep -q 'no-install-recommends python3 ca-certificates && rm' "$DOCKERFILE"; then
+        TMPD="$(mktemp -d "${TMPDIR:-/tmp}/strata-build.XXXX")"
+        sed 's/no-install-recommends python3 ca-certificates \&\& rm/no-install-recommends git python3 ca-certificates \&\& rm/' \
+            "$DOCKERFILE" > "$TMPD/Dockerfile"
+        if [[ -f "$STRATA_REPO/.containerignore" ]]; then
+            grep -v '^\.git$' "$STRATA_REPO/.containerignore" > "$TMPD/containerignore"
+        else
+            : > "$TMPD/containerignore"
+        fi
+        DOCKERFILE="$TMPD/Dockerfile"
+        BUILD_ARGS=(--ignorefile "$TMPD/containerignore")
+    else
+        printf 'WARNING: Dockerfile terminal-stage apt line does not match the 0.2.1 git-bug workaround pattern; building as-is. CHECK upstream.\n' >&2
+    fi
     podman build --build-arg "CUDA_ARCHITECTURES=${CUDA_ARCHS}" \
         --build-arg "CUDA_IMAGE=docker.io/nvidia/cuda:13.0.0-devel-ubuntu24.04" \
         --build-arg "RUNTIME_BASE=docker.io/library/ubuntu:24.04" \
-        -t "$IMAGE" -f "$STRATA_REPO/Dockerfile" "$STRATA_REPO"
+        "${BUILD_ARGS[@]}" \
+        -t "$IMAGE" -f "$DOCKERFILE" "$STRATA_REPO"
+    if [[ -n "${TMPD:-}" ]]; then rm -rf "$TMPD"; fi
 else
     printf 'Image %s exists (use --rebuild to rebuild).\n' "$IMAGE"
 fi
@@ -74,7 +99,7 @@ fi
 chmod 600 "$SERVICE_ENV"
 
 # --- Data layout: shared model data + 0.2.0 state dirs, one preset store per variant
-mkdir -p "$DATA_DIR"/{models,mtp,packs,workspaces,state,install,home}
+mkdir -p "$DATA_DIR"/{models,mtp,packs,state,install,home}
 for v in "${VARIANTS[@]}"; do mkdir -p "$DATA_DIR/config-$v"; chmod 700 "$DATA_DIR/config-$v"; done
 chmod 700 "$DATA_DIR"
 # A single-unit install kept its setup in config/: that one ran on the 5090.
