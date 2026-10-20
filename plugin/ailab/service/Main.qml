@@ -56,6 +56,11 @@ Item {
         // the rest of the monitoring group is driven by the MONITORING row.
         const graf = services.find(s => s.installed && s.name === "grafana");
         if (graf) rows.push(graf);
+        // Memory group (embeddings, openviking, honcho-*): no shared-port
+        // variants to arbitrate - one plain row per service. Internal-only
+        // services carry host_port null (ServiceRow shows "internal").
+        for (const s of services)
+            if (s.installed && s.group === "memory") rows.push(s);
         return rows;
     }
 

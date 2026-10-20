@@ -161,6 +161,23 @@ set_kv "$OW" OTEL_METRICS_EXPORT_INTERVAL_MILLIS 15000
 echo "  open-webui: 5 backends (strata, strata-coder, llama-cpp-5090/4070ti/both), URL http://${HOST_LOCAL}:3100, OTLP -> prometheus"
 set_kv "$CONF/sketchlab/service.env" STRATA_API_KEY "$STRATA_KEY"
 echo "  sketchlab: /v1 proxy key = strata key"
+# Memory group (plan ~/Documents/plans/ai-memory-services-plan.md):
+# OpenViking + Honcho on CPU. ov.conf is re-rendered from the template with
+# the LIVE keys on every run (values never printed); honcho's LLM key lines
+# are managed the same way.
+OV_ROOT="$(env_get "$CONF/openviking/service.env" OPENVIKING_ROOT_API_KEY)"
+[ -n "$OV_ROOT" ] || { echo "  ! openviking root key missing (scripts/generate-secrets.sh)" >&2; exit 1; }
+tmp="$CONF/openviking/ov.conf.tmp"
+sed -e "s|__ROOT_API_KEY__|$OV_ROOT|" -e "s|__STRATA_API_KEY__|$STRATA_KEY|" \
+    -e "s|__LLAMA_CPP_KEY__|$LLAMA_KEY|" "$ROOT/config/openviking/ov.conf.example" > "$tmp"
+chmod 600 "$tmp"; mv "$tmp" "$CONF/openviking/ov.conf"
+echo "  openviking: ov.conf rendered (root key; strata VLM; bge-m3 embeddings)"
+HC="$CONF/honcho/service.env"
+if [ -f "$HC" ]; then
+    set_kv "$HC" LLM_OPENAI_API_KEY "$STRATA_KEY"
+    set_kv "$HC" EMBEDDING_API_KEY "$LLAMA_KEY"
+    echo "  honcho: strata LLM + llama.cpp embedding keys (managed lines)"
+fi
 DSH="$CONF/deepseek-harness/service.env"
 if [ "$WITH_DSH" = 1 ] || [ -f "$DSH" ]; then
     # An existing dsh env holds copies of both keys: keep them current (key
@@ -183,7 +200,7 @@ umask 022
 
 # ─── 4. Units ────────────────────────────────────────────────────────────────
 say "4/6 units in $QUADLET_DIR"
-UNITS=(ai llama-cpp-5090 llama-cpp-4070ti llama-cpp-both comfyui-5090 comfyui-4070ti rizzo open-webui sketchlab hyperframes docling-cpu docling-4070ti prometheus grafana node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit)
+UNITS=(ai llama-cpp-5090 llama-cpp-4070ti llama-cpp-both comfyui-5090 comfyui-4070ti rizzo open-webui sketchlab hyperframes docling-cpu docling-4070ti prometheus grafana node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit embeddings openviking honcho-database honcho-api honcho-deriver)
 [ "$WITH_DSH" = 1 ] && UNITS+=(deepseek-harness)
 [ "$WITH_HERMES" = 1 ] && UNITS+=(hermes)
 "$ROOT/scripts/render-units.sh" "${UNITS[@]}"
@@ -226,6 +243,10 @@ echo "  ✓ daemon-reload (monitoring + default strata variant enabled at boot; 
 say "5/6 data dirs"
 mkdir -p "$DATA"/llama.cpp/cards/{5090,4070ti,both} "$DATA"/comfyui "$DATA"/sketchlab "$DATA"/rizzo
 mkdir -p "$DATA"/prometheus "$DATA"/victorialogs "$DATA"/node-exporter/textfile
+# Memory group data dirs (create BEFORE first start: statfs pitfall). The
+# embeddings dir is separate from the llama.cpp card dirs on purpose.
+mkdir -p "$DATA"/ai-lab/embeddings/models "$DATA"/ai-lab/openviking "$DATA"/ai-lab/honcho-database
+chmod 700 "$DATA"/ai-lab/embeddings "$DATA"/ai-lab/embeddings/models "$DATA"/ai-lab/openviking "$DATA"/ai-lab/honcho-database
 [ "$WITH_HERMES" = 1 ] && mkdir -p "$DATA"/hermes-service
 echo "  ✓ ~/.local/share/{llama.cpp/cards/{5090,4070ti,both},comfyui,sketchlab,rizzo,prometheus,victorialogs,node-exporter/textfile}"
 mkdir -p "${HOME}/.local/bin"
@@ -239,7 +260,7 @@ say "6/6 images"
 if [ "$NO_IMAGES" = 1 ]; then
     echo "  skipped (--no-images)"
 else
-    IMAGES=(open-webui llama-cpp comfyui rizzo sketchlab hyperframes docling)
+    IMAGES=(open-webui llama-cpp comfyui rizzo sketchlab hyperframes docling memory)
     [ "$WITH_DSH" = 1 ] && IMAGES+=(deepseek-harness)
     [ "$WITH_HERMES" = 1 ] && IMAGES+=(hermes)
     "$ROOT/scripts/build-images.sh" $([ "$REBUILD" = 1 ] && echo --rebuild) "${IMAGES[@]}" \

@@ -18,7 +18,10 @@ import json, sys
 reg = json.load(open(sys.argv[1]))
 for s in reg["services"]:
     if s["name"] == sys.argv[2]:
-        print(f"{s['bind']}:{s['host_port']}:{s['container_port']}")
+        if s["host_port"] in (None, 0):
+            print("NONE")  # internal-only service: no PublishPort allowed
+        else:
+            print(f"{s['bind']}:{s['host_port']}:{s['container_port']}")
         print(s["image"])
         sys.exit(0)
 sys.exit(1)
@@ -31,7 +34,13 @@ EOF
     actual=$( (grep -E '^PublishPort=' "$file" | head -1 || true) | sed 's/^PublishPort=//; s|/tcp$||')
     # Network=host services (deepseek-harness) publish no port: the app binds
     # itself. Assert the quadlet really uses host networking instead.
-    if grep -qE '^Network=host' "$file"; then
+    if [ "$want_port" = NONE ]; then
+        # host_port null in the registry: internal-only (ai.network).
+        if [ -n "$actual" ]; then
+            echo "  DRIFT: $name publishes '$actual' but the registry has no host port"
+            fail=1
+        fi
+    elif grep -qE '^Network=host' "$file"; then
         if [ -n "$actual" ]; then
             echo "  DRIFT: $name has Network=host but also PublishPort '$actual'"
             fail=1

@@ -1,0 +1,43 @@
+# OpenViking server config TEMPLATE - install.sh renders the deployed copy to
+# ~/.config/containers/config/openviking/ov.conf (mode 600, rewritten on
+# every run so the keys stay current across rotation; values are hex, never
+# printed). Placeholders:
+#   __ROOT_API_KEY__     = config/openviking/service.env  OPENVIKING_ROOT_API_KEY
+#   __STRATA_API_KEY__   = config/strata/service.env      API_KEY
+#   __LLAMA_CPP_KEY__    = first live key in config/llama-cpp/keys.txt
+# Model names verified live: strata serves qwen3.8-flash-next-iq3_s; the CPU
+# embeddings server aliases bge-m3 (dense, 1024).
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 1933,
+    "root_api_key": "__ROOT_API_KEY__"
+  },
+  "storage": {
+    "workspace": "/app/.openviking/data",
+    "vectordb": { "backend": "local" },
+    "agfs": { "backend": "local" }
+  },
+  "embedding": {
+    "dense": {
+      "provider": "openai",
+      "model": "bge-m3",
+      "api_base": "http://systemd-embeddings:8080/v1",
+      "api_key": "__LLAMA_CPP_KEY__",
+      "dimension": 1024,
+      "input": "text"
+    },
+    "text_source": "content_only",
+    "max_input_tokens": 4096
+  },
+  "vlm": {
+    "provider": "openai",
+    "model": "qwen3.8-flash-next-iq3_s",
+    "api_base": "http://systemd-strata:8080/v1",
+    "api_key": "__STRATA_API_KEY__",
+    "temperature": 0.0,
+    "max_retries": 2,
+    "thinking": false
+  },
+  "log": { "level": "INFO", "output": "stdout" }
+}

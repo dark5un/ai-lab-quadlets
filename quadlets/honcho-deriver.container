@@ -1,0 +1,30 @@
+# Honcho deriver - the background worker (observations, representations,
+# session summaries, dreams). Essential: without it messages are stored but
+# no memory is derived (honcho docs). Same pinned image as honcho-api.
+# The image default CMD is the API server, so the unit replaces
+# entrypoint+command the way docker-compose does: python -m src.deriver
+# (verified from the pulled image). No host port; it exposes /metrics on
+# 9090 in-network only. Start after honcho-api is healthy.
+
+[Unit]
+Description=Honcho deriver (background worker)
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-honcho-deriver
+Image=ghcr.io/plastic-labs/honcho:latest
+Network=ai.network
+UserNS=keep-id
+EnvironmentFile=%h/.config/containers/config/honcho/service.env
+Entrypoint=/app/.venv/bin/python
+Exec=-m src.deriver
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=120
+# No install section by design: on-demand only (ai-lab convention).

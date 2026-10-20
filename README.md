@@ -48,6 +48,11 @@ GPU rules when they do.
 | `hermes` (opt-in) | `3104` | - | account | containerized Hermes gateway; this host runs Hermes natively instead |
 | `deepseek-harness` (opt-in) | `127.0.0.1:3105` | - | token | dsh agent runtime, host loopback only |
 | `docling-cpu` / `-4070ti` | `127.0.0.1:3108` | - / 4070 Ti | none | docling-serve document conversion API (the docling MCP's remote backend), loopback only |
+| `embeddings` | `127.0.0.1:3109` | - | API key (llama-cpp keys.txt) | llama.cpp CPU server + bge-m3 Q8_0 (dense 1024); the memory stack's embedder, own model dir (never a card dir) |
+| `openviking` | `3110` | - | root API key | OpenViking memory server (shared Hermes memory provider; VLM=strata, embeddings=systemd-embeddings) |
+| `honcho-database` | none (ai.network) | - | password | PostgreSQL 15 + pgvector for Honcho |
+| `honcho-api` | `3111` | - | JWT | Honcho API (AUTH_USE_AUTH=true; LLM=strata, embeddings=systemd-embeddings) |
+| `honcho-deriver` | none (ai.network) | - | none | Honcho background worker (memory extraction; `/metrics` on 9090 in-network) |
 | `prometheus` | `127.0.0.1:3107` | - | none | metrics store; scrapes every service, OTLP receiver for Open WebUI; boot |
 | `grafana` | `3106` | - | account | dashboards (provisioned from `monitoring/`), LAN with login; on demand |
 | `node-exporter` | `127.0.0.1:9100` | - | none | host CPU/RAM/disk/net/temp; boot |
@@ -79,7 +84,9 @@ lists an RTX 5090 and an RTX 4070 Ti) and is idempotent. It:
    secrets via `scripts/generate-secrets.sh`, each `config/<svc>/*.example`
    copied once, and the managed lines rewritten every run: Open WebUI's four
    backends + keys and `WEBUI_URL` (`http://$(hostnamectl --static).local:3100`,
-   mDNS by systemd-resolved), sketchlab's strata key, dsh's keys (if opted in);
+   mDNS by systemd-resolved), sketchlab's strata key, dsh's keys (if opted in),
+   the memory group's keys (`ov.conf` rendered from `config/openviking/
+   ov.conf.example`; honcho's `LLM_OPENAI_API_KEY` + `EMBEDDING_API_KEY`);
 3. runs `scripts/install-strata.sh` (strata image if missing + its 3 units);
 4. renders the units (`scripts/render-units.sh`, GPU UUIDs from nvidia-smi),
    removes legacy units, masks `podman-user-wait-network-online`, reloads once;
@@ -318,6 +325,9 @@ Auth status mirrors the `"auth"` field in `services.json`
 | Strata (optional) | `http://<host-LAN-IP>:11434/v1` | API key |
 | HyperFrames API | `http://<host-LAN-IP>:3103` | none |
 | docling-serve | `http://127.0.0.1:3108` (loopback only; UI at `/ui`) | none |
+| Embeddings (memory stack) | `http://127.0.0.1:3109/v1` (loopback only) | API key (llama-cpp keys.txt) |
+| OpenViking (memory stack) | `http://<host>:3110` (tailnet only: ufw rules on tailscale0) | root API key (`config/openviking/service.env`) |
+| Honcho (memory stack) | `http://<host>:3111` (tailnet only: ufw rules on tailscale0) | JWT (`config/honcho/service.env` AUTH_JWT_SECRET) |
 
 **LAN exposure decision (deliberate):** this stack runs on a trusted home LAN.
 The unauthenticated endpoints (ComfyUI, Sketch Lab, HyperFrames, Rizzo) are
@@ -350,9 +360,13 @@ answers on the host itself. Open a port per service, explicitly:
 ```bash
 sudo ufw allow 3100/tcp                                       # LAN + tailnet
 sudo ufw allow in on tailscale0 to any port 11434 proto tcp   # tailnet only
+sudo ufw allow in on tailscale0 to any port 3110 proto tcp    # OpenViking (Mac Hermes)
+sudo ufw allow in on tailscale0 to any port 3111 proto tcp    # Honcho (Mac Hermes)
 ```
 
-DeepSeek Harness stays on loopback and never needs a rule.
+DeepSeek Harness stays on loopback and never needs a rule. The memory stack
+(embeddings/openviking/honcho-*) is CPU-only and never touches the GPU
+arbiter; honcho-database and honcho-deriver have no host port at all.
 
 ### Retained Caddy configuration (not installed)
 

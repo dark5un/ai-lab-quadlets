@@ -53,7 +53,7 @@ Item {
         Text {
             width: parent.width
             text: sr.previewing ? "→ " + sr.service.previewText
-                : ":" + sr.row.host_port
+                : (sr.row.host_port ? ":" + sr.row.host_port : "internal")
                   + (sr.running && sr.service ? "  " + sr.service.healthText(sr.row) : "")
                   + (sr.card ? "  · " + (sr.card === "4070ti" ? "4070 Ti" : sr.card === "auto" ? "card auto" : sr.card) : "")
             color: sr.previewing ? Theme.gold : Theme.dim

@@ -5,7 +5,7 @@
 #   scripts/build-images.sh [--rebuild] [NAME...]
 #
 # NAME: open-webui llama-cpp comfyui rizzo sketchlab hyperframes
-#       deepseek-harness hermes        (default: the first six)
+#       deepseek-harness hermes memory   (default: the first six)
 # Pulled images (open-webui, llama-cpp, hermes) are pulled only when missing;
 # a pulled digest that differs from the registry's image_digest is reported.
 # Built images are skipped when present unless --rebuild; comfyui also
@@ -95,6 +95,8 @@ for name in "${NAMES[@]}"; do
         sketchlab) build sketchlab "$SKETCHLAB_REPO" -f "$SKETCHLAB_REPO/Dockerfile" ;;
         hyperframes) build hyperframes "$HYPERFRAMES_REPO" -f "$HYPERFRAMES_REPO/packages/gcp-cloud-run/Dockerfile" ;;
         docling) pull docling-cpu; pull docling-4070ti ;;
+        memory) pull embeddings; pull openviking; pull honcho-database;
+                pull honcho-api; pull honcho-deriver ;;
         deepseek-harness) build deepseek-harness "$ROOT/containers/deepseek-harness" \
                               -f "$ROOT/containers/deepseek-harness/Containerfile" ;;
         *) echo "  ! unknown image '$name'"; fail=1 ;;

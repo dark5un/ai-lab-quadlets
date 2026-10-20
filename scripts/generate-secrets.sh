@@ -9,6 +9,8 @@
 # (default ~/.config/containers/config):
 #   open-webui/service.env       WEBUI_SECRET_KEY
 #   llama-cpp/keys.txt           API key shared by every llama.cpp server
+#   openviking/service.env       root API key (memory group)
+#   honcho/service.env           DB password + JWT secret (memory group)
 #   hermes-service/service.env   only with --with-hermes (opt-in container)
 # Strata's API key is created by install-strata.sh.
 set -euo pipefail
@@ -64,6 +66,34 @@ if [ ! -f "$dst" ] && [ -f "$ROOT/config/grafana/service.env.example" ]; then
     sed "s/change-me-to-a-random-hex-string/$(rand_hex 16)/" \
         "$ROOT/config/grafana/service.env.example" > "$dst"
     echo "  created $dst"
+fi
+chmod 600 "$dst"
+
+# OpenViking root API key (server.root_api_key; install.sh renders it into
+# ov.conf from the same file).
+dst="$CONF/openviking/service.env"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    sed "s/change-me-to-a-random-hex-string/$(rand_hex 32)/" \
+        "$ROOT/config/openviking/service.env.example" > "$dst"
+    echo "  created $dst"
+else
+    echo "  kept    $dst"
+fi
+chmod 600 "$dst"
+
+# Honcho (memory group): one DB password reused in POSTGRES_PASSWORD and in
+# DB_CONNECTION_URI, plus the JWT signing secret. The strata/llama.cpp LLM
+# keys are managed lines rewritten by install.sh.
+dst="$CONF/honcho/service.env"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    sed -e "s/change-me-to-a-random-hex-string/$(rand_hex 16)/g" \
+        -e "s/change-me-to-another-random-hex-string/$(rand_hex 32)/" \
+        "$ROOT/config/honcho/service.env.example" > "$dst"
+    echo "  created $dst"
+else
+    echo "  kept    $dst"
 fi
 chmod 600 "$dst"
 

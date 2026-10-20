@@ -44,7 +44,8 @@ reg = json.load(open(sys.argv[1]))
 # share port, health path and container name.
 for s in reg["services"]:
     if sys.argv[2] in (s["name"], s.get("group")):
-        print(s[sys.argv[3]]); sys.exit(0)
+        v = s[sys.argv[3]]
+        print("" if v is None else v); sys.exit(0)
 sys.exit(1)
 EOF
 }
@@ -95,7 +96,9 @@ for s in reg["services"]:
     p = props.get(s["unit"], {})
     active = p.get("ActiveState", "inactive")
     health = "-"
-    if active == "active":
+    # host_port null = internal-only service (honcho-database/deriver): no
+    # published port to probe; ai.network + podman-exporter cover their state.
+    if active == "active" and s["host_port"] and s["health"] not in ("-", None):
         code = subprocess.run(["curl", "-s", "-m", "3", "-o", "/dev/null", "-w", "%{http_code}",
                                f"http://127.0.0.1:{s['host_port']}{s['health']}"],
                               capture_output=True, text=True).stdout.strip()
@@ -111,7 +114,7 @@ else:
     for r in out:
         state = r["state"] if r["installed"] else "-"
         health = r["health"] if r["installed"] else "not installed"
-        print(f"{r['name']:<18} {state:<9} {r['tier']:<9} {r['host_port']:<6} {health}")
+        print(f"{r['name']:<18} {state:<9} {r['tier']:<9} {str(r['host_port'] or '-'):<6} {health}")
 EOF
 }
 
@@ -302,7 +305,7 @@ cmd_ports() {
     python3 -c "
 import json
 for s in json.load(open('$REGISTRY'))['services']:
-    print(f\"{s['name']:<18} {s['bind']}:{s['host_port']} -> :{s['container_port']}\")"
+    print(f\"{s['name']:<18} {s['bind']}:{s['host_port'] if s['host_port'] else '-'} -> :{s['container_port']}\")"
 }
 
 cmd_info() {
@@ -324,6 +327,7 @@ cmd_url() {  # print the browser launch URL for a service
     local port bind
     port=$(registry_get "$1" host_port)
     bind=$(registry_get "$1" bind)
+    [ -n "$port" ] || { echo "ai-lab: $1 is internal-only (no host port)" >&2; exit 1; }
     local host=127.0.0.1
     [ "$bind" = "0.0.0.0" ] && host=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i == "src") {print $(i+1); exit}}')
     [ -n "$host" ] || host=127.0.0.1

@@ -1,0 +1,39 @@
+# Honcho API - shared memory backend candidate #2 (plan
+# ~/Documents/plans/ai-memory-services-plan.md). Image ghcr.io/plastic-labs/
+# honcho:latest; the digest is pinned in services.json the way honcho-cli
+# pins it (pull latest, record its manifest digest).
+# The published image has NO entrypoint and its default CMD is the bare API
+# server (verified from the pulled image). Compose runs migrations first via
+# docker/entrypoint.sh (scripts/provision_db.py = alembic) - the unit does the
+# same with an Entrypoint=/Exec= override.
+# Auth: AUTH_USE_AUTH=true + AUTH_JWT_SECRET (generate-secrets.sh) - required
+# for a non-loopback bind. 0.0.0.0:3111: the Mac Hermes plugin (honcho.json
+# baseUrl + apiKey) reaches it over the tailnet (ufw allow per-port).
+# LLM = systemd-strata (qwen3.8-flash-next-iq3_s), embeddings =
+# systemd-embeddings (bge-m3, 1024) - all in config/honcho/service.env.
+# Start order: honcho-database -> honcho-api -> honcho-deriver.
+
+[Unit]
+Description=Honcho API
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-honcho-api
+Image=ghcr.io/plastic-labs/honcho:latest
+Network=ai.network
+UserNS=keep-id
+PublishPort=0.0.0.0:3111:8000/tcp
+EnvironmentFile=%h/.config/containers/config/honcho/service.env
+Entrypoint=/bin/sh
+Exec=docker/entrypoint.sh
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+# First start runs alembic migrations against honcho-database.
+TimeoutStartSec=900
+TimeoutStopSec=120
+# No install section by design: on-demand only (ai-lab convention).

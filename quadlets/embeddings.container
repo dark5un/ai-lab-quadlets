@@ -1,0 +1,42 @@
+# Embeddings - llama.cpp server (CPU) with bge-m3 Q8_0 (dense 1024).
+# Dedicated model dir: never link embedding models into the GPU card dirs
+# (~/.local/share/llama.cpp/cards) - the routers advertise everything in
+# their dir. Loopback-only (127.0.0.1:3109); the memory services reach it
+# over ai.network as http://systemd-embeddings:8080/v1.
+# Auth: the shared llama.cpp key (config/llama-cpp/keys.txt).
+# No GPU: -ngl 0 (pure CPU), no AddDevice, no CUDA_VISIBLE_DEVICES.
+
+[Unit]
+Description=Embeddings - llama.cpp server (CPU, bge-m3)
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-embeddings
+Image=ghcr.io/ggml-org/llama.cpp:server
+Network=ai.network
+UserNS=keep-id
+PublishPort=127.0.0.1:3109:8080/tcp
+Volume=%h/.local/share/ai-lab/embeddings/models:/models:ro,Z
+Volume=%h/.config/containers/config/llama-cpp/keys.txt:/etc/llama-cpp/keys.txt:ro
+
+Environment=LLAMA_ARG_MODEL=/models/bge-m3-q8_0.gguf
+Environment=LLAMA_ARG_MODEL_ALIAS=bge-m3
+Environment=LLAMA_ARG_EMBEDDINGS=true
+Environment=LLAMA_ARG_API_KEY_FILE=/etc/llama-cpp/keys.txt
+Environment=LLAMA_ARG_HOST=0.0.0.0
+Environment=LLAMA_ARG_PORT=8080
+Environment=LLAMA_ARG_CTX_SIZE=8192
+Environment=LLAMA_ARG_N_GPU_LAYERS=0
+# bge-m3 pooled embeddings (dense retrieval for OpenViking + Honcho).
+Environment=LLAMA_ARG_POOLING_TYPE=LAST
+Environment=LLAMA_ARG_NORMALIZE=true
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=60
+# No install section by design: on-demand only (ai-lab convention).

@@ -29,6 +29,28 @@ h="$AI_LAB_CONFIG_DIR/hermes-service/service.env"
 [ "$(stat -c %a "$h")" = 600 ] || fail "hermes env not 600"
 grep -q 'change-me' "$h" && fail "placeholder left in hermes env"
 
+# Memory group: openviking root key + honcho secrets (one DB password reused
+# in POSTGRES_PASSWORD and DB_CONNECTION_URI; JWT distinct).
+ov="$AI_LAB_CONFIG_DIR/openviking/service.env"
+[ "$(stat -c %a "$ov")" = 600 ] || fail "openviking env not 600"
+[ "$(stat -c %a "$AI_LAB_CONFIG_DIR/openviking")" = 700 ] || fail "openviking dir not 700"
+grep -q 'change-me' "$ov" && fail "placeholder left in openviking env"
+hc="$AI_LAB_CONFIG_DIR/honcho/service.env"
+[ "$(stat -c %a "$hc")" = 600 ] || fail "honcho env not 600"
+[ "$(stat -c %a "$AI_LAB_CONFIG_DIR/honcho")" = 700 ] || fail "honcho dir not 700"
+grep -q 'change-me' "$hc" && fail "placeholder left in honcho env"
+hc_pw=$(sed -n 's/^POSTGRES_PASSWORD=//p' "$hc" | tail -1)
+hc_uri=$(sed -n 's/^DB_CONNECTION_URI=//p' "$hc" | tail -1)
+grep -qF ":${hc_pw}@" <<<"$hc_uri" || fail "honcho DB password not reused in DB_CONNECTION_URI"
+hc_jwt=$(sed -n 's/^AUTH_JWT_SECRET=//p' "$hc" | tail -1)
+[ -n "$hc_pw" ] && [ -n "$hc_jwt" ] && [ "$hc_pw" != "$hc_jwt" ] || fail "honcho secrets missing or identical"
+
+# Re-run keeps the live memory secrets too.
+k1=$(sed -n 's/^OPENVIKING_ROOT_API_KEY=//p' "$ov" | tail -1)
+bash "$ROOT/scripts/generate-secrets.sh" > /dev/null
+[ "$(sed -n 's/^OPENVIKING_ROOT_API_KEY=//p' "$ov" | tail -1)" = "$k1" ] || fail "openviking key changed on re-run"
+[ "$(sed -n 's/^AUTH_JWT_SECRET=//p' "$hc" | tail -1)" = "$hc_jwt" ] || fail "honcho JWT secret changed on re-run"
+
 # Nothing written into the repo.
 after="$(git -C "$ROOT" status --porcelain --ignored config 2>/dev/null || true)"
 [ "$before" = "$after" ] || fail "generate-secrets.sh touched the repo's config/"

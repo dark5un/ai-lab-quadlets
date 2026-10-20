@@ -1,0 +1,30 @@
+# Honcho database - PostgreSQL 15 + pgvector (required by Honcho; the plain
+# postgres image lacks the extension). NO host port on purpose: reachable
+# only on ai.network as systemd-honcho-database:5432. POSTGRES_PASSWORD (and
+# Honcho's DB_CONNECTION_URI) live in config/honcho/service.env (600);
+# honcho-api / honcho-deriver read the same file.
+# Start BEFORE honcho-api (migrations run on honcho-api's first start).
+
+[Unit]
+Description=Honcho database (PostgreSQL 15 + pgvector)
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-honcho-database
+Image=docker.io/pgvector/pgvector:pg15
+Network=ai.network
+UserNS=keep-id
+Environment=POSTGRES_DB=honcho
+Environment=POSTGRES_USER=honcho
+EnvironmentFile=%h/.config/containers/config/honcho/service.env
+Volume=%h/.local/share/ai-lab/honcho-database:/var/lib/postgresql/data:Z
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=120
+# No install section by design: on-demand only (ai-lab convention).

@@ -1,0 +1,42 @@
+# OpenViking - shared memory backend for the Hermes fleet (plan
+# ~/Documents/plans/ai-memory-services-plan.md). Single HTTP server on 1933
+# inside the container; embedded local vectordb + agfs live under
+# storage.workspace (default /app/.openviking/data in this image, HOME=/app).
+# The server refuses a non-loopback bind without server.root_api_key, so the
+# rendered ov.conf carries one (same value as OPENVIKING_ROOT_API_KEY in
+# service.env). 0.0.0.0:3110 on purpose: the Mac Hermes plugin connects over
+# the tailnet (ufw allow per-port, tailscale0 only).
+# PITFALL volcengine/OpenViking#5553: a local endpoint that is down makes the
+# Hermes plugin spawn openviking-server inheriting its env. The server always
+# runs HERE; the plugin endpoint must never be "local-down".
+
+[Unit]
+Description=OpenViking memory server
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-openviking
+Image=ghcr.io/volcengine/openviking:latest
+Network=ai.network
+UserNS=keep-id
+PublishPort=0.0.0.0:3110:1933/tcp
+# service.env: OPENVIKING_ROOT_API_KEY (host-side curl/CLI; the server itself
+# reads the key from ov.conf). Server only: no bot gateway sidecar.
+Environment=OPENVIKING_WITH_BOT=0
+EnvironmentFile=%h/.config/containers/config/openviking/service.env
+# Workspace (vectordb + agfs + master.key + memory) persists here:
+Volume=%h/.local/share/ai-lab/openviking:/app/.openviking:Z
+# Rendered config (install.sh rewrites it from ov.conf.example with the live
+# strata + llama.cpp + root keys; never edit in the container):
+Volume=%h/.config/containers/config/openviking/ov.conf:/app/.openviking/ov.conf:ro,Z
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+# First start creates the local vectordb + agfs layout.
+TimeoutStartSec=600
+TimeoutStopSec=120
+# No install section by design: on-demand only (ai-lab convention).

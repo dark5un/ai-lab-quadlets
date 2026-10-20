@@ -145,6 +145,11 @@ for s in REG["services"]:
     if s["tier"] == "monitoring" and s["name"] != "grafana":
         continue
     path = s["health"]
+    # health "-" + null host_port: internal-only service with no HTTP health
+    # endpoint (honcho-database, honcho-deriver) - container state via
+    # podman-exporter is the only probe that makes sense.
+    if not path or path == "-" or s["host_port"] is None:
+        continue
     probe_targets.append({"targets": [f"http://{container_dns(s)}{path}"],
                           "labels": {"ai_service": s["name"]}})
 w(os.path.join(CONF, "blackbox/blackbox.yml"),
@@ -183,7 +188,7 @@ for cname, group in sorted(by_container.items()):
     svc = group[0]["name"] if len(group) == 1 else group[0].get("group", group[0]["name"])
     gpu = group[0].get("gpu", "")
     tier = group[0]["tier"]
-    port = group[0]["host_port"]
+    port = group[0]["host_port"] or ""
     variants = "|".join(g.get("variant", g["name"]) for g in group)
     rows.append(
         f'ailab_service_info{{service="{svc}",container="{cname}",'

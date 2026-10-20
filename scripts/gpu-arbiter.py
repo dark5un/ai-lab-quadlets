@@ -228,7 +228,7 @@ class Planner:
 
     def do_start(self, name):
         if name in self.groups() and name not in ("comfyui", "monitoring"):
-            variants = "|".join(s["variant"] for s in self.group(name))
+            variants = "|".join(s.get("variant", s["name"]) for s in self.group(name))
             raise ArbiterError(f"pick a {name} variant: {variants}")
         if name == "monitoring":
             # the whole monitoring tier comes up together (no GPU rules apply)
