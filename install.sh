@@ -206,6 +206,25 @@ UNITS=(ai llama-cpp-5090 llama-cpp-4070ti llama-cpp-both comfyui-5090 comfyui-40
 [ "$WITH_DSH" = 1 ] && UNITS+=(deepseek-harness)
 [ "$WITH_HERMES" = 1 ] && UNITS+=(hermes)
 "$ROOT/scripts/render-units.sh" "${UNITS[@]}"
+# Deployed units are pinned to the registry image_digest (the repo template
+# keeps the readable tag; the runtime inode gets name@sha256). Security gate:
+# digest pinning recorded but never applied was a SHOULD finding.
+python3 - "$REG" "$QUADLET_DIR" <<'PY'
+import json, sys, pathlib, re
+reg, qd = sys.argv[1], pathlib.Path(sys.argv[2])
+for s in json.load(open(reg))["services"]:
+    dg = s.get("image_digest")
+    if not dg:
+        continue
+    p = qd / (s["name"] + ".container")
+    if not p.is_file():
+        continue
+    txt = p.read_text()
+    new = re.sub(r"(?m)^Image=" + re.escape(s["image"]) + r"\s*$", "Image=" + dg, txt)
+    if new != txt:
+        p.write_text(new)
+        print("  pinned %s -> digest" % s["name"])
+PY
 
 LEGACY=(llama-cpp-main llama-cpp-research llama-cpp-cpu comfyui comfyui-cpu strata caddy)
 [ "$WITH_DSH" = 1 ] || LEGACY+=(deepseek-harness)

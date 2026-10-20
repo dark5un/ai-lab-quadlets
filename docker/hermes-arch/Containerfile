@@ -1,9 +1,11 @@
 # Containerfile.arch — Arch Linux port of the upstream Hermes Agent Dockerfile.
-# Build from the hermes-agent source root (context must be the repo):
-#   podman build -f docker/Containerfile.arch --build-arg HERMES_ARCH_PIN=<digest> -t localhost/hermes-agent:arch-<ver> .
+# Build from a CHECKED-OUT PIN of the hermes-agent source (context must be the repo):
+#   git checkout v0.22.2   # source pin lives in the checkout, not a build-arg
+#   podman build -f docker/Containerfile.arch -t localhost/hermes-agent:arch-<ver> .
 #
 # Differences vs the Debian Dockerfile (all deliberate):
-# - Base archlinux:latest; pacman replaces apt. Arch keyring init first.
+# - Base archlinux pinned by multi-arch index digest (bump deliberately);
+#   pacman replaces apt. Arch keyring init first.
 # - The sqlite_build stage is DROPPED: Arch ships SQLite 3.53.4, the exact
 #   version upstream pins to fix the Debian WAL-reset bug (Dockerfile lines
 #   1-43). We keep upstream's FTS5-trigram self-test instead.
@@ -16,7 +18,8 @@
 # photon sidecar, build_agent assembly, stage2-hook, and the entrypoint
 # dispatcher are byte-for-byte upstream logic.
 
-FROM docker.io/archlinux/archlinux:latest AS runtime_base
+# Base pinned to the current multi-arch index digest (bump deliberately at port rebase).
+FROM docker.io/archlinux/archlinux@sha256:24bd9134f828780b847419581105bd40b6dd9182ea7b12a0a0bb42b8562f9796 AS runtime_base
 
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -25,7 +28,7 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/opt/hermes/tools
 # Arch base images can hold a stale/partial keyring; init before first sync.
 RUN pacman-key --init && pacman-key --populate archlinux && \
     pacman -Syu --noconfirm --needed \
-    ca-certificates curl iputils procps-ng git openssh xz which \
+    ca-certificates curl iputils procps-ng git openssh xz which python \
     gcc make cmake pkgconf libffi openssl sqlite \
     libolm \
     alsa-lib at-spi2-core cairo dbus expat fontconfig freetype2 util-linux \
@@ -84,7 +87,16 @@ COPY pm/ pm/
 COPY hermes_constants.py hermes_constants.py
 COPY hermes_cli/__init__.py hermes_cli/runtime_state.py hermes_cli/
 COPY scripts/bundles/payload.py scripts/bundles/payload.py
+# Arch port deviation: bootstrap pm's standalone python FIRST and shadow the
+# system interpreter before the rest. Arch's system python is the same 3.14
+# series as the pbs build, and pm's worker re-exec then blends the two installs
+# (system python running with the pbs stdlib prefix: binascii/_hashlib are
+# static in pbs, .so in Arch -> ModuleNotFoundError). On Debian (3.13 vs 3.14)
+# the collision is impossible, which is why upstream never sees this.
 RUN set -eu; \
+    python3 -c 'from pm import ensure; ensure("python", explicit=True)'; \
+    ln -sf "$(python3 -c 'from pm import installed_package; print(installed_package("python").binary)')" /usr/local/bin/python3; \
+    python3 -c 'import sys; sys.exit(0 if "tools/python-" in sys.prefix else 1)'; \
     python3 -c 'from pm import ensure; [ensure(name, explicit=True) for name in ("uv", "chromium", "npm", "ffmpeg", "ripgrep")]'; \
     python3 -c 'from pathlib import Path; from pm import installed_package; [Path("/usr/local/bin", command).symlink_to(installed_package(package).binary) for command, package in (("python3", "python"), ("node", "node"), ("npm", "npm"), ("ffmpeg", "ffmpeg"), ("rg", "ripgrep"))]; Path("/usr/local/bin/ffprobe").symlink_to(installed_package("ffmpeg").binary.with_name("ffprobe"))'; \
     ffmpeg -version >/dev/null; ffprobe -version >/dev/null; rg --version >/dev/null; \
