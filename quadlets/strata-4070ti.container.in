@@ -46,22 +46,6 @@ Environment=KV=int8
 Volume=%h/.local/share/strata/models:/data/models:z
 Volume=%h/.local/share/strata/mtp:/data/mtp:z
 Volume=%h/.local/share/strata/packs:/data/packs:z
-# strata-harness fork: the agent tab at /harness (serve/harness); sessions
-# and spill live on a shared state volume (same layout as the host CLI).
-Environment=STRATA_HARNESS=1
-Environment=STRATA_HARNESS_DIR=/data/harness
-# M9: new sessions default to the shared workspaces tree (the
-# harness tab's trusted-folder fence; pick per-session roots to override).
-Environment=STRATA_HARNESS_ROOTS=/data/workspaces
-# ADR-0014: the harness Plugins panel + loader are on; a plugin file is
-# imported ONLY after its sha256 is reviewed (panel or /harness/plugins/review).
-# The plugin dir lives on the shared harness state volume.
-Environment=STRATA_HARNESS_PLUGINS=1
-Environment=STRATA_HARNESS_PLUGIN_DIR=/data/harness/plugins
-Volume=%h/.local/share/strata/harness:/data/harness:Z
-# M9 trusted workspaces: the agent tab's per-session trusted folders live
-# here — place project dirs into this tree to share them with a session.
-Volume=%h/.local/share/strata/workspaces:/data/workspaces:Z
 Volume=%h/.local/share/strata/Strata-data:/data/Strata-data:Z
 Volume=%h/.local/share/strata/config-4070ti:/data/config:Z
 Volume=%h/.local/share/strata/state:/data/state:Z
@@ -70,6 +54,9 @@ Volume=%h/.local/share/strata/home:/data/home:Z
 PublishPort=0.0.0.0:11434:8080/tcp
 
 [Service]
+# Upstream #3238: this session inherits RLIMIT_RTTIME=0 (PipeWire without
+# rtkit) and the engine can get SIGKILL'ed with no OOM line. Never inherit it.
+LimitRTTIME=infinity
 # A container killed by the stop signal exits 143; that is a clean stop.
 SuccessExitStatus=143
 Restart=on-failure

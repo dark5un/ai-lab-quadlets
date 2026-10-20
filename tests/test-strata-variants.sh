@@ -39,10 +39,8 @@ for m in "${members[@]}"; do
     grep -Eq '^AddDevice=nvidia.com/gpu=(all|[0-9]+)$' "$f" && err "$name: CDI device by index/all, pin by UUID"
     grep -q "Volume=%h/.local/share/strata/config-$variant:/data/config" "$f" \
         || err "$name: config volume is not config-$variant"
-    grep -q "Volume=%h/.local/share/strata/workspaces:/data/workspaces:Z" "$f" \
-        || err "$name: workspaces mount missing"
-    grep -qx 'Environment=STRATA_HARNESS_ROOTS=/data/workspaces' "$f" \
-        || err "$name: STRATA_HARNESS_ROOTS default missing"
+    grep -q "STRATA_HARNESS" "$f" && err "$name: harness env must be gone (upstream switch 2026-10-20)"
+    grep -qx 'LimitRTTIME=infinity' "$f" || err "$name: LimitRTTIME=infinity missing"
     conflicts=$(sed -n 's/^Conflicts=//p' "$f")
     for other in "${members[@]}"; do
         read -r oname _ _ <<<"$other"
@@ -117,8 +115,8 @@ for m in "${coders[@]}"; do
     grep -qx 'Exec=-c __CPUS_CODER__ /opt/strata/entrypoint.sh run' "$f" || err "$name: not pinned to __CPUS_CODER__"
     cfg="config-${variant}"
     grep -q "Volume=%h/.local/share/strata/$cfg:/data/config" "$f" || err "$name: config volume is not $cfg"
-    grep -q "Volume=%h/.local/share/strata/workspaces:/data/workspaces:Z" "$f" || err "$name: workspaces mount missing"
-    grep -qx 'Environment=STRATA_HARNESS_ROOTS=/data/workspaces' "$f" || err "$name: STRATA_HARNESS_ROOTS default missing"
+    grep -q "STRATA_HARNESS" "$f" && err "$name: harness env must be gone (upstream switch 2026-10-20)"
+    grep -qx 'LimitRTTIME=infinity' "$f" || err "$name: LimitRTTIME=infinity missing"
     case "$variant" in *-128k) ctx=131072 ;; *-524k) ctx=524288 ;; *-1m) ctx=1048576 ;; *) ctx=262144 ;; esac
     grep -qx "Environment=CONTEXT=$ctx" "$f" || err "$name: CONTEXT is not $ctx"
     grep -qx "Environment=PRESET=$name" "$f" || err "$name: PRESET is not $name"
