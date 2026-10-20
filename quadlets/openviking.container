@@ -27,9 +27,6 @@ Environment=OPENVIKING_WITH_BOT=0
 EnvironmentFile=%h/.config/containers/config/openviking/service.env
 # Workspace (vectordb + agfs + master.key + memory) persists here:
 Volume=%h/.local/share/ai-lab/openviking:/app/.openviking:Z
-# Rendered config (install.sh rewrites it from ov.conf.example with the live
-# strata + llama.cpp + root keys; never edit in the container):
-Volume=%h/.config/containers/config/openviking/ov.conf:/app/.openviking/ov.conf:ro,Z
 
 [Service]
 # A container killed by the stop signal exits 143; that is a clean stop.

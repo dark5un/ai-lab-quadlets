@@ -167,10 +167,12 @@ echo "  sketchlab: /v1 proxy key = strata key"
 # are managed the same way.
 OV_ROOT="$(env_get "$CONF/openviking/service.env" OPENVIKING_ROOT_API_KEY)"
 [ -n "$OV_ROOT" ] || { echo "  ! openviking root key missing (scripts/generate-secrets.sh)" >&2; exit 1; }
-tmp="$CONF/openviking/ov.conf.tmp"
-sed -e "s|__ROOT_API_KEY__|$OV_ROOT|" -e "s|__STRATA_API_KEY__|$STRATA_KEY|" \
+tmp="$DATA/ai-lab/openviking/ov.conf.tmp"
+# the template header is shell comments; strip them (the entrypoint json.loads
+# the file, comments are fatal) and substitute the live keys.
+sed -e "/^#/d" -e "s|__ROOT_API_KEY__|$OV_ROOT|" -e "s|__STRATA_API_KEY__|$STRATA_KEY|" \
     -e "s|__LLAMA_CPP_KEY__|$LLAMA_KEY|" "$ROOT/config/openviking/ov.conf.example" > "$tmp"
-chmod 600 "$tmp"; mv "$tmp" "$CONF/openviking/ov.conf"
+chmod 600 "$tmp"; mv "$tmp" "$DATA/ai-lab/openviking/ov.conf"
 echo "  openviking: ov.conf rendered (root key; strata VLM; bge-m3 embeddings)"
 HC="$CONF/honcho/service.env"
 if [ -f "$HC" ]; then

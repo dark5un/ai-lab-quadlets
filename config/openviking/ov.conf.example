@@ -1,5 +1,5 @@
 # OpenViking server config TEMPLATE - install.sh renders the deployed copy to
-# ~/.config/containers/config/openviking/ov.conf (mode 600, rewritten on
+# ~/.local/share/ai-lab/openviking/ov.conf (the in-container config path; mode 600, rewritten on
 # every run so the keys stay current across rotation; values are hex, never
 # printed). Placeholders:
 #   __ROOT_API_KEY__     = config/openviking/service.env  OPENVIKING_ROOT_API_KEY
