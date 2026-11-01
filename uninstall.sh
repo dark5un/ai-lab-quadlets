@@ -58,7 +58,8 @@ for f in ai.network caddy.container comfyui.container hermes.container \
          gpu-exporter.container podman-exporter.container \
          blackbox-exporter.container victorialogs.container \
          fluent-bit.container embeddings.container openviking.container \
-         honcho-api.container honcho-deriver.container honcho-database.container; do
+         honcho-api.container honcho-deriver.container honcho-database.container \
+         dufs.container syncthing.container; do
     # shellcheck disable=SC2086
     for file in "$QUADLET_DIR"/$f; do
         [ -f "$file" ] && rm -f "$file" && echo "  ✓ removed $(basename "$file")"

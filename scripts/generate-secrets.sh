@@ -11,6 +11,7 @@
 #   llama-cpp/keys.txt           API key shared by every llama.cpp server
 #   openviking/service.env       root API key (memory group)
 #   honcho/service.env           DB password + JWT secret (memory group)
+#   dufs/config.yaml + service.env  WebDAV px password (hashed + plaintext mirror)
 #   hermes-service/service.env   only with --with-hermes (opt-in container)
 # Strata's API key is created by install-strata.sh.
 set -euo pipefail
@@ -96,6 +97,23 @@ else
     echo "  kept    $dst"
 fi
 chmod 600 "$dst"
+
+# dufs WebDAV (files tier): sha-512 hashed password for the px account in
+# the mounted config.yaml; the plaintext lives only in dufs/service.env
+# (DAV_PASSWORD) so clients can be configured. The hash never touches argv.
+dst="$CONF/dufs/config.yaml"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    dav_pass="$(openssl rand -hex 16)"
+    dav_hash="$(openssl passwd -6 "$dav_pass")"
+    sed "s|change-me-to-a-random-hashed-password|$dav_hash|" \
+        "$ROOT/config/dufs/config.yaml.example" > "$dst"
+    printf 'DAV_USER=px\nDAV_PASSWORD=%s\n' "$dav_pass" > "$CONF/dufs/service.env"
+    echo "  created $dst (user px; password in dufs/service.env, not printed)"
+else
+    echo "  kept    $dst"
+fi
+chmod 600 "$dst" "$CONF/dufs/service.env"
 
 # Containerized Hermes gateway (opt-in; this host runs Hermes natively).
 if [ "$WITH_HERMES" = 1 ]; then

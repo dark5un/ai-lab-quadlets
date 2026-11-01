@@ -71,6 +71,7 @@ if [[ "$REBUILD" == 1 ]] || ! podman image exists "$IMAGE"; then
     podman build --build-arg "CUDA_ARCHITECTURES=${CUDA_ARCHS}" \
         --build-arg "CUDA_IMAGE=docker.io/nvidia/cuda:13.0.0-devel-ubuntu24.04" \
         --build-arg "RUNTIME_BASE=docker.io/library/ubuntu:24.04" \
+    --build-arg "STRATA_COMMIT=$(git -C "$STRATA_REPO" rev-parse HEAD)" \
         "${BUILD_ARGS[@]}" \
         -t "$IMAGE" -f "$DOCKERFILE" "$STRATA_REPO"
     if [[ -n "${TMPD:-}" ]]; then rm -rf "$TMPD"; fi

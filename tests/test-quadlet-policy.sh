@@ -3,6 +3,8 @@
 #   - nothing starts at boot: no [Install], registry boot=false everywhere,
 #     EXCEPT the monitoring tier (plan D1): prometheus, the exporters and the
 #     log pair enable at boot; grafana stays on demand like the web apps.
+#   - AND the files tier (dufs, syncthing): no GPU, headless-box access
+#     services, must not gap while the owner works from the Mac.
 #   - the one GPU exception: strata-5090-1m is the default strata variant and
 #     boots with the session (its Conflicts= lines stop it when another
 #     variant or card user takes over).
@@ -29,7 +31,8 @@ for f in "$ROOT"/quadlets/*.container "$ROOT"/quadlets/*.container.in; do
         case "$n" in
             prometheus.container|node-exporter.container|gpu-exporter.container|\
             podman-exporter.container|blackbox-exporter.container|\
-            victorialogs.container|fluent-bit.container|strata-5090-1m.container.in) ;;
+            victorialogs.container|fluent-bit.container|strata-5090-1m.container.in|\
+            dufs.container|syncthing.container) ;;
             *) err "$n has an [Install] section" ;;
         esac
     fi
@@ -50,7 +53,8 @@ root = sys.argv[1]
 want = {"5090": "__GPU_5090_UUID__", "4070ti": "__GPU_4070TI_UUID__",
         "both": "__GPU_5090_UUID__,__GPU_4070TI_UUID__"}
 BOOT_OK = {"prometheus", "node-exporter", "gpu-exporter", "podman-exporter",
-           "blackbox-exporter", "victorialogs", "fluent-bit", "strata-5090-1m"}
+           "blackbox-exporter", "victorialogs", "fluent-bit", "strata-5090-1m",
+           "dufs", "syncthing"}
 GPU_DEVICE_OK = {"gpu-exporter"}   # AddDevice without a registry card
 bad = 0
 for s in json.load(open(f"{root}/services.json"))["services"]:

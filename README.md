@@ -2,7 +2,8 @@
 
 > **Self-hosted AI services for ONE host: Arch Linux, RTX 5090 + RTX 4070 Ti,
 > rootless Podman Quadlets.** Every service starts on demand; at boot only
-> the monitoring tier and the default strata variant (5090, 1M context) start.
+> the monitoring tier, the files tier (dufs WebDAV, syncthing) and the default
+> strata variant (5090, 1M context) start.
 
 This repo packages the AI lab of the `ai` box as Podman Quadlets (declarative
 container units managed by `systemd --user`). `services.json` is the single
@@ -53,6 +54,8 @@ GPU rules when they do.
 | `honcho-database` | none (ai.network) | - | password | PostgreSQL 15 + pgvector for Honcho |
 | `honcho-api` | `3111` | - | JWT | Honcho API (AUTH_USE_AUTH=true; LLM=strata, embeddings=systemd-embeddings) |
 | `honcho-deriver` | none (ai.network) | - | none | Honcho background worker (memory extraction; `/metrics` on 9090 in-network) |
+| `dufs` | `3112` | - | basic (px) | dufs WebDAV file server, whole home; LAN + tailnet; boot (files tier) |
+| `syncthing` | `127.0.0.1:8384` + `22000` listener | - | device-ID | Syncthing v2, home folder sync with the Mac; GUI loopback (`ssh -L 8384:127.0.0.1:8384`); listener open on tailscale0; boot (files tier) |
 | `prometheus` | `127.0.0.1:3107` | - | none | metrics store; scrapes every service, OTLP receiver for Open WebUI; boot |
 | `grafana` | `3106` | - | account | dashboards (provisioned from `monitoring/`), LAN with login; on demand |
 | `node-exporter` | `127.0.0.1:9100` | - | none | host CPU/RAM/disk/net/temp; boot |
@@ -328,6 +331,8 @@ Auth status mirrors the `"auth"` field in `services.json`
 | Embeddings (memory stack) | `http://127.0.0.1:3109/v1` (loopback only) | API key (llama-cpp keys.txt) |
 | OpenViking (memory stack) | `http://<host>:3110` (tailnet only: ufw rules on tailscale0) | root API key (`config/openviking/service.env`) |
 | Honcho (memory stack) | `http://<host>:3111` (tailnet only: ufw rules on tailscale0) | JWT (`config/honcho/service.env` AUTH_JWT_SECRET) |
+| dufs (files) | `http://<host>:3112` (LAN + tailnet; Finder/`WebDAV`) | basic px (hash in `config/dufs/config.yaml`; plaintext in `config/dufs/service.env` DAV_PASSWORD) |
+| syncthing (files) | GUI loopback `:8384`; listener `:22000` (tailscale0 only) | device-ID crypto; no password leg |
 
 **LAN exposure decision (deliberate):** this stack runs on a trusted home LAN.
 The unauthenticated endpoints (ComfyUI, Sketch Lab, HyperFrames, Rizzo) are
@@ -362,6 +367,9 @@ sudo ufw allow 3100/tcp                                       # LAN + tailnet
 sudo ufw allow in on tailscale0 to any port 11434 proto tcp   # tailnet only
 sudo ufw allow in on tailscale0 to any port 3110 proto tcp    # OpenViking (Mac Hermes)
 sudo ufw allow in on tailscale0 to any port 3111 proto tcp    # Honcho (Mac Hermes)
+sudo ufw allow 3112/tcp                                       # dufs WebDAV (LAN + tailnet)
+sudo ufw allow in on tailscale0 to any port 22000 proto tcp   # syncthing direct
+sudo ufw allow in on tailscale0 to any port 22000 proto udp
 ```
 
 DeepSeek Harness stays on loopback and never needs a rule. The memory stack
@@ -561,12 +569,38 @@ cd /path/to/hyperframes
 podman build -f packages/gcp-cloud-run/Dockerfile -t localhost/hyperframes:latest .
 ```
 
+## Headless operation (this box runs without the desktop)
+
+The box's admin leg is ssh (sshd + the Mac's key); user linger is ON, so
+quadlets - including the boot tier - come up with no GUI session at all.
+The desktop is disabled at boot, not uninstalled:
+
+    sudo systemctl disable sddm     # next boot: headless (saves RAM/GPU compositing)
+    sudo systemctl start sddm       # any time from ssh: ryoku desktop on its VT
+    sudo systemctl enable sddm      # persist the desktop again
+
+Everything the bar widget does is available from ssh: `ai-lab status`,
+`ai-lab start|stop <name>`, `ai-lab strata 5090-1m|...`. The Syncthing GUI is
+loopback-only; reach it headless with `ssh -L 8384:127.0.0.1:8384 <box>`.
+
+File access from the Mac has two legs:
+- WebDAV (browse/edit the whole home): Finder Cmd-K
+  `http://<tailnet-ip>:3112` (tailnet; prefer it over `ai.local` mDNS for
+  the saved bookmark). User `px`; password in `config/dufs/service.env`.
+  LAN HTTP is basic-auth only - trusted-LAN decision; the tailnet leg is
+  encrypted by Tailscale.
+- Syncthing (continuous two-way sync of the home, minus `~/.stignore`):
+  add the box's device ID in the Mac's Syncthing GUI and share the folder.
+  Pairing is manual on purpose; the box accepts introductions over the
+  tailnet listener only (ufw tailscale0 rules for 22000).
+
 ## Monitoring
 
 Prometheus + Grafana + VictoriaLogs, all rootless quadlets (plan:
 ~/Documents/plans/ai-lab-monitoring-plan.md). The monitoring tier is the
-stack's one deliberate boot exception: Prometheus, the exporters and the
-log pair enable at boot (they hold no GPU/VRAM); Grafana stays on demand
+stack's deliberate boot exceptions: Prometheus, the exporters and the
+log pair enable at boot (they hold no GPU/VRAM), as does the files tier
+(dufs + syncthing: a headless box whose file access must never gap); Grafana stays on demand
 with the web apps. `ai-lab start|stop monitoring` (or the MONITORING row
 in the bar plugin) controls the whole group.
 

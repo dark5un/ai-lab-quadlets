@@ -18,7 +18,7 @@ REG="$ROOT/services.json"
 CONF="${HOME}/.config/containers/config"
 SKETCHLAB_REPO="${SKETCHLAB_REPO:-${HOME}/workspace/github.com/dark5un/sketchlab.app}"
 HYPERFRAMES_REPO="${HYPERFRAMES_REPO:-${HOME}/workspace/github.com/heygen-com/hyperframes}"
-DEFAULT=(open-webui llama-cpp comfyui rizzo sketchlab hyperframes)
+DEFAULT=(open-webui llama-cpp comfyui rizzo sketchlab hyperframes dufs syncthing)
 
 REBUILD=0 NAMES=()
 for arg in "$@"; do

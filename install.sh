@@ -12,7 +12,8 @@
 #                            (this host runs Hermes natively; normally not wanted)
 #
 # Nothing is started, and nothing is enabled at boot EXCEPT the monitoring
-# tier (prometheus, exporters, logs; plan D1 — they hold no GPU/VRAM).
+# tier (prometheus, exporters, logs; plan D1 - they hold no GPU/VRAM) and the
+# files tier (dufs WebDAV, syncthing - headless box, access must never gap).
 # Grafana and every GPU/web service start on demand:
 # `scripts/ai-lab start <name>` or the AI Lab bar widget.
 set -euo pipefail
@@ -207,7 +208,7 @@ umask 022
 
 # ─── 4. Units ────────────────────────────────────────────────────────────────
 say "4/6 units in $QUADLET_DIR"
-UNITS=(ai llama-cpp-5090 llama-cpp-4070ti llama-cpp-both comfyui-5090 comfyui-4070ti rizzo open-webui sketchlab hyperframes docling-cpu docling-4070ti prometheus grafana node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit embeddings openviking honcho-database honcho-api honcho-deriver)
+UNITS=(ai llama-cpp-5090 llama-cpp-4070ti llama-cpp-both comfyui-5090 comfyui-4070ti rizzo open-webui sketchlab hyperframes docling-cpu docling-4070ti prometheus grafana node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit embeddings openviking honcho-database honcho-api honcho-deriver dufs syncthing)
 [ "$WITH_DSH" = 1 ] && UNITS+=(deepseek-harness)
 [ "$WITH_HERMES" = 1 ] && UNITS+=(hermes)
 "$ROOT/scripts/render-units.sh" "${UNITS[@]}"
@@ -262,8 +263,9 @@ install -m 644 "$ROOT/services/maya-metrics-relay.timer" "$HOME/.config/systemd/
 systemctl --user enable --now maya-metrics-relay.timer >/dev/null 2>&1 || true
 echo "  ✓ maya-metrics-relay.timer (15 s, on demand with maya)"
 # Boot tier (plan D1): monitoring units except grafana enable at boot, plus
-# the default strata variant (strata-5090-1m).
-for u in prometheus node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit strata-5090-1m; do
+# the default strata variant (strata-5090-1m), plus the files tier (dufs,
+# syncthing: no GPU, must not gap while the owner is away at the Mac).
+for u in prometheus node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit strata-5090-1m dufs syncthing; do
     systemctl --user enable "$u.service" >/dev/null 2>&1 || true
 done
 systemctl --user daemon-reload
@@ -276,6 +278,13 @@ mkdir -p "$DATA"/prometheus "$DATA"/victorialogs "$DATA"/node-exporter/textfile
 # Memory group data dirs (create BEFORE first start: statfs pitfall). The
 # embeddings dir is separate from the llama.cpp card dirs on purpose.
 mkdir -p "$DATA"/ai-lab/embeddings/models "$DATA"/ai-lab/openviking "$DATA"/ai-lab/honcho-database
+# files tier: syncthing config/db home + the user-editable ignore list for
+# the shared home folder (created once; afterwards the user's to edit).
+mkdir -p "$DATA"/syncthing
+if [ ! -f "$HOME/.stignore" ]; then
+    install -m 644 "$ROOT/config/syncthing/stignore.example" "$HOME/.stignore"
+    echo "  created ~/.stignore (syncthing home-folder excludes)"
+fi
 chmod 700 "$DATA"/ai-lab/embeddings "$DATA"/ai-lab/embeddings/models "$DATA"/ai-lab/openviking "$DATA"/ai-lab/honcho-database
 [ "$WITH_HERMES" = 1 ] && mkdir -p "$DATA"/hermes-service
 echo "  ✓ ~/.local/share/{llama.cpp/cards/{5090,4070ti,both},comfyui,sketchlab,rizzo,prometheus,victorialogs,node-exporter/textfile}"
@@ -290,7 +299,7 @@ say "6/6 images"
 if [ "$NO_IMAGES" = 1 ]; then
     echo "  skipped (--no-images)"
 else
-    IMAGES=(open-webui llama-cpp comfyui rizzo sketchlab hyperframes docling memory)
+    IMAGES=(open-webui llama-cpp comfyui rizzo sketchlab hyperframes docling memory dufs syncthing)
     [ "$WITH_DSH" = 1 ] && IMAGES+=(deepseek-harness)
     [ "$WITH_HERMES" = 1 ] && IMAGES+=(hermes)
     "$ROOT/scripts/build-images.sh" $([ "$REBUILD" = 1 ] && echo --rebuild) "${IMAGES[@]}" \

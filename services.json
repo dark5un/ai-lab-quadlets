@@ -393,7 +393,7 @@
       "bind": "0.0.0.0",
       "health": "/",
       "tier": "image",
-      "image": "localhost/comfyui:v0.34.0-cu130",
+      "image": "localhost/comfyui:v0.43.0-cu130",
       "boot": false,
       "auth": "none",
       "gpu": "5090",
@@ -410,7 +410,7 @@
       "bind": "0.0.0.0",
       "health": "/",
       "tier": "image",
-      "image": "localhost/comfyui:v0.34.0-cu130",
+      "image": "localhost/comfyui:v0.43.0-cu130",
       "boot": false,
       "auth": "none",
       "gpu": "4070ti",
@@ -775,6 +775,36 @@
       "image_digest": "ghcr.io/plastic-labs/honcho@sha256:81dc7d8d38ca28b3f4420aa43666c03e8334391b71eb351fbae64233082159f0",
       "note": "Honcho background worker (Exec python -m src.deriver, no host port; /metrics on 9090 in-network); essential for memory extraction; start after honcho-api is healthy",
       "group": "memory"
+    },
+    {
+      "name": "dufs",
+      "unit": "dufs.service",
+      "container": "systemd-dufs",
+      "host_port": 3112,
+      "container_port": 5000,
+      "bind": "127.0.0.1",
+      "health": "/__dufs__/health",
+      "tier": "files",
+      "image": "docker.io/sigoden/dufs:latest",
+      "boot": true,
+      "auth": "basic",
+      "image_digest": "docker.io/sigoden/dufs@sha256:5b0da3dd554e56f7ad8b85a929c6aaaf4024773a15a8a07d3a653a47c80d322d",
+      "note": "whole-home WebDAV + browser UI for the Mac; tailnet-only: loopback bind + tailscale serve https://ai.<tailnet>.ts.net (LE cert, 443 -> 127.0.0.1:3112); old ufw allow 3112/tcp deleted; account px, sha-512 hash in config/dufs/config.yaml, plaintext in config/dufs/service.env (DAV_PASSWORD); boots at boot (files tier)"
+    },
+    {
+      "name": "syncthing",
+      "unit": "syncthing.service",
+      "container": "systemd-syncthing",
+      "host_port": 8384,
+      "container_port": 8384,
+      "bind": "127.0.0.1",
+      "health": "/",
+      "tier": "files",
+      "image": "docker.io/syncthing/syncthing:2",
+      "boot": true,
+      "auth": "account",
+      "image_digest": "docker.io/syncthing/syncthing@sha256:c28e86f5173bacc429aef92af915b5c4fac56e1a9dcd3875855fd51f664d0414",
+      "note": "home folder sync with the Mac; GUI loopback 127.0.0.1:8384 (ssh -L when headless); listener 22000 tcp+udp published for direct connect, ufw tailscale0-only; ~/.stignore excludes machine-local state; boots at boot (files tier)"
     }
   ]
 }

@@ -1,0 +1,14 @@
+# .stignore template. install.sh copies it to ~/.stignore ONCE (the deployed
+# file is the user's to edit). Root-anchored: the whole home syncs except
+# machine-local state that must never cross hosts.
+/.cache
+/.config/containers
+/.local/share/containers
+/.local/share/syncthing
+/.local/share/pip-cache
+/.local/share/nvidia
+/.local/state
+/.stfolder
+/.git
+*.sock
+node_modules

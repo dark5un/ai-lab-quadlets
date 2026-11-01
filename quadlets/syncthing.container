@@ -1,0 +1,43 @@
+# Syncthing v2: continuous two-way sync of the home folder with the Mac
+# (and any future device). Home is mounted at the SAME path inside the
+# container so sync is path-identical; ~/.stignore (from install.sh) keeps
+# machine-local state (podman storage, caches, config dirs) out of the sync.
+# GUI: loopback only (http://127.0.0.1:8384; reach it headless via
+# `ssh -L 8384:127.0.0.1:8384 <box>`). Listener 22000 tcp+udp is published
+# for direct connections; ufw permits it on tailscale0 only.
+# Boots with the session (files tier, see dufs.container and
+# tests/test-quadlet-policy.sh). PUID/PGID make the entrypoint run as px.
+
+[Unit]
+Description=Syncthing (home sync)
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-syncthing
+Image=docker.io/syncthing/syncthing:2
+Network=ai.network
+# First PublishPort = the registry contract (gui, loopback); the listener is
+# extra, like nats' 4222.
+PublishPort=127.0.0.1:8384:8384/tcp
+PublishPort=0.0.0.0:22000:22000/tcp
+PublishPort=0.0.0.0:22000:22000/udp
+Volume=%h/.local/share/syncthing:/var/syncthing:Z
+Volume=%h:/home/px:Z
+# PUID/PGID 0: under rootless podman "root" in this container IS px on the
+# host; a 1000 here would map to subuid 100999 and mis-own every synced
+# file. The entrypoint su-execs to 0:0, which is the host user.
+Environment=PUID=0
+Environment=PGID=0
+# image tag is pinned in services.json; never let syncthing self-update.
+Environment=STNOUPGRADE=1
+RunInit=true
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,17 @@
+# dufs config template. scripts/generate-secrets.sh renders the deployed
+# copy to ~/.config/containers/config/dufs/config.yaml (mode 600), replacing
+# the placeholder with a sha-512 hash (openssl passwd -6) of a random
+# password; the plaintext is kept in dufs/service.env (DAV_PASSWORD) for
+# clients. Mounted read-only into the container.
+port: 5000
+bind: 0.0.0.0
+auth:
+  - "px:change-me-to-a-random-hashed-password@/:rw"
+allow-upload: true
+allow-delete: true
+allow-search: true
+allow-archive: true
+allow-hash: true
+hidden:
+  - "*.sock"
+  - "*.pid"
