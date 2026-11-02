@@ -573,6 +573,9 @@ podman build -f packages/gcp-cloud-run/Dockerfile -t localhost/hyperframes:lates
 
 The box's admin leg is ssh (sshd + the Mac's key); user linger is ON, so
 quadlets - including the boot tier - come up with no GUI session at all.
+Root ssh is disabled (`PermitRootLogin no` via a drop-in in
+`/etc/ssh/sshd_config.d/`; root's `authorized_keys` removed): administer as `px`
+(in `wheel`; sudo prompts for the password). Root stays reachable on the console.
 The desktop is disabled at boot, not uninstalled:
 
     sudo systemctl disable sddm     # next boot: headless (saves RAM/GPU compositing)
