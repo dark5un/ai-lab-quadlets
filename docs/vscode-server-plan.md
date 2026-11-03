@@ -336,6 +336,21 @@ tests/test-quadlet-policy.sh && tests/test-registry-consistency.sh   # repo gate
 
 ## 7. Explicitly NOT doing (deferred)
 
+- **Connection-token rotation**: add `vscode` to `scripts/rotate-secrets.sh`
+  (`rotate_env_key "$CONF/vscode/service.env" VSCODE_CONNECTION_TOKEN` +
+  restart `vscode.service` + re-bootstrap the browser with `?tkn=<new>`).
+  Mechanism already exists; only the one line is missing. Noted 2026-11-03.
+- **`--connection-token-file` instead of `--connection-token`**: keeps the
+  token out of the serve-web argv, where host `ps`/`systemctl status` expose
+  it to any local user. One-line entrypoint change; also makes the rotation
+  above cheaper (swap the file, restart). Noted 2026-11-03.
+- **Login UX note (verified 1.144.1)**: serve-web renders NO HTML login page
+  on an unauthenticated navigation — the browser sees plain-text
+  "Forbidden." (the token gate working). First visit must be
+  `https://ai.<TAILNET>.ts.net:8443/?tkn=<token>`; the `vscode-tkn` cookie
+  lasts 7 days, after which the bare URL works again. The §5 curl check
+  passes only through this cookie flow.
+
 - caddy TLS front for direct LAN browser use — motivation superseded by
   tailscale serve; revisit only if a non-tailnet LAN client ever matters.
 - `code tunnel` for desktop-client sessions (one entrypoint flag away).
