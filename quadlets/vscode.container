@@ -20,8 +20,10 @@ EnvironmentFile=%h/.config/containers/config/vscode/service.env
 
 # persistent home (extensions, .vscode-server, dotfiles)
 Volume=%h/.homes/vscode/px:/home/px:Z
-# workspace at the SAME path -> host-podman bind mounts work identically
-Volume=%h/workspace:%h/workspace:Z
+# workspace at the SAME path -> host-podman bind mounts work identically.
+# Deliberately NOT ~/workspace (syncthing-synced): the box works in its own
+# ~/.workspaces/vscode area (v0.5, 2026-11-03).
+Volume=%h/.workspaces/vscode:%h/.workspaces/vscode:Z
 # distrobox-style host Podman API (socket at the host's same path; the image
 # sets containers.conf remote=true and the entrypoint registers the default
 # connection -- no XDG_RUNTIME_DIR=/run/user/1000 override: the mount point

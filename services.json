@@ -818,7 +818,7 @@
       "image": "localhost/vscode:1.144.1",
       "boot": false,
       "auth": "token",
-      "note": "VS Code Server (serve-web) in an Arch dev box; px=1000 keep-id (fish login shell), sudo inside; host podman socket mounted (distrobox-style); ~/workspace at same path; GPU devices visible via AddDevice=all but NO gpu field (deliberate: outside arbiter); loopback publish, tailnet door via tailscale serve https :8443 (real FQDN never committed)"
+      "note": "VS Code Server (serve-web) in an Arch dev box; px=1000 keep-id (fish login shell), sudo inside; host podman socket mounted (distrobox-style); works in ~/.workspaces/vscode at the same path (NOT the syncthing-synced ~/workspace); GPU devices visible via AddDevice=all but NO gpu field (deliberate: outside arbiter); loopback publish, tailnet door via tailscale serve https :8443 (real FQDN never committed)"
     }
   ]
 }
