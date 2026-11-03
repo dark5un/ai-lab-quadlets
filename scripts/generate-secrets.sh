@@ -12,6 +12,7 @@
 #   openviking/service.env       root API key (memory group)
 #   honcho/service.env           DB password + JWT secret (memory group)
 #   dufs/config.yaml + service.env  WebDAV px password (hashed + plaintext mirror)
+#   vscode/service.env           VSCODE_CONNECTION_TOKEN (serve-web)
 #   hermes-service/service.env   only with --with-hermes (opt-in container)
 # Strata's API key is created by install-strata.sh.
 set -euo pipefail
@@ -114,6 +115,18 @@ else
     echo "  kept    $dst"
 fi
 chmod 600 "$dst" "$CONF/dufs/service.env"
+
+# VS Code Server (serve-web) connection token.
+dst="$CONF/vscode/service.env"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    sed "s/change-me-to-a-random-hex-string/$(rand_hex 16)/" \
+        "$ROOT/config/vscode/service.env.example" > "$dst"
+    echo "  created $dst"
+else
+    echo "  kept    $dst"
+fi
+chmod 600 "$dst"
 
 # Containerized Hermes gateway (opt-in; this host runs Hermes natively).
 if [ "$WITH_HERMES" = 1 ]; then

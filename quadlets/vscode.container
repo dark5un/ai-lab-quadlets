@@ -1,0 +1,40 @@
+[Unit]
+Description=VS Code Server - Arch dev box (serve-web), host-podman aware
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-vscode
+Image=localhost/vscode:1.144.1
+Network=ai.network
+UserNS=keep-id
+
+# GPU: full card visibility via CDI (nvidia-smi/CUDA work inside) but NO
+# registry "gpu" field -> the arbiter never treats this as a card claim.
+# Both cards visible; pin per process with CUDA_VISIBLE_DEVICES when needed.
+# Matches the test's GPU_DEVICE_OK exception (add "vscode" to the set).
+AddDevice=nvidia.com/gpu=all
+SecurityLabelDisable=true
+
+EnvironmentFile=%h/.config/containers/config/vscode/service.env
+
+# persistent home (extensions, .vscode-server, dotfiles)
+Volume=%h/.homes/vscode/px:/home/px:Z
+# workspace at the SAME path -> host-podman bind mounts work identically
+Volume=%h/workspace:%h/workspace:Z
+# distrobox-style host Podman API (socket at the host's same path; the image
+# sets containers.conf remote=true and the entrypoint registers the default
+# connection -- no XDG_RUNTIME_DIR=/run/user/1000 override: the mount point
+# is root-owned inside and the client needs a writable runtime dir)
+Volume=%t/podman/podman.sock:/run/user/1000/podman/podman.sock
+
+PublishPort=127.0.0.1:3113:8000/tcp
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+# first start downloads the VS Code Server component into the home
+TimeoutStartSec=900
+TimeoutStopSec=120

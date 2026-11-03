@@ -55,7 +55,7 @@ want = {"5090": "__GPU_5090_UUID__", "4070ti": "__GPU_4070TI_UUID__",
 BOOT_OK = {"prometheus", "node-exporter", "gpu-exporter", "podman-exporter",
            "blackbox-exporter", "victorialogs", "fluent-bit", "strata-5090-1m",
            "dufs", "syncthing"}
-GPU_DEVICE_OK = {"gpu-exporter"}   # AddDevice without a registry card
+GPU_DEVICE_OK = {"gpu-exporter", "vscode"}   # AddDevice without a registry card
 bad = 0
 for s in json.load(open(f"{root}/services.json"))["services"]:
     name = s["name"]
@@ -79,7 +79,7 @@ for s in json.load(open(f"{root}/services.json"))["services"]:
             print(f"  FAIL: {name}: a non-strata service on both cards must be exclusive"); bad = 1
     elif devices or cvd:
         if name in GPU_DEVICE_OK and devices == ["nvidia.com/gpu=all"] and not cvd:
-            pass  # gpu-exporter: NVML device access, not a card owner
+            pass  # GPU visibility (NVML / dev box), not a card claim
         else:
             print(f"  FAIL: {name}: has GPU devices but no registry card"); bad = 1
 sys.exit(bad)

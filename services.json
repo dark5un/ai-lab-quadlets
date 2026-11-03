@@ -805,6 +805,20 @@
       "auth": "account",
       "image_digest": "docker.io/syncthing/syncthing@sha256:c28e86f5173bacc429aef92af915b5c4fac56e1a9dcd3875855fd51f664d0414",
       "note": "home folder sync with the Mac; GUI loopback 127.0.0.1:8384 (ssh -L when headless); listener 22000 tcp+udp published for direct connect, ufw tailscale0-only; ~/.stignore excludes machine-local state; boots at boot (files tier)"
+    },
+    {
+      "name": "vscode",
+      "unit": "vscode.service",
+      "container": "systemd-vscode",
+      "host_port": 3113,
+      "container_port": 8000,
+      "bind": "127.0.0.1",
+      "health": "/",
+      "tier": "optional",
+      "image": "localhost/vscode:1.144.1",
+      "boot": false,
+      "auth": "token",
+      "note": "VS Code Server (serve-web) in an Arch dev box; px=1000 keep-id (fish login shell), sudo inside; host podman socket mounted (distrobox-style); ~/workspace at same path; GPU devices visible via AddDevice=all but NO gpu field (deliberate: outside arbiter); loopback publish, tailnet door via tailscale serve https :8443 (real FQDN never committed)"
     }
   ]
 }

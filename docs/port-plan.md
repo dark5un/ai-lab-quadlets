@@ -41,6 +41,7 @@ Web apps (31xx family, sequential):
 | hermes (opt-in)    | 3003 | 3104 | LAN      |
 | deepseek-harness   | 3080 | 3105 | loopback (Network=host, dsh binds 127.0.0.1 itself) |
 | docling-serve      | 5001 | 3108 | loopback (the docling MCP's remote backend) |
+| vscode             | -    | 3113 | loopback (tailnet door: tailscale serve https :8443; fallback ssh -L) |
 
 Monitoring (added 2026-10-08, plan ~/Documents/plans/ai-lab-monitoring-plan.md):
 

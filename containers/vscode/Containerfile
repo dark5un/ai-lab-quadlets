@@ -1,0 +1,60 @@
+# VS Code Server dev box (Arch) — image
+#
+# Build:
+#   podman build -t localhost/vscode:1.144.1 -f containers/vscode/Containerfile containers/vscode/
+#
+# Official VS Code Server CLI pinned by commit. Update deliberately:
+#   resolve https://update.code.visualstudio.com/latest/cli-linux-x64/stable, read commit from URL.
+#
+# uid/gid 1000 MUST match host px; quadlet runs with UserNS=keep-id.
+
+# syntax=docker/dockerfile:1.7
+FROM docker.io/library/archlinux@sha256:42217d5f09e11d3fe7ad3b309b7fde891d458464dab5d674e629073765610427
+
+ARG VSCODE_COMMIT=261c84cb1eddf11235f9e2c921425e9663fbe556
+
+# Full -Syu first (digest-pinned base: never a partial upgrade).
+# Starter package set is deliberately small; px installs the rest with sudo.
+# mise is pacman-managed here exactly like on the host (2026.10.x).
+RUN pacman -Syu --noconfirm && \
+    pacman -S --noconfirm --needed \
+      base-devel bash curl ca-certificates fish git jq mise neovim \
+      openssh fd fzf procps-ng iproute2 ripgrep which \
+      sudo podman \
+      unzip zip tar gzip xz && \
+    pacman -Sc --noconfirm
+
+# px = 1000:1000 (keep-id maps it to host px); fish is the login shell;
+# wheel + NOPASSWD = distrobox-style sudo. The fish pacman hook registers
+# /usr/bin/fish in /etc/shells, so useradd -s accepts it.
+RUN groupadd -g 1000 px && \
+    useradd -m -u 1000 -g 1000 -s /usr/bin/fish -G wheel px && \
+    printf 'px ALL=(ALL) NOPASSWD:ALL\n' > /etc/sudoers.d/px && \
+    chmod 0440 /etc/sudoers.d/px && \
+    visudo -c
+
+# VS Code Server CLI (single static-ish binary; glibc base, NOT the alpine build)
+RUN curl -fL "https://update.code.visualstudio.com/commit:${VSCODE_COMMIT}/cli-linux-x64/stable" \
+      -o /tmp/vscode-cli.tar.gz && \
+    tar xzf /tmp/vscode-cli.tar.gz -C /usr/local/bin && \
+    rm /tmp/vscode-cli.tar.gz && \
+    /usr/local/bin/code --version
+
+# Guest podman = client only (distrobox-style): every podman/docker-API call
+# goes to the HOST daemon via the socket the quadlet mounts at the host's
+# same path. remote=true makes bare `podman` pick the remote connection;
+# the connection itself is registered once by the entrypoint into the
+# persisted home (podman-connections.json). Do NOT export
+# XDG_RUNTIME_DIR=/run/user/1000 here: the socket mount point is root-owned
+# in the container and the client needs a writable runtime dir for its
+# tmp files — with the var unset podman falls back to /tmp/storage-run-1000.
+RUN mkdir -p /etc/containers && \
+    printf '[engine]\nremote = true\n' > /etc/containers/containers.conf
+
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod 0755 /usr/local/bin/entrypoint.sh
+
+USER px:px
+WORKDIR /home/px
+EXPOSE 8000
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

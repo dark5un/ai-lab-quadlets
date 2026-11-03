@@ -5,7 +5,7 @@
 #   scripts/build-images.sh [--rebuild] [NAME...]
 #
 # NAME: open-webui llama-cpp comfyui rizzo sketchlab hyperframes
-#       deepseek-harness hermes memory   (default: the first six)
+#       deepseek-harness hermes memory vscode   (default: the first six + files + vscode)
 # Pulled images (open-webui, llama-cpp, hermes) are pulled only when missing;
 # a pulled digest that differs from the registry's image_digest is reported.
 # Built images are skipped when present unless --rebuild; comfyui also
@@ -18,7 +18,7 @@ REG="$ROOT/services.json"
 CONF="${HOME}/.config/containers/config"
 SKETCHLAB_REPO="${SKETCHLAB_REPO:-${HOME}/workspace/github.com/dark5un/sketchlab.app}"
 HYPERFRAMES_REPO="${HYPERFRAMES_REPO:-${HOME}/workspace/github.com/heygen-com/hyperframes}"
-DEFAULT=(open-webui llama-cpp comfyui rizzo sketchlab hyperframes dufs syncthing)
+DEFAULT=(open-webui llama-cpp comfyui rizzo sketchlab hyperframes dufs syncthing vscode)
 
 REBUILD=0 NAMES=()
 for arg in "$@"; do
@@ -99,6 +99,7 @@ for name in "${NAMES[@]}"; do
                 pull honcho-api; pull honcho-deriver ;;
         deepseek-harness) build deepseek-harness "$ROOT/containers/deepseek-harness" \
                               -f "$ROOT/containers/deepseek-harness/Containerfile" ;;
+        vscode) build vscode "$ROOT/containers/vscode" -f "$ROOT/containers/vscode/Containerfile" ;;
         *) echo "  ! unknown image '$name'"; fail=1 ;;
     esac
 done

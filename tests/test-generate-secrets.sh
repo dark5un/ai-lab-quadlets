@@ -51,6 +51,16 @@ bash "$ROOT/scripts/generate-secrets.sh" > /dev/null
 [ "$(sed -n 's/^OPENVIKING_ROOT_API_KEY=//p' "$ov" | tail -1)" = "$k1" ] || fail "openviking key changed on re-run"
 [ "$(sed -n 's/^AUTH_JWT_SECRET=//p' "$hc" | tail -1)" = "$hc_jwt" ] || fail "honcho JWT secret changed on re-run"
 
+# vscode: connection token env (600, no placeholder, kept on re-run).
+vc="$AI_LAB_CONFIG_DIR/vscode/service.env"
+[ "$(stat -c %a "$vc")" = 600 ] || fail "vscode env not 600"
+[ "$(stat -c %a "$AI_LAB_CONFIG_DIR/vscode")" = 700 ] || fail "vscode dir not 700"
+grep -q 'change-me' "$vc" && fail "placeholder left in vscode env"
+v1=$(sed -n 's/^VSCODE_CONNECTION_TOKEN=//p' "$vc" | tail -1)
+grep -Eq '^[0-9a-f]{32}$' <<<"$v1" || fail "vscode token is not one 32-hex string"
+bash "$ROOT/scripts/generate-secrets.sh" > /dev/null
+[ "$(sed -n 's/^VSCODE_CONNECTION_TOKEN=//p' "$vc" | tail -1)" = "$v1" ] || fail "vscode token changed on re-run"
+
 # Nothing written into the repo.
 after="$(git -C "$ROOT" status --porcelain --ignored config 2>/dev/null || true)"
 [ "$before" = "$after" ] || fail "generate-secrets.sh touched the repo's config/"
