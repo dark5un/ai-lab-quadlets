@@ -12,17 +12,41 @@
 FROM docker.io/library/archlinux@sha256:42217d5f09e11d3fe7ad3b309b7fde891d458464dab5d674e629073765610427
 
 ARG VSCODE_COMMIT=261c84cb1eddf11235f9e2c921425e9663fbe556
+# gcloud CLI pinned to the latest rapid release (verified live 2026-11-03).
+# Update deliberately: probe
+#   https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-<V>-linux-x86_64.tar.gz
+# (or the latest google-cloud-cli entry in packages.cloud.google.com/apt).
+ARG GCLOUD_VERSION=592.0.0
 
 # Full -Syu first (digest-pinned base: never a partial upgrade).
 # Starter package set is deliberately small; px installs the rest with sudo.
 # mise is pacman-managed here exactly like on the host (2026.10.x).
+# Cloud/forge CLIs: github-cli, glab, opentofu, aws-cli-v2 (provides `aws`)
+# are all official extra repos. gcloud is NOT in Arch repos -> official
+# Google tarball method below.
 RUN pacman -Syu --noconfirm && \
     pacman -S --noconfirm --needed \
       base-devel bash curl ca-certificates fish git jq mise neovim \
       openssh fd fzf procps-ng iproute2 ripgrep which \
       sudo podman \
+      github-cli glab opentofu aws-cli-v2 \
       unzip zip tar gzip xz && \
     pacman -Sc --noconfirm
+
+# Google Cloud CLI: official quickstart for generic Linux (docs verified
+# 2026-11-03): download the x86_64 rapid tarball, extract, run install.sh
+# non-interactively. The x86_64 package bundles its own Python interpreter
+# (system python NOT required). gcloud component installs via `sudo gcloud
+# components install X` change the container only -- bake extra components
+# here (GCLOUD_VERSION bump) to make them permanent.
+RUN curl -fL "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-${GCLOUD_VERSION}-linux-x86_64.tar.gz" \
+      -o /tmp/gcloud.tar.gz && \
+    tar -xzf /tmp/gcloud.tar.gz -C /opt && \
+    rm /tmp/gcloud.tar.gz && \
+    /opt/google-cloud-sdk/install.sh --quiet \
+      --usage-reporting=false --command-completion=false --path-update=false && \
+    ln -s /opt/google-cloud-sdk/bin/gcloud /usr/local/bin/gcloud && \
+    gcloud --version | head -1
 
 # px = 1000:1000 (keep-id maps it to host px); fish is the login shell;
 # wheel + NOPASSWD = distrobox-style sudo. The fish pacman hook registers
