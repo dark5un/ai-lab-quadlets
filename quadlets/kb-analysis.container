@@ -1,0 +1,30 @@
+# kb-analysis: deterministic state/plumbing service for the W1-W4 analysis
+# pipelines (queue+verdicts in kb/state/queue.sqlite, RAGFlow tagging, report
+# rendering). n8n workflows call it over ai.network; it publishes NO host
+# port. Shares the kb-watcher image (different entrypoint arg) and its env
+# file (RAGFLOW_API_KEY / LIGHTRAG_BASE_URL), plus the kb/ dir mounted rw.
+
+[Unit]
+Description=Knowledge-base analysis helper (W1-W4 state + reports)
+Wants=ai-network.service
+Wants=ragflow.service
+After=ai-network.service
+After=ragflow.service
+
+[Container]
+ContainerName=systemd-kb-analysis
+Image=localhost/kb-watcher:latest
+Network=ai.network
+UserNS=keep-id
+EnvironmentFile=%h/.config/containers/config/kb-watcher/service.env
+PodmanArgs=--entrypoint=/app/analysis.py
+Exec=serve
+Volume=%h/workspace/github.com/dark5un/ai-lab-quadlets/kb:/home/px/workspace/github.com/dark5un/ai-lab-quadlets/kb
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=120
+TimeoutStopSec=120

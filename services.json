@@ -978,6 +978,21 @@
       "auth": "none",
       "note": "Nightly corpus ingestion one-shot (plan sec.4): sha256 manifest diff over ~/workspace+~/Documents -> RAGFlow upload+parse, LightRAG mirror, tombstones; reports+state in repo kb/ dir (gitignored); activated by systemd/kb-watcher.timer.",
       "group": "kb"
+    },
+    {
+      "name": "kb-analysis",
+      "unit": "kb-analysis.service",
+      "container": "systemd-kb-analysis",
+      "host_port": null,
+      "container_port": 8090,
+      "bind": "none",
+      "health": "-",
+      "tier": "optional",
+      "image": "localhost/kb-watcher:latest",
+      "boot": false,
+      "auth": "none",
+      "note": "W1-W4 deterministic helper (pair queue verdicts RAGFlow tagging report rendering); called by n8n over ai.network at systemd-kb-analysis:8090; shares the kb-watcher image; state in repo kb/ dir (gitignored)",
+      "group": "kb"
     }
   ]
 }

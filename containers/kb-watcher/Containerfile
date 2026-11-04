@@ -8,6 +8,8 @@ RUN uv pip install --system --no-cache httpx==0.28.1
 
 WORKDIR /app
 COPY watcher.py /app/watcher.py
+COPY analysis.py /app/analysis.py
+RUN chmod +x /app/watcher.py /app/analysis.py
 
 # Mounted by the quadlet at identical host paths:
 #   /home/px/workspace            (ro corpus root)

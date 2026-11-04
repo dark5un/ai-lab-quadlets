@@ -212,7 +212,7 @@ def rf_headers() -> dict:
 def rf_datasets() -> dict[str, str]:
     """name -> id; creates missing datasets."""
     r = httpx.get(f"{RAGFLOW_URL}/api/v1/datasets", headers=rf_headers(),
-                  params={"page": 1, "limit": 100}, timeout=30)
+                  params={"page": 1, "page_size": 100}, timeout=30)
     r.raise_for_status()
     have = {d["name"]: d["id"] for d in r.json().get("data", [])}
     for want in ("docs-general", "docs-code", "docs-notes"):
@@ -349,7 +349,10 @@ def lr_delete_by_source(file_source: str) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--limit", type=int, default=0)
+    # per-run ingest budget (first pass over a large corpus must drain
+    # gradually across nights, not blow the 6h unit timeout)
+    ap.add_argument("--limit", type=int,
+                    default=int(os.environ.get("INGEST_LIMIT", "300")))
     ap.add_argument("--no-mirror", action="store_true")
     ap.add_argument("--no-classify", action="store_true")
     args = ap.parse_args()
@@ -431,6 +434,8 @@ def main() -> int:
                     old["attempts"] = attempts
             fail += 1
 
+    save_manifest(m)  # persist upload results before the slow parse phase
+
     # parse + wait per dataset, then mirror
     for ds_id, ids in to_parse.items():
         try:
@@ -441,6 +446,7 @@ def main() -> int:
             fail += 1
             continue
         st = rf_wait(ds_id, ids)
+        save_manifest(m)
         for doc_id, s in st.items():
             if s != "DONE":
                 errors.append({"op": "parse", "ds": ds_id, "doc": doc_id,
@@ -487,6 +493,16 @@ def main() -> int:
                 f"{lr_['unchanged']} | {lr_['ok']} | {lr_['fail']} | {lr_['secs']} |\n")
     print(f"done: ok={len(new_docs)} fail={fail} in "
           f"{m['last_run']['secs']}s; report {rep}")
+
+    # plan sec.6: n8n analysis runs trigger on watcher completion (fallback
+    # is the per-workflow cron). Best-effort; never fails the ingest run.
+    hook = env("N8N_WEBHOOK_URL")
+    if hook and (added or changed or deleted):
+        try:
+            httpx.post(hook, json={"ok": len(new_docs), "fail": fail,
+                                   "at": m["last_run"]["at"]}, timeout=15)
+        except Exception as e:
+            print(f"  ~ completion webhook failed: {e}", file=sys.stderr)
     return 0 if fail == 0 else 1
 
 

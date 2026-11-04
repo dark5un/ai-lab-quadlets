@@ -17,7 +17,10 @@ Image=docker.io/pgvector/pgvector:pg18
 Network=ai.network
 UserNS=keep-id
 EnvironmentFile=%h/.config/containers/config/kb-postgres/service.env
-Volume=kb-lightrag-pg-data:/var/lib/postgresql/data
+# PG 18 official images store data in major-version-specific dirs
+# (/var/lib/postgresql/18/docker) - mount the PARENT (docker-library/postgres#1259),
+# not .../data which older images (honcho's pg15) used.
+Volume=kb-lightrag-pg-data:/var/lib/postgresql
 
 [Service]
 # A container killed by the stop signal exits 143; that is a clean stop.
