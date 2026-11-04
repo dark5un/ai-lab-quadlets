@@ -37,14 +37,40 @@ if [ -d "$SRC" ]; then
   EXTDIR="$HOME/.vscode-server/extensions"
   ver=$(sed -nE 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "$SRC/package.json" | head -1)
   dest="$EXTDIR/dark5un.strata-provider-${ver}"
+  mkdir -p "$EXTDIR"
   if [ ! -d "$dest" ]; then
-    mkdir -p "$EXTDIR"
     cp -a "$SRC" "$dest"
     # retire older copies of our extension (single registration only)
     for old in "$EXTDIR"/dark5un.strata-provider-*; do
       [ -d "$old" ] && [ "$old" != "$dest" ] && rm -rf "$old"
     done
     echo "installed strata-provider ${ver} into $EXTDIR"
+  fi
+  # Register in the profile manifest (extensions.json) -- the manifest is the
+  # authoritative installed set; folders merely present on disk get GC'd into
+  # .obsolete by extension sync (observed live in 1.144.1). Re-arm our entry
+  # every start; leave all other entries untouched. Drop any .obsolete marks
+  # for our id. Manifest shape mirrors gallery-installed entries.
+  MANIFEST="$EXTDIR/extensions.json"
+  [ -f "$MANIFEST" ] || echo '[]' > "$MANIFEST"
+  now=$(date +%s%3N)
+  entry=$(jq -n --arg id "dark5un.strata-provider" --arg ver "$ver" \
+    --arg dir "dark5un.strata-provider-${ver}" --arg path "$dest" --argjson ts "$now" \
+    '{identifier:{id:$id},version:$ver,location:{"$mid":1,path:$path,scheme:"file"},
+      relativeLocation:$dir,
+      metadata:{installedTimestamp:$ts,pinned:true,source:"vsix",
+        isBuiltin:false,isPreReleaseVersion:false,hasPreReleaseVersion:false}}' 2>/dev/null || true)
+  tmp=$(mktemp)
+  if [ -n "$entry" ] && jq -c --arg id "dark5un.strata-provider" --argjson e "$entry" \
+       '[ .[] | select(.identifier.id != $id) ] + [$e]' "$MANIFEST" > "$tmp" 2>/dev/null; then
+    mv "$tmp" "$MANIFEST"
+  else
+    rm -f "$tmp"; echo "WARN: could not update $MANIFEST" >&2
+  fi
+  if [ -f "$EXTDIR/.obsolete" ]; then
+    tmp=$(mktemp)
+    if jq -c 'with_entries(select(.key | startswith("dark5un.strata-provider") | not))' \
+         "$EXTDIR/.obsolete" > "$tmp" 2>/dev/null; then mv "$tmp" "$EXTDIR/.obsolete"; else rm -f "$tmp"; fi
   fi
 fi
 
@@ -63,9 +89,17 @@ cat > "$MACHINE/settings.json" <<'JSON'
   "chat.byokUtilityModelDefault": "mainAgent"
 }
 JSON
+# Note: workspace trust is intentionally left ON. First open of the default
+# folder in a new browser asks once ("Trust Workspace"); that click persists
+# per browser. The chat model picker is disabled while a workspace is
+# untrusted (verified headless) -- by design, not a config gap.
 
+# --default-folder: the box's own work area (same-path mount); an empty
+# workspace hides the agent-mode chat input entirely (verified headless).
+mkdir -p "$HOME/.workspaces/vscode"
 exec code serve-web \
   --host 0.0.0.0 --port 8000 \
+  --default-folder "$HOME/.workspaces/vscode" \
   --connection-token "$VSCODE_CONNECTION_TOKEN" \
   --accept-server-license-terms \
   --disable-telemetry

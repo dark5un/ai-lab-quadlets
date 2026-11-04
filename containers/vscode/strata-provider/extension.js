@@ -270,6 +270,9 @@ function convertMessages(messages) {
 }
 
 function activate(context) {
+	// Visible in the browser devtools console for serve-web (and to the CDP
+	// smoke driver in the e2e container); cheap activation proof.
+	console.info('[strata-provider] activated; models discovered on demand from strata /models');
 	context.subscriptions.push(
 		vscode.lm.registerLanguageModelChatProvider(VENDOR, new StrataProvider())
 	);

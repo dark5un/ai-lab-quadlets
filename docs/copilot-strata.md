@@ -122,18 +122,35 @@ VS Code's) shows the new id/n_ctx. Nothing to edit.
 
 ## 4. Verify
 
-- No VS Code needed for transport:
-  `podman exec systemd-vscode curl -s -H "Authorization: Bearer $STRATA_API_KEY" http://systemd-strata:8080/v1/models`
-  (key from the on-target env file). Model shows `status: loaded`.
-- Extension landed: `ls ~/.homes/vscode/px/.vscode-server/extensions/ | grep strata`.
-- Picker/model behavior: open the box (tailnet door / `?tkn=` bootstrap),
-  Chat model picker → **Strata (local)** group → pick the model → send a
-  prompt. Logs if in doubt:
-  `~/.vscode-server/data/logs/<session>/exthost*/` (provider activation),
-  `.../agenthost.log` (BYOK model catalog the Agent Host sees),
-  `.../GitHub Copilot Chat.log` (per-request success/networkError lines).
-- A BYOK group that never reaches the picker in the *config* path is almost
-  always the URL shape or a missing `toolCalling` flag (§2).
+- Automated (no browser): `tests/test-strata-provider.sh` — drives the
+  installed extension.js with the serve-web node binary + real env key:
+  discovery, streamed chat text, tool-call emission. Skips gracefully if
+  the stack is down.
+- Transport: `podman exec systemd-vscode curl -s -H "Authorization: Bearer $STRATA_API_KEY" http://systemd-strata:8080/v1/models`.
+- UI (first time, per browser): open the box → **Trust Workspace** once
+  (the model picker is disabled while the workspace is untrusted — by
+  design) → Chat (Ctrl+Alt+I) → Models button → pick the Qwen model under
+  **Strata (local)**.
+- Logs if in doubt:
+  `~/.vscode-server/data/logs/<session>/remoteagent.log` (extension scan
+  errors; clean = loaded), `exthost*/remoteexthost.log` (per-extension
+  `_doActivateExtension` lines), `.../agenthost.log` (BYOK catalog the
+  Agent Host sees).
+
+### Scanner gotchas (all hit live during headless verification)
+
+- `engines.vscode` must be full semver: `^1.104` FAILS the scan
+  ("Could not parse `engines.vscode` value" — the extension is then
+  marked removed); use `^1.104.0`. The upstream sample's package.json
+  still shows `^1.104`.
+- A folder merely present in `~/.vscode-server/extensions/` gets
+  **garbage-collected** (`Marked extension as removed` → `.obsolete`) by
+  profile extension sync unless it has a manifest entry in
+  `extensions.json`. The entrypoint registers it idempotently (same shape
+  gallery installs write) and clears its `.obsolete` marks each start.
+- An empty (no-folder) serve-web session renders the chat pane without an
+  input at all — hence `--default-folder ~/.workspaces/vscode` in the
+  exec line.
 
 ## 5. What BYOK does **not** cover
 
