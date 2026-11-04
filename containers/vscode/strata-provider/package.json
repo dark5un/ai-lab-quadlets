@@ -3,7 +3,7 @@
   "publisher": "dark5un",
   "displayName": "Strata Local Models",
   "description": "Contributes the ai-lab strata server's models to the VS Code model picker via the stable Language Model Chat Provider API (fully local BYOK).",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -14,6 +14,8 @@
     "vscode": "^1.104.0"
   },
   "categories": ["AI", "Chat"],
+  "keywords": ["byok", "strata", "openai-compatible", "local models", "llama.cpp", "chat"],
+  "pricing": "Free",
   "main": "./extension.js",
   "extensionKind": ["workspace"],
   "contributes": {
