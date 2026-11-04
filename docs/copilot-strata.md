@@ -1,235 +1,222 @@
-# Copilot ↔ Strata: binding the VS Code Server box to the local model (research, 2026-11-03)
+# Copilot ↔ Strata: binding the VS Code Server box to the local model (v2, 2026-11-04)
 
-Question: can the VS Code Server (`systemd-vscode`, VS Code 1.144.1 web +
-Arch dev box) run its GitHub Copilot experience against **strata** (our
-local OpenAI-compatible server at 11434) instead of GitHub's cloud models?
+Question: how does the VS Code Server box (`systemd-vscode`, VS Code 1.144.1
+serve-web, Arch dev box) connect **automatically** to **strata** (our local
+OpenAI-compatible server) as its language model — cleanly, with no manual
+steps and no drifting hand-edited config files?
 
-Short answer: **yes for chat/agent mode — first-party, no extra plugin
-needed** — via VS Code's built-in **Custom Endpoint** BYOK provider, which
-works against any Chat-Completions endpoint and needs no Copilot plan.
-**No for inline ghost-text completions**: those stay on GitHub's cloud, a
-known open gap. Details and the exact config for our box below.
+Answer (v2): a tiny first-party **Language Model Provider extension**
+(`containers/vscode/strata-provider`, stable `vscode.lm.registerLanguageModelChatProvider`
+API + `contributes.languageModelChatProviders`), baked into the image and
+installed by the entrypoint into the persisted server home. The box policy
+(Agent Host BYOK gates) lives in **server-scope**
+`~/.vscode-server/data/Machine/settings.json`, written wholesale each start.
+The v1 approach — seeding user-scope `chatLanguageModels.json` + jq-merging
+`User/settings.json` — is **removed** (§6).
 
-## 1. Ground truth probed live on this box (2026-11-03)
+Chat/agent mode works fully local **without a GitHub sign-in or Copilot
+plan**; inline ghost-text completions and embeddings remain GitHub cloud (§5).
 
-These are our own measurements, not external claims:
+## 1. Ground truth probed live on this box (2026-11-03/04)
 
-- strata `GET /v1/models`: id `qwen3.8-flash-next-iq3_s` (slash-free —
-  good, see §4 pitfall), `n_ctx: 1048576` (the 1M variant is what's
-  currently running), input modalities `text+image` per the model card.
-- **Tool calling works**: an OpenAI `tools=[calculator]` round-trip
-  returned `finish_reason: "tool_calls"` with a well-formed function call.
-- **Streaming works**: SSE chunks from `/v1/chat/completions stream:true`.
+Own measurements, not external claims:
+
+- strata `GET /v1/models` (auth header required): id
+  `qwen3.8-flash-next-iq3_s` (slash-free — see §7 pitfall),
+  `status: {"value":"loaded"}`, `meta.n_ctx: 1048576`,
+  `architecture.input_modalities: ["text","image"]`. Those extra fields are
+  why the provider extension beats config-based discovery: it maps real
+  context and modality per model automatically.
+- **Tool calling works**: OpenAI `tools=[calculator]` round-trip returned
+  `finish_reason: "tool_calls"` with a well-formed call.
+- **Streaming works**: SSE chunks from `/v1/chat/completions` with
+  `stream:true`.
+- strata has **no Ollama-native API** (`/api/tags` → 404 `not found`), so
+  the official Ollama extension cannot front it. OpenAI-compatible only.
 - The box reaches strata over the stack network:
-  `http://systemd-strata:8080/v1/models` returns the model list **from
-  inside `systemd-vscode`**. Host loopback (127.0.0.1:11434) is NOT
-  reachable from the container netns — always use the `ai.network` name.
-- strata responses carry `reasoning_content` (thinking) alongside tool
-  calls — relevant to the empty-response trap in §4.
+  `http://systemd-strata:8080/v1/models` answers **from inside
+  `systemd-vscode`**. Host loopback (`127.0.0.1:11434`) is dead in the
+  container netns — always the `ai.network` alias + container port.
+- strata emits `reasoning_content` (thinking) alongside answer deltas and
+  tool calls — budget interplay in §7.
 
-So strata satisfies the documented model requirements for Copilot
-surfaces: tool calling + streaming + big context (the CLI's bar: tool
-calling, streaming, 128k+ recommended).[3]
+## 2. How 1.144.1 actually implements this (bundle-verified)
 
-## 2. The first-party path: Custom Endpoint BYOK in VS Code
+Read the real code shipped in this box (`~/.vscode/cli/serve-web/<commit>/`),
+not blog claims:
 
-VS Code's BYOK ("bring your own language model key") lets you add models
-from other providers while keeping the VS Code chat experience and
-tools.[1] The **Custom Endpoint provider** is the official way to connect
-any compatible API endpoint; it replaces the deprecated OpenAI Compatible
-provider and the `github.copilot.chat.customOAIModels` setting.[1] It
-shipped in stable VS Code 1.122+,[12] so our 1.144.1 server has it — the
-old Insiders-only gating (which community unlocker extensions existed to
-bypass[11]) is not a concern anymore.
+- Copilot Chat is a **bundled server extension**
+  (`extensions/copilot`, v0.72.0) inside the downloaded serve-web tree —
+  no GitHub.copilot-chat install needed in the box.
+- `vscode.lm.registerLanguageModelChatProvider` and
+  `contributes.languageModelChatProviders` are **stable API** at this commit
+  (present in the pinned `vscode.d.ts`; activation event
+  `onLanguageModelChatProvider:<vendor>` is auto-generated by VS Code).
+- The 1.14x default chat runs on the **Copilot harness via the Agent Host**
+  (`out/vs/platform/agentHost/node/agentHostMain.js`): BYOK models reach it
+  through a `ByokLmProxyService` (loopback proxy) bridged over reverse-RPC
+  to the client-side `ILanguageModelsService`, which aggregates **both**
+  config-based vendors (`chatLanguageModels.json`; the vendor set includes
+  `customendpoint`, `customoai`, `ollama`, …) **and** extension-registered
+  providers (extension vendors map to `3p-extension`). So provider
+  extensions are first-class in Agent Host sessions — gated by
+  `chat.agentHost.byokModels.enabled` (constants in the workbench bundle;
+  default false).
+- Config-file semantics for the *alternative* Custom Endpoint provider
+  (still useful for ad-hoc endpoints; verified in
+  `extensions/copilot/dist/extension.js`):
+  `url` may be the `/v1` base (a `/v\d+$` URL gets `/chat/completions`
+  appended), a full endpoint path (used as-is; `apiType` inferred from it),
+  or a bare origin (gets `/v1/chat/completions`). A **provider-level** `url`
+  triggers auto-discovery from `${url}/models` — but discovery cannot carry
+  capabilities/context, so agent mode needs the explicit `models[]` form.
+  (Earlier community claims that only one URL shape works are version-specific
+  folklore; 1.144.1 normalizes all three.)
+- Server-scope settings: the serve-web bundle exposes
+  `machineSettingsResource = <serverDataDir>/Machine/settings.json` and ships
+  it to every client — the right layer for per-box policy that must not
+  collide with user edits.
 
-Key scope facts, straight from the docs:
+## 3. The v2 mechanism on this box
 
-- BYOK models work **without signing into a GitHub account and without a
-  Copilot plan**, including offline scenarios with local models.[1][2]
-  Requests go directly to your provider, not through GitHub's Copilot
-  API.[2]
-- BYOK applies to chat, agent mode, inline chat and utility tasks;
-  **inline suggestions (ghost text), semantic search and embeddings
-  still require GitHub Copilot**.[1][13] The ghost-text gap is an open
-  feature request (microsoft/vscode#318545): custom IDs set as completion
-  models are silently ignored and fall back to the cloud model.[6]
-- Agent mode only lists models that support tool calling; set
-  `"toolCalling": true` on the model entry.[7][12]
-- If your plan is Copilot Business/Enterprise, BYOK can be disabled by an
-  org policy — not our case (personal use).[1][2]
+Files (all git-tracked):
 
-Feature matrix for what strata can take over inside the box (supported =
-BYOK works there):
+- `containers/vscode/strata-provider/package.json` — vendor `strata`
+  (`contributes.languageModelChatProviders`), `extensionKind: ["workspace"]`
+  (runs in the server extension host: container network + env), and the
+  settings schema with box-correct defaults (`strata.baseUrl` =
+  `http://systemd-strata:8080/v1`, context/output budgets, tool/vision
+  flags, optional `strata.modelAllowlist`).
+- `containers/vscode/strata-provider/extension.js` — pure CommonJS, stable
+  API only:
+  - discovery: `GET {base}/models` → per-model `meta.n_ctx` →
+    `maxInputTokens = n_ctx - maxOutputTokens`;
+    `architecture.input_modalities` → `imageInput`; `status.value` → version.
+  - responses: OpenAI Chat Completions with `stream:true`; SSE parsing;
+    text deltas → `LanguageModelTextPart`; accumulated `tool_calls` deltas
+    → `LanguageModelToolCallPart`; tool results → `role:"tool"` messages;
+    images (`LanguageModelDataPart`) → `image_url` data URIs;
+    `toolMode: Required` → `tool_choice:"required"`.
+  - the API key: `strata.apiKey` setting, else **`process.env.STRATA_API_KEY`**
+    (inherited from the quadlet `EnvironmentFile` — no secret in image or repo,
+    nothing written to user profile files).
+  - `reasoning_content` deltas are deliberately dropped (the thinking-part
+    class is proposed-only at this commit; leaking reasoning as text mixes
+    it into answers).
+- `Containerfile` — `COPY strata-provider/ /opt/vscode/extensions/strata-provider/`.
+- `entrypoint.sh` —
+  1. installs the baked extension into `~/.vscode-server/extensions/`
+     (versioned folder, older copies retired; idempotent),
+  2. writes `~/.vscode-server/data/Machine/settings.json` wholesale:
+     `chat.agentHost.byokModels.enabled: true` (Agent Host would otherwise
+     hide BYOK models — the exact silent `Auto` fallback hit in v1),
+     `chat.agentHost.allowSignedOutWhenUsable: true` (no GitHub sign-in
+     needed when a usable model is configured; bundle confirms BYOK models
+     make the Copilot auth resource optional),
+     `chat.byokUtilityModelDefault: "mainAgent"` (titles, commit messages,
+     PR text run on strata too).
 
-| Copilot capability | On strata via BYOK | Notes |
-|---|---|---|
-| Chat panel | yes | chat-completions API[1] |
-| Agent mode in chat | yes | needs tool-calling model[1][7] |
-| Inline chat (`Ctrl+I`) | yes | `inlineChat.defaultModel`[1] |
-| Commit messages / PR text / titles | yes | point `chat.utilityModel` / `chat.utilitySmallModel` at strata[1][7] |
-| Agent Host sessions | experimental | `chat.agentHost.byokModels.enabled`[7] |
-| Inline code completions (ghost text) | **no** | GitHub cloud only[1][6][13] |
-| Semantic workspace search / embeddings | **no** | needs Copilot[1][13] |
+Refresh loop: strata re-slots (different model/context variant) → the
+provider's next silent discovery (`lm.onDidChangeChatModels` plumbing is
+VS Code's) shows the new id/n_ctx. Nothing to edit.
 
-## 3. Exact config for this box
+## 4. Verify
 
-**SETUP IS AUTOMATED (2026-11-04)**: the box entrypoint seeds this file at
-first start from `STRATA_API_KEY` in the on-target env file
-(`config/vscode/service.env`, copied there by `generate-secrets.sh` from
-`config/strata/service.env` — sketchlab's pattern). No secret ever
-enters the image, the Containerfile, or this repo. The seeded file lives
-in the persisted home (`~/.vscode-server/data/User/chatLanguageModels.json`,
-mode 600); after first seed the box owns it and UI edits win. The
-alternative UI path (wizard + secret storage) remains:
-Command Palette → **Chat: Manage Language Models** → **Add Models →
-Custom Endpoint**. In that path, VS Code stores the key you paste at the
-prompt in secret storage and writes a `${input:...}`
-reference — enter the key in the wizard rather than pasting it into the
-JSON, per Coder's guide.[12] Note the vendors conflict on this: a
-MindsHub test on VS Code 1.131 saw the secret reference passed through
-unexpanded (401s), and treated a literal key as the working form there;
-retest if requests arrive without an Authorization header.[14]) The generated `chatLanguageModels.json`
-should end up like:
+- No VS Code needed for transport:
+  `podman exec systemd-vscode curl -s -H "Authorization: Bearer $STRATA_API_KEY" http://systemd-strata:8080/v1/models`
+  (key from the on-target env file). Model shows `status: loaded`.
+- Extension landed: `ls ~/.homes/vscode/px/.vscode-server/extensions/ | grep strata`.
+- Picker/model behavior: open the box (tailnet door / `?tkn=` bootstrap),
+  Chat model picker → **Strata (local)** group → pick the model → send a
+  prompt. Logs if in doubt:
+  `~/.vscode-server/data/logs/<session>/exthost*/` (provider activation),
+  `.../agenthost.log` (BYOK model catalog the Agent Host sees),
+  `.../GitHub Copilot Chat.log` (per-request success/networkError lines).
+- A BYOK group that never reaches the picker in the *config* path is almost
+  always the URL shape or a missing `toolCalling` flag (§2).
 
-```json
-[
-  {
-    "name": "strata",
-    "vendor": "customendpoint",
-    "apiKey": "${input:chat.lm.secret.XXXXXX}",
-    "apiType": "chat-completions",
-    "models": [
-      {
-        "id": "qwen3.8-flash-next-iq3_s",
-        "name": "Strata (local 5090)",
-        "url": "http://systemd-strata:8080/v1/chat/completions",
-        "toolCalling": true,
-        "vision": true,
-        "thinking": true,
-        "contextWindow": 1048576,
-        "maxOutputTokens": 16384
-      }
-    ]
-  }
-]
+## 5. What BYOK does **not** cover
+
+- Inline ghost-text completions: hardwired to GitHub cloud; custom
+  completion IDs are ignored (open issue microsoft/vscode#318545).
+- Semantic workspace search and embeddings: need Copilot.
+- Ghost-text-local options (deferred): a dedicated FIM coder model (chat
+  models perform poorly there — true for Tabby and Continue's autocomplete
+  role too) fronted by Tabby, or hybrid cloud-ghost-text + local chat.
+  The stable `InlineCompletionItemProvider` API is also an option if a
+  local-ghost-text lane is ever wanted without third-party clients.
+
+## 6. Why v1 was removed (lessons)
+
+v1 (2026-11-04 morning) seeded `data/User/chatLanguageModels.json`
+(first-start only) and jq-merged `data/User/settings.json` from the
+entrypoint. Failure modes observed:
+
+- **Drift**: the seeded copy and the live file diverged (the UI wizard and
+  manual edits own user-scope files; a first-start-only seed can never be
+  trusted as "the config" afterwards; editor History snapshots made the
+  on-disk mtime lie about which config was current).
+- **Hard-coded facts in the seed**: model id and context constants went
+  stale whenever strata re-slotted.
+- **A secret written into the persisted home** instead of staying env-scoped.
+
+The stable provider-extension API is the supported way to contribute
+models ("VS Code is extensible, so any model provider can enable support
+through an extension" — the BYOK blog), so configuration moved from
+user-state files into image + env, which is versionable and idempotent.
+`chatLanguageModels.json`/Custom Endpoint remains the right tool for
+*interactive* one-off endpoints, just not for automated box provisioning.
+
+## 7. Pitfalls (kept)
+
+- Model ids containing `/` are rejected by the custom-endpoint client;
+  strata ids are flat. (Provider extensions don't share that constraint,
+  but keep ids simple anyway.)
+- Reasoning backends share the output budget: keep `maxOutputTokens`
+  generous (16k+); empty bubbles + `finish_reason: "length"` means the
+  thinking ate the answer. The provider throws a pointed error on
+  `length`.
+- `restart the agent host` after changing `chat.agentHost.*` gates
+  (entrypoint covers this on container restart).
+- Copilot Business/Enterprise org policy can disable BYOK entirely — not
+  our plan.
+- The extension only activates when something asks for its models
+  (activation event generated from the contribution point) — a missing
+  provider in logs usually means it never got queried, not that it failed.
+
+## 8. Terminal surface: Copilot CLI fully local (unchanged)
+
+Inside the box's fish terminal (note the `/v1` **base** form here, unlike
+the config-file full-URL discussion in §2):
+
+```fish
+set -Ux COPILOT_PROVIDER_BASE_URL http://systemd-strata:8080/v1
+set -Ux COPILOT_PROVIDER_API_KEY <key>
+set -Ux COPILOT_MODEL qwen3.8-flash-next-iq3_s
+set -Ux COPILOT_OFFLINE true
 ```
-
-Notes on the fields (all from the docs/config reference):
-
-- `url` must be the **full** chat-completions path, not just `/v1` — the
-  most common setup-breaker for this provider.[13]
-- `contextWindow` (1M here, matching the live model card) lets VS Code
-  derive `maxInputTokens` itself; a 1M-token example is in the official
-  property reference.[1]
-- `vision: true` per the model card's input modalities; not exercised
-  end-to-end yet — flip to `false` if image requests misbehave.
-- `chatLanguageModels.json` lives in the box's **user config** (server
-  side, under the persisted home) — it survives rebuilds, and the strata
-  key itself is in secret storage, never in this repo.
-- Reload the window after saving; the model picker populates at
-  startup.[7][12]
-- **Gotcha hit live (2026-11-04): the Agent Host (the default session
-  type in 1.14x) hides BYOK models unless
-  `chat.agentHost.byokModels.enabled` is true — default false — so
-  selecting strata silently reverts to Auto/Copilot.** VS Code's settings
-  reference confirms the key and its `false` default. The entrypoint now
-  guarantees the key (adds it if absent, respects an explicit `false`).
-
-Then, for the utility features (title generation, commit messages, PR
-descriptions) to also run local, override the utility model settings
-with any available model, including BYOK ones:[1]
-
-- `chat.byokUtilityModelDefault: Main Agent Model`, or
-- `chat.utilityModel` / `chat.utilitySmallModel` → the strata entry.[1]
-
-Operational: strata is an on-demand GPU unit outside the arbiter for
-vscode itself — an agent session from the box needs strata RUNNING
-(`ai-lab start strata` / the boot variant). If strata gets moved by the
-arbiter when another GPU service starts, chat requests fail until it is
-back — normal stack behavior, just be aware.
-
-## 4. Pitfalls worth pre-arming (sourced)
-
-- **Model IDs containing `/` are rejected by the custom-endpoint
-  client** (per Lyceum's guide; they publish slash-free aliases). Our
-  strata ID is already slash-free.[7]
-- **Reasoning models can return empty bubbles**: the visible answer and
-  reasoning can share the output budget — strata emits
-  `reasoning_content` (our probe saw it), so keep `maxOutputTokens`
-  generous (16k+) and check `finish_reason` when the UI shows blank
-  responses.[7]
-- Copilot sends `temperature: 0.1` for custom endpoints unless the model
-  entry overrides it via `modelOptions`.[14]
-- If agent mode hides the model: `toolCalling` missing or stale JSON —
-  VS Code reads the file at startup, restart to apply.[12]
-
-## 5. Other surfaces that can bind to strata (not just VS Code)
-
-- **GitHub Copilot CLI**: user-configured BYOK with `openai` provider
-  type = "any OpenAI Chat Completions API-compatible endpoint"; requires
-  tool calling + streaming; 128k+ context recommended; env:
-  `COPILOT_PROVIDER_BASE_URL=http://systemd-strata:8080/v1`,
-  `COPILOT_PROVIDER_API_KEY`, `COPILOT_MODEL=qwen3.8-flash-next-iq3_s`;
-  `COPILOT_OFFLINE=true` keeps it from contacting GitHub at all.[3]
-  Runs inside the box's fish terminal — effectively a local Copilot
-  agent. (Note the base URL here is the `/v1` form, unlike the full
-  path the VS Code provider needs.[13])
-- **GitHub Copilot app**: supports "any OpenAI-compatible HTTP
-  endpoint" for BYOK (public preview); GitHub sign-in is still required
-  but not a Copilot plan.[4]
-- **Model-provider extensions** as an alternative bridge: "OAI
-  Compatible Provider for Copilot" (marketplace) injects
-  OpenAI/Ollama/Anthropic/Gemini endpoints into the Copilot Chat picker
-  with per-model families and custom headers[5] — mostly useful where
-  the built-in Custom Endpoint lacks a feature; redundant for us now.
-
-## 6. The ghost-text gap: options if you want completions local too
-
-None of these use "Copilot" for completions; they replace that lane:
-
-1. **Keep Copilot cloud completions** and run chat/agent on strata —
-   hybrid, zero extra moving parts (the pragmatic default).
-2. **Tabby**: self-hosted completion server whose model connectors speak
-   `llama.cpp/completion` (FIM) and `openai/chat` for its chat side;
-   its VS Code client contributes the inline suggestions.[10] Needs a
-   dedicated FIM model — qwen3.8-next is a chat model, so strata is a
-   poor completions backend; a small coder model (e.g., Qwen2.5-Coder
-   class) on the 4070 Ti/CPU via the existing llama-cpp units is the
-   right shape.
-3. **Continue.dev**: config `provider: openai` + `apiBase` covers chat/agent
-   against strata,[8] but its autocomplete role explicitly needs a
-   fill-in-the-middle model — "chat models, though larger, will often
-   perform poorly" for autocomplete.[9]
-
-Follow-up candidates (deferred, not part of this research): a small
-Qwen-Coder FIM llama.cpp quadlet + Tabby (or Continue's
-tabAutocompleteModel) to make ghost text local too.
-
-## 7. Verdict
-
-Bind Copilot Chat + Agent in the box to strata through the built-in
-Custom Endpoint provider (§3) — it is first-party,[1] ships in stable
-since 1.122,[12] works against local models without a GitHub sign-in or
-Copilot plan,[1][2] and strata already passes every documented model
-requirement (§1 probes; tools + streaming per the CLI's stated bar,[3]
-1M ctx live). Ghost-text completions and embeddings remain GitHub-side
-until microsoft/vscode#318545 lands;[6] option 1 (hybrid) until a
-dedicated FIM model exists in the stack.
 
 ## Sources
 
+Official (fetched 2026-11-04):
+- https://code.visualstudio.com/docs/agent-customization/language-models — AI language models in VS Code (BYOK, Custom Endpoint config reference incl. provider-level `url` discovery, utility-model settings)
+- https://code.visualstudio.com/blogs/2026/06/18/byok-vscode — "Use your own language model key in VS Code" (GA; extensions can provide models)
+- https://code.visualstudio.com/api/extension-guides/ai/language-model-chat-provider — Language Model Chat Provider API (register in `contributes.languageModelChatProviders` + `lm.registerLanguageModelChatProvider`)
+- https://code.visualstudio.com/docs/agents/run/agents-window-configuration — Agents window uses BYOK models only with `chat.agentHost.byokModels.enabled`; signed-out experimental gate `chat.agentHost.allowSignedOutWhenUsable`
+- https://code.visualstudio.com/updates/v1_128 — `chat.agentHost.byokModels.enabled` (experimental, agent host restart needed), `chat.byokUtilityModelDefault` (values none/mainAgent/copilot)
+- https://code.visualstudio.com/updates/v1_144 — Agent Host / Copilot harness default; AHP
+- https://github.com/microsoft/vscode/pull/322977 — BYOK support in the local Copilot agent host (loopback `ByokLmProxyService` bridging to `ILanguageModelsService`)
+- https://github.com/microsoft/vscode-extension-samples/tree/main/chat-model-provider-sample — minimal provider extension (engines ^1.104)
+- https://code.visualstudio.com/docs/agent-customization/language-models#_frequently-asked-questions — local models without sign-in/plan; inline-suggestions gap + `InlineCompletionItemProvider`
+- https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/use-byok-models — Copilot CLI BYOK env contract
+- https://github.com/microsoft/vscode/issues/318545 — BYOK for inline completions (open)
 
-[1] https://code.visualstudio.com/docs/agent-customization/language-models — AI language models in VS Code (official docs)
-[2] https://docs.github.com/en/copilot/concepts/models/bring-your-own-key — Bring your own key for GitHub Copilot (concepts)
-[3] https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/use-byok-models — Adding LLM models to GitHub Copilot CLI
-[4] https://docs.github.com/en/copilot/how-tos/github-copilot-app/use-byok-models — Adding LLM models to the GitHub Copilot app
-[5] https://marketplace.visualstudio.com/items?itemName=johnny-zhao.oai-compatible-copilot — OAI Compatible Provider for Copilot (marketplace)
-[6] https://github.com/microsoft/vscode/issues/318545 — Support BYOK/Custom Models for Inline Code Completions (open issue)
-[7] https://lyceum.technology/magazine/how-to-use-lyceum-models-in-github-copilot/index.html — How to Use Lyceum Models in GitHub Copilot (vendor guide)
-[8] https://docs.continue.dev/customize/model-providers/top-level/openai — Continue: OpenAI-compatible provider config
-[9] https://docs.continue.dev/customize/model-roles/autocomplete — Continue: autocomplete role (FIM)
-[10] https://tabby.tabbyml.com/docs/references/models-http-api/llama.cpp — Tabby: llama.cpp model HTTP API
-[11] https://github.com/zqcli/enable-copilot-customoai — enable-copilot-customoai (legacy CustomOAI unlock)
-[12] https://coder.com/docs/ai-coder/ai-gateway/clients/vscode.md — Coder AI Gateway: VS Code Custom Endpoint (1.122+ stable)
-[13] https://docs.xkiro.com/guides/tools/vscode — xKiro: VS Code Custom Endpoint BYOK scope
-[14] http://docs.mindshub.ai/inference/vscode — MindsHub: VS Code Custom Endpoint guide
+Bundle-verified in-box (pinned commit 261c84cb1eddf…, VS Code 1.144.1):
+`out/vs/code/browser/workbench/workbench.js`,
+`out/vs/platform/agentHost/node/agentHostMain.js`,
+`extensions/copilot/dist/extension.js` (v0.72.0),
+`out/server-main.js`, pinned `src/vscode-dts/vscode.d.ts`.
+
+Third-party (leads, cross-checked above):
+- https://learn.microsoft.com/en-us/windows-server/ai/configure-visual-studio-code-local-models
+- https://docs.xkiro.com/guides/tools/vscode (claims full-path URL only — version-specific, superseded by §2)

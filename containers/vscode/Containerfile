@@ -75,6 +75,11 @@ RUN curl -fL "https://update.code.visualstudio.com/commit:${VSCODE_COMMIT}/cli-l
 RUN mkdir -p /etc/containers && \
     printf '[engine]\nremote = true\n' > /etc/containers/containers.conf
 
+# Strata model provider extension (stable LanguageModelChatProvider API).
+# Baked into the image; the entrypoint installs it into the persisted
+# ~/.vscode-server/extensions on start. See docs/copilot-strata.md.
+COPY strata-provider/ /opt/vscode/extensions/strata-provider/
+
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod 0755 /usr/local/bin/entrypoint.sh
 

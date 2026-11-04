@@ -1,0 +1,68 @@
+{
+  "name": "strata-provider",
+  "publisher": "dark5un",
+  "displayName": "Strata Local Models",
+  "description": "Contributes the ai-lab strata server's models to the VS Code model picker via the stable Language Model Chat Provider API (fully local BYOK).",
+  "version": "0.1.1",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dark5un/ai-lab-quadlets",
+    "directory": "containers/vscode/strata-provider"
+  },
+  "engines": {
+    "vscode": "^1.104"
+  },
+  "categories": ["AI", "Chat"],
+  "main": "./extension.js",
+  "extensionKind": ["workspace"],
+  "contributes": {
+    "languageModelChatProviders": [
+      {
+        "vendor": "strata",
+        "displayName": "Strata (local)"
+      }
+    ],
+    "configuration": {
+      "title": "Strata",
+      "properties": {
+        "strata.baseUrl": {
+          "type": "string",
+          "default": "http://systemd-strata:8080/v1",
+          "description": "OpenAI-compatible base URL of the strata server (stack-network alias, not host loopback)."
+        },
+        "strata.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "API key for strata. Leave empty to read STRATA_API_KEY from the server environment (injected by the quadlet EnvironmentFile)."
+        },
+        "strata.contextWindow": {
+          "type": "number",
+          "default": 1048576,
+          "description": "Fallback context window (tokens) when the server does not report meta.n_ctx per model."
+        },
+        "strata.maxOutputTokens": {
+          "type": "number",
+          "default": 16384,
+          "description": "Max output tokens per response. Keep generous: strata reasoning models share this budget with thinking."
+        },
+        "strata.toolCalling": {
+          "type": "boolean",
+          "default": true,
+          "description": "Declare tool-calling support (agent mode lists only tool-capable models)."
+        },
+        "strata.imageInput": {
+          "type": "boolean",
+          "default": true,
+          "description": "Fallback vision flag when the server does not report architecture.input_modalities."
+        },
+        "strata.modelAllowlist": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "If non-empty, only expose these model ids from GET /models."
+        }
+      }
+    }
+  }
+}
