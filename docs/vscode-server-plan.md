@@ -63,14 +63,14 @@ both land in the persisted home, so this is a one-time cost.
 - **Persistent home**: host `~/.homes/vscode/px` → `/home/px`. Holds dotfiles,
   extensions, `~/.vscode-server`, secrets you generate inside. Survives image
   rebuilds.
-- **Workspace (v0.5, remapped 2026-11-04)**: host `~/.workspaces/vscode`
-  → **`~/workspace`** inside the container, matching the
-  `~/workspace/<git-host>/<owner>/<repo>` clone convention in the box's own
-  shell. Still deliberately NOT the host's syncthing-synced `~/workspace`
-  tree (box work kept separate). Consequence: bind-mount SOURCE paths from
+- **Workspace (v0.5; remapped to `/workspace` 2026-11-04)**: host
+  `~/.workspaces/vscode` → **`/workspace`** inside the container (outside
+  home, px-owned via keep-id; evokes the clone-convention habit without
+  colliding with the home volume or the host's syncthing-synced `~/workspace`
+  tree — box work kept separate). Consequence: bind-mount SOURCE paths from
   the box go to the host daemon, so to mount box-workspace files reference
   the HOST path `$HOME/.workspaces/vscode/...`, not the container's
-  `~/workspace/...`.
+  `/workspace/...`.
 - **Host Podman (distrobox-like)**:
   - mount `%t/podman/podman.sock` → `/run/user/1000/podman/podman.sock`,
   - `Environment=XDG_RUNTIME_DIR=/run/user/1000` so the guest `podman` CLI
@@ -234,8 +234,8 @@ EnvironmentFile=%h/.config/containers/config/vscode/service.env
 
 # persistent home (extensions, .vscode-server, dotfiles)
 Volume=%h/.homes/vscode/px:/home/px:Z
-# box workspace -> ~/workspace inside the container (host path for bind sources!)
-Volume=%h/.workspaces/vscode:/home/px/workspace:Z
+# box workspace -> /workspace inside the container (host path for bind sources!)
+Volume=%h/.workspaces/vscode:/workspace:Z
 # distrobox-style host Podman API
 Volume=%t/podman/podman.sock:/run/user/1000/podman/podman.sock
 
@@ -309,7 +309,7 @@ podman exec systemd-vscode sh -c 'command -v mise nvim fish git'   # all present
 podman exec systemd-vscode nvidia-smi -L                # both cards visible (CDI)
 podman exec systemd-vscode podman ps -a                 # shows HOST containers
 podman exec -it systemd-vscode fish -c 'podman run --rm -v $HOME/.workspaces/vscode:/w busybox ls /w'   # from inside the box: host daemon resolves HOST paths — use ~/.workspaces/vscode, not the container's ~/workspace
-podman exec systemd-vscode sh -c 'touch ~/workspace/marker && ls ~/.workspaces 2>/dev/null' # container ~/workspace is the mounted box dir
+podman exec systemd-vscode sh -c 'touch /workspace/marker'   # container /workspace is the mounted box dir
 curl -fsS http://127.0.0.1:3113/ | head -c200           # VS Code Server login page
 tailscale serve status                                  # shows https :8443 -> 127.0.0.1:3113 alongside the existing / route (dufs)
 # from a tailnet device (laptop): https://ai.<TAILNET>.ts.net:8443 -> login page, token accepted

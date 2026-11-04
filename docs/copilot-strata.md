@@ -154,7 +154,7 @@ VS Code's) shows the new id/n_ctx. Nothing to edit.
   `extensions.json`. The entrypoint registers it idempotently (same shape
   gallery installs write) and clears its `.obsolete` marks each start.
 - An empty (no-folder) serve-web session renders the chat pane without an
-  input at all — hence `--default-folder ~/workspace` (host ~/.workspaces/vscode mounted there) in the
+  input at all — hence `--default-folder /workspace` (host ~/.workspaces/vscode mounted there) in the
   exec line.
 
 ## 5. What BYOK does **not** cover
