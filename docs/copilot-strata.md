@@ -84,9 +84,12 @@ Files (all git-tracked):
 - `containers/vscode/strata-provider/package.json` — vendor `strata`
   (`contributes.languageModelChatProviders`), `extensionKind: ["workspace"]`
   (runs in the server extension host: container network + env), and the
-  settings schema with box-correct defaults (`strata.baseUrl` =
-  `http://systemd-strata:8080/v1`, context/output budgets, tool/vision
-  flags, optional `strata.modelAllowlist`).
+  settings schema: `strata.baseUrl`/`strata.apiKey`/`strata.modelAllowlist`
+  are **machine-scope** (a workspace must never redirect the auto-attached
+  key — review finding P0-2); the public default baseUrl is
+  `http://127.0.0.1:8080/v1` while the box-correct value is supplied by the
+  entrypoint via Machine settings below. Plus context/output budgets,
+  tool/vision flags and `strata.maxImageBytes`.
 - `containers/vscode/strata-provider/extension.js` — pure CommonJS, stable
   API only:
   - discovery: `GET {base}/models` → per-model `meta.n_ctx` →
@@ -114,7 +117,9 @@ Files (all git-tracked):
      needed when a usable model is configured; bundle confirms BYOK models
      make the Copilot auth resource optional),
      `chat.byokUtilityModelDefault: "mainAgent"` (titles, commit messages,
-     PR text run on strata too).
+     PR text run on strata too),
+     `strata.baseUrl: "http://systemd-strata:8080/v1"` (machine-scope setting;
+     the public package default is loopback, the box overrides it here).
 
 Refresh loop: strata re-slots (different model/context variant) → the
 provider's next silent discovery (`lm.onDidChangeChatModels` plumbing is
@@ -130,7 +135,7 @@ VS Code's) shows the new id/n_ctx. Nothing to edit.
 - UI (first time, per browser): open the box → **Trust Workspace** once
   (the model picker is disabled while the workspace is untrusted — by
   design) → Chat (Ctrl+Alt+I) → Models button → pick the Qwen model under
-  **Strata (local)**.
+  **OpenAI-Compatible (local)** (vendor id stays `strata`).
 - Logs if in doubt:
   `~/.vscode-server/data/logs/<session>/remoteagent.log` (extension scan
   errors; clean = loaded), `exthost*/remoteexthost.log` (per-extension

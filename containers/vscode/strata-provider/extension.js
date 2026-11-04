@@ -11,7 +11,10 @@ const VENDOR = 'strata';
 
 function config() {
 	const c = vscode.workspace.getConfiguration('strata');
-	const base = (c.get('baseUrl') || 'http://systemd-strata:8080/v1').replace(/\/+$/, '');
+	// baseUrl/apiKey/modelAllowlist are MACHINE-scope settings (package.json):
+	// a workspace must not be able to redirect the auto-attached key.
+	// Per-box overrides live in the server's data/Machine/settings.json.
+	const base = (c.get('baseUrl') || 'http://127.0.0.1:8080/v1').replace(/\/+$/, '');
 	return {
 		base,
 		apiKey: c.get('apiKey') || process.env.STRATA_API_KEY || '',
@@ -19,8 +22,19 @@ function config() {
 		maxOutputTokens: c.get('maxOutputTokens', 16384),
 		toolCalling: c.get('toolCalling', true),
 		imageInput: c.get('imageInput', true),
+		maxImageBytes: c.get('maxImageBytes', 10485760),
 		allowlist: c.get('modelAllowlist', []) || [],
 	};
+}
+
+// Error text stays debuggable but never echoes URL userinfo/query (finding #9).
+function safeUrl(url) {
+	try {
+		const u = new URL(url);
+		return u.origin + u.pathname;
+	} catch {
+		return '<invalid-url>';
+	}
 }
 
 function abortSignal(token) {
@@ -40,12 +54,12 @@ async function fetchJson(url, apiKey, token, init) {
 	try {
 		res = await fetch(url, Object.assign(opts, { signal: abortSignal(token) }));
 	} catch (e) {
-		throw new Error(`strata: request to ${url} failed: ${e && e.message ? e.message : e}`);
+		throw new Error(`strata: request to ${safeUrl(url)} failed: ${e && e.message ? e.message : e}`);
 	}
 	if (!res.ok) {
 		let body = '';
 		try { body = (await res.text()).slice(0, 400); } catch { /* ignore */ }
-		throw new Error(`strata: ${url} returned ${res.status} ${body}`);
+		throw new Error(`strata: ${safeUrl(url)} returned ${res.status} ${body}`);
 	}
 	return res;
 }
@@ -93,14 +107,21 @@ class StrataProvider {
 
 	async provideLanguageModelChatResponse(model, messages, options, progress, token) {
 		const cfg = config();
-		const body = {
-			model: model.id,
-			messages: convertMessages(messages),
-			stream: true,
-			max_tokens: cfg.maxOutputTokens,
-		};
-		if (options && options.modelOptions) {
-			Object.assign(body, options.modelOptions);
+		// Spread caller-/setting-supplied modelOptions FIRST, then re-pin the
+		// transport-core fields last (finding #6): OpenAI-compatible extras
+		// (temperature, top_p, seed...) pass through verbatim, but model,
+		// messages and stream can never be overridden.
+		const body = Object.assign({}, (options && options.modelOptions) || {});
+		if (body.max_tokens == null) {
+			body.max_tokens = cfg.maxOutputTokens;
+		}
+		const skippedImages = [];
+		body.model = model.id;
+		body.messages = convertMessages(messages, cfg.maxImageBytes, skippedImages);
+		body.stream = true;
+		if (skippedImages.length) {
+			progress.report(new vscode.LanguageModelTextPart(
+				`[strata: skipped ${skippedImages.length} image input(s) over ${Math.round(cfg.maxImageBytes / 1024)} KB — raise strata.maxImageBytes to allow them]`));
 		}
 		const tools = options && options.tools;
 		if (tools && tools.length) {
@@ -169,7 +190,10 @@ class StrataProvider {
 						if (tc.id) {
 							slot.id = tc.id;
 						}
-						if (tc.function && tc.function.name) {
+						if (tc.function && tc.function.name && tc.function.name !== slot.name) {
+							// Accumulate chunked names; skip an exact repeat of
+							// what we already have — some servers resend the
+							// full name in every delta (finding #11).
 							slot.name += tc.function.name;
 						}
 						if (tc.function && typeof tc.function.arguments === 'string') {
@@ -207,7 +231,7 @@ class StrataProvider {
 	}
 }
 
-function convertMessages(messages) {
+function convertMessages(messages, maxImageBytes, skippedImages) {
 	const out = [];
 	for (const m of messages) {
 		const texts = [];
@@ -222,7 +246,14 @@ function convertMessages(messages) {
 			} else if (p instanceof vscode.LanguageModelToolResultPart) {
 				results.push(p);
 			} else if (p instanceof vscode.LanguageModelDataPart && (p.mimeType || '').startsWith('image/')) {
-				images.push(`data:${p.mimeType};base64,${Buffer.from(p.data).toString('base64')}`);
+				const bytes = Buffer.from(p.data);
+				if (maxImageBytes > 0 && bytes.byteLength > maxImageBytes) {
+					// size cap keeps memory and request bodies bounded (#10);
+					// images are otherwise re-encoded and resent every turn.
+					skippedImages.push(p.mimeType);
+					continue;
+				}
+				images.push(`data:${p.mimeType};base64,${bytes.toString('base64')}`);
 			}
 		}
 		// Tool results ride on user messages but must become their own

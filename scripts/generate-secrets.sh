@@ -133,7 +133,10 @@ if [ -f "$CONF/strata/service.env" ] && ! grep -q '^STRATA_API_KEY=..' "$dst"; t
     sk=$(sed -n 's/^API_KEY=//p' "$CONF/strata/service.env" | head -1)
     if [ -n "$sk" ]; then
         if grep -q '^STRATA_API_KEY=' "$dst"; then
-            sed -i "s|^STRATA_API_KEY=.*|STRATA_API_KEY=${sk}|" "$dst"
+            # awk with -v, not sed: a key containing & or | would corrupt a
+            # sed replacement (review finding #12). Generated keys are hex,
+            # but these files are hand-editable.
+            awk -v k="$sk" '/^STRATA_API_KEY=/{print "STRATA_API_KEY=" k; next} 1' "$dst" > "$dst.tmp" && mv "$dst.tmp" "$dst"
         else
             printf 'STRATA_API_KEY=%s\n' "$sk" >> "$dst"
         fi

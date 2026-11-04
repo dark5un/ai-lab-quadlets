@@ -35,41 +35,46 @@ fi
 SRC=/opt/vscode/extensions/strata-provider
 if [ -d "$SRC" ]; then
   EXTDIR="$HOME/.vscode-server/extensions"
-  ver=$(sed -nE 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' "$SRC/package.json" | head -1)
-  dest="$EXTDIR/dark5un.strata-provider-${ver}"
+  # jq, not sed: first "version" string anywhere in package.json could be a
+  # dependency's (review finding #8).
+  ver=$(jq -r .version "$SRC/package.json")
+  dest="$EXTDIR/dark5un.openai-compatible-models-${ver}"
   mkdir -p "$EXTDIR"
   if [ ! -d "$dest" ]; then
     cp -a "$SRC" "$dest"
-    # retire older copies of our extension (single registration only)
-    for old in "$EXTDIR"/dark5un.strata-provider-*; do
+    # retire older copies of our extension (single registration only); the
+    # strata-provider glob covers the pre-rename (0.1.x) installs.
+    for old in "$EXTDIR"/dark5un.openai-compatible-models-* "$EXTDIR"/dark5un.strata-provider-*; do
       [ -d "$old" ] && [ "$old" != "$dest" ] && rm -rf "$old"
     done
-    echo "installed strata-provider ${ver} into $EXTDIR"
+    echo "installed openai-compatible-models ${ver} into $EXTDIR"
   fi
   # Register in the profile manifest (extensions.json) -- the manifest is the
   # authoritative installed set; folders merely present on disk get GC'd into
   # .obsolete by extension sync (observed live in 1.144.1). Re-arm our entry
-  # every start; leave all other entries untouched. Drop any .obsolete marks
-  # for our id. Manifest shape mirrors gallery-installed entries.
+  # every start; drop our legacy id (dark5un.strata-provider) and any other
+  # entries are left untouched. Manifest shape mirrors gallery-installed
+  # entries.
   MANIFEST="$EXTDIR/extensions.json"
   [ -f "$MANIFEST" ] || echo '[]' > "$MANIFEST"
   now=$(date +%s%3N)
-  entry=$(jq -n --arg id "dark5un.strata-provider" --arg ver "$ver" \
-    --arg dir "dark5un.strata-provider-${ver}" --arg path "$dest" --argjson ts "$now" \
+  entry=$(jq -n --arg id "dark5un.openai-compatible-models" --arg ver "$ver" \
+    --arg dir "dark5un.openai-compatible-models-${ver}" --arg path "$dest" --argjson ts "$now" \
     '{identifier:{id:$id},version:$ver,location:{"$mid":1,path:$path,scheme:"file"},
       relativeLocation:$dir,
       metadata:{installedTimestamp:$ts,pinned:true,source:"vsix",
         isBuiltin:false,isPreReleaseVersion:false,hasPreReleaseVersion:false}}' 2>/dev/null || true)
   tmp=$(mktemp)
-  if [ -n "$entry" ] && jq -c --arg id "dark5un.strata-provider" --argjson e "$entry" \
-       '[ .[] | select(.identifier.id != $id) ] + [$e]' "$MANIFEST" > "$tmp" 2>/dev/null; then
+  if [ -n "$entry" ] && jq -c --arg id "dark5un.openai-compatible-models" --arg legacy "dark5un.strata-provider" \
+       --argjson e "$entry" \
+       '[ .[] | select(.identifier.id != $id and .identifier.id != $legacy) ] + [$e]' "$MANIFEST" > "$tmp" 2>/dev/null; then
     mv "$tmp" "$MANIFEST"
   else
     rm -f "$tmp"; echo "WARN: could not update $MANIFEST" >&2
   fi
   if [ -f "$EXTDIR/.obsolete" ]; then
     tmp=$(mktemp)
-    if jq -c 'with_entries(select(.key | startswith("dark5un.strata-provider") | not))' \
+    if jq -c 'with_entries(select(.key | startswith("dark5un.") | not))' \
          "$EXTDIR/.obsolete" > "$tmp" 2>/dev/null; then mv "$tmp" "$EXTDIR/.obsolete"; else rm -f "$tmp"; fi
   fi
 fi
@@ -86,7 +91,8 @@ cat > "$MACHINE/settings.json" <<'JSON'
 {
   "chat.agentHost.byokModels.enabled": true,
   "chat.agentHost.allowSignedOutWhenUsable": true,
-  "chat.byokUtilityModelDefault": "mainAgent"
+  "chat.byokUtilityModelDefault": "mainAgent",
+  "strata.baseUrl": "http://systemd-strata:8080/v1"
 }
 JSON
 # Note: workspace trust is intentionally left ON. First open of the default
@@ -97,9 +103,18 @@ JSON
 # --default-folder: the box's own work area (same-path mount); an empty
 # workspace hides the agent-mode chat input entirely (verified headless).
 mkdir -p "$HOME/.workspaces/vscode"
+# Connection token via FILE, never argv (review finding #1): argv is visible
+# to every process in the container (ps, /proc/*/cmdline) and to any exec
+# audit. The env var stays the EnvironmentFile delivery; this file lands in
+# the persisted home with 0600 and is rewritten each start (rotation-safe).
+# The one-time startup banner in the journal still shows ?tkn=; if ever
+# suspected, rotate via scripts/rotate-secrets.sh.
+umask 077
+mkdir -p "$HOME/.vscode-server"
+printf '%s' "$VSCODE_CONNECTION_TOKEN" > "$HOME/.vscode-server/connection-token"
 exec code serve-web \
   --host 0.0.0.0 --port 8000 \
   --default-folder "$HOME/.workspaces/vscode" \
-  --connection-token "$VSCODE_CONNECTION_TOKEN" \
+  --connection-token-file "$HOME/.vscode-server/connection-token" \
   --accept-server-license-terms \
   --disable-telemetry

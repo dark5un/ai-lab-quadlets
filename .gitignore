@@ -4,6 +4,9 @@ config/**/presets.ini
 config/**/keys.txt
 config/**/.deepseek-harness-built
 
+# Built VSIX (release artifacts, never committed)
+*.vsix
+
 # OS junk
 .DS_Store
 Thumbs.db

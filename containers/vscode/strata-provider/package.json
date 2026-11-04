@@ -1,14 +1,17 @@
 {
-  "name": "strata-provider",
+  "name": "openai-compatible-models",
   "publisher": "dark5un",
-  "displayName": "Strata Local Models",
-  "description": "Contributes the ai-lab strata server's models to the VS Code model picker via the stable Language Model Chat Provider API (fully local BYOK).",
-  "version": "0.1.4",
+  "displayName": "OpenAI-Compatible Local Models (BYOK)",
+  "description": "Adds any OpenAI-compatible Chat Completions server (Strata, llama.cpp-class, vLLM) to the VS Code model picker and agent mode via the stable Language Model Chat Provider API. Fully local BYOK.",
+  "version": "0.2.0",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/dark5un/ai-lab-quadlets",
     "directory": "containers/vscode/strata-provider"
+  },
+  "bugs": {
+    "url": "https://github.com/dark5un/ai-lab-quadlets/issues"
   },
   "engines": {
     "vscode": "^1.104.0"
@@ -16,27 +19,32 @@
   "categories": ["AI", "Chat"],
   "keywords": ["byok", "strata", "openai-compatible", "local models", "llama.cpp", "chat"],
   "pricing": "Free",
+  "icon": "icon.png",
   "main": "./extension.js",
+  "activationEvents": ["onLanguageModelChatProvider:strata"],
   "extensionKind": ["workspace"],
+  "files": ["extension.js", "icon.png", "LICENSE", "CHANGELOG.md"],
   "contributes": {
     "languageModelChatProviders": [
       {
         "vendor": "strata",
-        "displayName": "Strata (local)"
+        "displayName": "OpenAI-Compatible (local)"
       }
     ],
     "configuration": {
-      "title": "Strata",
+      "title": "OpenAI-Compatible Models (strata.*)",
       "properties": {
         "strata.baseUrl": {
           "type": "string",
-          "default": "http://systemd-strata:8080/v1",
-          "description": "OpenAI-compatible base URL of the strata server (stack-network alias, not host loopback)."
+          "scope": "machine",
+          "default": "http://127.0.0.1:8080/v1",
+          "description": "OpenAI-compatible base URL of your endpoint. Machine scope on purpose: this extension auto-attaches your API key to requests, so a workspace-level setting could redirect the key to an attacker host. In the ai-lab stack the box sets this in server-scope Machine settings (e.g. http://systemd-strata:8080/v1)."
         },
         "strata.apiKey": {
           "type": "string",
+          "scope": "machine",
           "default": "",
-          "description": "API key for strata. Leave empty to read STRATA_API_KEY from the server environment (injected by the quadlet EnvironmentFile)."
+          "description": "API key for the endpoint. Leave empty to read STRATA_API_KEY from the server process environment (e.g. injected by a quadlet EnvironmentFile). Machine scope: never set per-workspace; note plaintext settings flow through Settings Sync."
         },
         "strata.contextWindow": {
           "type": "number",
@@ -46,7 +54,7 @@
         "strata.maxOutputTokens": {
           "type": "number",
           "default": 16384,
-          "description": "Max output tokens per response. Keep generous: strata reasoning models share this budget with thinking."
+          "description": "Max output tokens per response. Keep generous: reasoning models share this budget with thinking."
         },
         "strata.toolCalling": {
           "type": "boolean",
@@ -58,11 +66,17 @@
           "default": true,
           "description": "Fallback vision flag when the server does not report architecture.input_modalities."
         },
+        "strata.maxImageBytes": {
+          "type": "number",
+          "default": 10485760,
+          "description": "Skip image inputs larger than this many raw bytes (default 10 MB) to avoid memory spikes and oversized requests; a notice is shown in chat when an image is skipped."
+        },
         "strata.modelAllowlist": {
           "type": "array",
           "items": { "type": "string" },
+          "scope": "machine",
           "default": [],
-          "description": "If non-empty, only expose these model ids from GET /models."
+          "description": "If non-empty, only expose these model ids from GET {baseUrl}/models. Machine scope so a workspace cannot shape model discovery."
         }
       }
     }

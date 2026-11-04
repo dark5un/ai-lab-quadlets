@@ -30,6 +30,11 @@ Volume=%h/.workspaces/vscode:%h/.workspaces/vscode:Z
 # is root-owned inside and the client needs a writable runtime dir)
 Volume=%t/podman/podman.sock:/run/user/1000/podman/podman.sock
 
+# Loopback-only publish. serve-web binds 0.0.0.0 INSIDE, so containers on
+# ai.network can also reach it -- every request (from any surface) must carry
+# the connection token ("a secret that must be included with all requests",
+# serve-web --help; delivered via --connection-token-file in the entrypoint),
+# so the ai.network reach is token-gated.
 PublishPort=127.0.0.1:3113:8000/tcp
 
 [Service]

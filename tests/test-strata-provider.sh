@@ -15,12 +15,13 @@ ENVFILE="$CONF/vscode/service.env"
 [ -f "$ENVFILE" ] || { echo "SKIP: $ENVFILE missing (run generate-secrets.sh)"; exit 0; }
 KEY=$(grep '^STRATA_API_KEY=' "$ENVFILE" | cut -d= -f2-)
 [ -n "$KEY" ] || { echo "SKIP: STRATA_API_KEY empty in $ENVFILE"; exit 0; }
-
-OUT=$(podman exec -i -e STRATA_API_KEY="$KEY" systemd-vscode bash -s <<'EOS'
+# --env-file, not -e KEY=...: the real key must never appear in argv (host
+# ps/journald exposure -- review finding #13). KEY above is only a presence check.
+OUT=$(podman exec -i --env-file "$ENVFILE" systemd-vscode bash -s <<'EOS'
 set -e
 NODE=$(find ~/.vscode/cli/serve-web -maxdepth 2 -name node -type f | head -1)
 [ -n "$NODE" ] || { echo "no serve-web node binary"; exit 1; }
-EXT=$(ls -d ~/.vscode-server/extensions/dark5un.strata-provider-* 2>/dev/null | head -1)
+EXT=$(ls -d ~/.vscode-server/extensions/dark5un.openai-compatible-models-* 2>/dev/null | head -1)
 [ -n "$EXT" ] || { echo "strata-provider extension not installed in server home"; exit 1; }
 cat > /tmp/strata-provider-smoke.cjs <<'HARNESS'
 "use strict";
@@ -33,7 +34,7 @@ const vscode={
   LanguageModelToolResultPart:class{},LanguageModelDataPart:class{},
   LanguageModelChatMessageRole:{User:1,Assistant:2},
   LanguageModelChatToolMode:{Auto:1,Required:2},
-  workspace:{getConfiguration:()=>({get:(k,d)=>d})},
+  workspace:{getConfiguration:()=>({get:(k,d)=>k==='baseUrl'?'http://systemd-strata:8080/v1':d})},
   lm:{registerLanguageModelChatProvider:(v,p)=>{global.__provider=p;global.__vendor=v;}}
 };
 Module._load=function(r,...a){ if(r==="vscode") return vscode; return orig.call(this,r,...a); };
@@ -46,9 +47,11 @@ const token={onCancellationRequested:()=>({dispose(){}})};
   const m=models[0];
   if(!(m.maxInputTokens>0&&m.maxOutputTokens>0)) throw new Error("bad token limits");
   let text="";
+  // modelOptions hostile-core-fields regression (review #6): stream/model must
+  // be re-pinned by the provider; temperature is a legit passthrough extra.
   await p.provideLanguageModelChatResponse(m,
     [{role:1,name:undefined,content:[new TextPart("Reply with exactly: STRATA-OK")]}],
-    {toolMode:1},{report(pt){if(pt.value)text+=pt.value;}},token);
+    {toolMode:1,modelOptions:{stream:false,model:"nonexistent-model",temperature:0}},{report(pt){if(pt.value)text+=pt.value;}},token);
   if(!text.includes("STRATA")) throw new Error("chat text missing: "+text.slice(0,80));
   let called=null;
   // IQ3-class local models occasionally answer tool prompts in plain text;

@@ -1,5 +1,14 @@
 # strata-provider — security & public-release review (2026-11-04)
 
+> **STATUS: executed 2026-11-04.** All P0/P1 fixes (#1-#8, rename per #7 to
+> `openai-compatible-models` per owner decision) plus #9-#13, #15, #16 applied;
+> vsce 4.1.0 packages the VSIX with zero warnings; box rebuilt, restarted,
+> smoke test PASS. Two deviations: the repo-root LICENSE is actually
+> Apache-2.0, not MIT (owner confirmed MIT for the extension — extension-folder
+> LICENSE is MIT); and with an explicit `"files"` array vsce 4.1.0 does NOT
+> auto-include LICENSE/CHANGELOG (the review's proposed `files` list produced a
+> license warning) — both must be listed in `files` explicitly.
+
 Scope: `containers/vscode/strata-provider/{package.json,extension.js,README.md}`,
 `containers/vscode/entrypoint.sh`, `containers/vscode/Containerfile`,
 `quadlets/vscode.container`, `config/vscode/service.env.example`,
