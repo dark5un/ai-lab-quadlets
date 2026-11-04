@@ -100,9 +100,11 @@ JSON
 # per browser. The chat model picker is disabled while a workspace is
 # untrusted (verified headless) -- by design, not a config gap.
 
-# --default-folder: the box's own work area (same-path mount); an empty
-# workspace hides the agent-mode chat input entirely (verified headless).
-mkdir -p "$HOME/.workspaces/vscode"
+# --default-folder: the box's own work area -- host ~/.workspaces/vscode
+# mounted at ~/workspace inside the container (the ~/workspace convention;
+# see quadlets/vscode.container). An empty workspace hides the agent-mode
+# chat input entirely (verified headless).
+mkdir -p "$HOME/workspace"
 # Connection token via FILE, never argv (review finding #1): argv is visible
 # to every process in the container (ps, /proc/*/cmdline) and to any exec
 # audit. The env var stays the EnvironmentFile delivery; this file lands in
@@ -114,7 +116,7 @@ mkdir -p "$HOME/.vscode-server"
 printf '%s' "$VSCODE_CONNECTION_TOKEN" > "$HOME/.vscode-server/connection-token"
 exec code serve-web \
   --host 0.0.0.0 --port 8000 \
-  --default-folder "$HOME/.workspaces/vscode" \
+  --default-folder "$HOME/workspace" \
   --connection-token-file "$HOME/.vscode-server/connection-token" \
   --accept-server-license-terms \
   --disable-telemetry
