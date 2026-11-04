@@ -24,6 +24,16 @@ box (strata + bge-m3 via ai.network).
 | kb-watcher | built (same image) | none | nightly one-shot ingest (Type=oneshot) |
 | kb-watcher.timer | plain user unit (`services/`) | - | nightly ~03:30+rand, wakes the group via Wants= chain |
 
+Tailnet doors (added 2026-11-04, verified end-to-end from this node):
+`tailscale serve --bg --https=8444 -> 127.0.0.1:3114` (RAGFlow),
+`:8445 -> 3115` (n8n), `:8446 -> 3116` (LightRAG). Real FQDN never
+committed; form: `https://ai.<tailnet>.ts.net:8444` etc. 443 stays dufs,
+8443 stays vscode. LightRAG was loopback-unauthenticated by design; before
+exposing it we enabled `LIGHTRAG_API_KEY` (generated + mirrored into
+kb-watcher/service.env by `scripts/kb-lightrag-auth.py`; clients auth with
+the **X-API-Key** header - v1.5.7's Bearer scheme is guest-JWT, not the
+api key). RAGFlow + n8n keep their own logins.
+
 Storage: all heavy state in named volumes `kb-es-data kb-mysql-data
 kb-minio-data kb-kvrocks-data kb-nats-data kb-lightrag-pg-data
 kb-lightrag-data kb-n8n-data kb-ragflow-logs`. Light human-readable state

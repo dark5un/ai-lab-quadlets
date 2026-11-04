@@ -57,6 +57,10 @@ Knowledge base (KB group, plan ~/tmp/knowledge_base_plan1.md, added 2026-11-04):
 | ragflow-nats       | -     | none (systemd-ragflow-nats:4222; distinct from host nats 4222/8222) |
 | kb-postgres        | -     | none (systemd-kb-postgres:5432) |
 
+Tailnet doors for the KB (tailscale serve; real FQDN never committed):
+ragflow -> `https://ai.<tailnet>.ts.net:8444`, n8n -> `:8445`,
+lightrag (`X-API-Key` auth enabled) -> `:8446`.
+
 Monitoring (added 2026-10-08, plan ~/Documents/plans/ai-lab-monitoring-plan.md):
 
 | service            | port  | binding  |

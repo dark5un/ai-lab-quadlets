@@ -43,6 +43,11 @@ def env(k, d=""):
 RAGFLOW_URL = env("RAGFLOW_BASE_URL", "http://systemd-ragflow:9380").rstrip("/")
 RAGFLOW_KEY = env("RAGFLOW_API_KEY")
 LIGHTRAG_URL = env("LIGHTRAG_BASE_URL", "http://systemd-lightrag:9621").rstrip("/")
+LR_KEY = env("LIGHTRAG_API_KEY")
+
+
+def lr_headers():
+    return {"X-API-Key": LR_KEY} if LR_KEY else {}
 KB = Path(env("KB_STATE_DIR", "/home/px/workspace/github.com/dark5un/ai-lab-quadlets/kb"))
 STATE = KB / "state"
 REPORTS = KB / "reports"
@@ -140,7 +145,7 @@ def graph_pairs(c: sqlite3.Connection) -> int:
     """entities linked in >=2 documents from LightRAG (co-occurrence)."""
     added = 0
     try:
-        g = httpx.get(f"{LIGHTRAG_URL}/graph", params={"label": "*",
+        g = httpx.get(f"{LIGHTRAG_URL}/graph", headers=lr_headers(), params={"label": "*",
                       "max_depth": 1, "max_nodes": 2000}, timeout=120)
         names = _name_index()
         ent_docs: dict[str, set] = defaultdict(set)
@@ -271,7 +276,7 @@ def coverage() -> dict:
     """W2: entity inventory (LightRAG) x doc counts + retrieval probes."""
     gaps = []
     try:
-        g = httpx.get(f"{LIGHTRAG_URL}/graph", params={"label": "*", "max_depth": 1,
+        g = httpx.get(f"{LIGHTRAG_URL}/graph", headers=lr_headers(), params={"label": "*", "max_depth": 1,
                       "max_nodes": 3000}, timeout=180)
         for node in g.json().get("nodes", []):
             ent = node.get("entity_id") or node.get("id") or ""

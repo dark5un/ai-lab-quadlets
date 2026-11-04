@@ -309,8 +309,15 @@ def rf_delete(ds_name: str, doc_ids: list[str], ds: dict[str, str]) -> None:
 
 
 # ── LightRAG mirror ──────────────────────────────────────────────────────────
+def lr_headers() -> dict:
+    # LightRAG API-key auth: X-API-Key header (verified against v1.5.7
+    # get_combined_auth_dependency; Bearer is its guest-JWT scheme)
+    k = env("LIGHTRAG_API_KEY")
+    return {"X-API-Key": k} if k else {}
+
+
 def lr_insert(text: str, file_source: str) -> str | None:
-    r = httpx.post(f"{LIGHTRAG_URL}/documents/text",
+    r = httpx.post(f"{LIGHTRAG_URL}/documents/text", headers=lr_headers(),
                    json={"text": text, "file_source": file_source}, timeout=600)
     if r.status_code >= 400:
         raise RuntimeError(f"lightrag insert: {r.status_code} {r.text[:200]}")
@@ -324,7 +331,7 @@ def lr_delete_by_source(file_source: str) -> int:
     deleted = 0
     page = 1
     while True:
-        r = httpx.post(f"{LIGHTRAG_URL}/documents/paginated",
+        r = httpx.post(f"{LIGHTRAG_URL}/documents/paginated", headers=lr_headers(),
                        json={"page": page, "page_size": 200,
                              "sort_field": "file_path",
                              "sort_direction": "asc"}, timeout=60)
@@ -335,6 +342,7 @@ def lr_delete_by_source(file_source: str) -> int:
                if doc.get("file_path") == file_source]
         for i in range(0, len(ids), 50):
             dr = httpx.request("DELETE", f"{LIGHTRAG_URL}/documents/delete_document",
+                               headers=lr_headers(),
                                json={"doc_ids": ids[i:i + 50]}, timeout=120)
             if dr.status_code >= 400:
                 raise RuntimeError(f"lightrag delete: {dr.status_code} {dr.text[:200]}")
