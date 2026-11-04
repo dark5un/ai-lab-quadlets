@@ -47,6 +47,21 @@ JSON
   echo "seeded $CLM (strata BYOK; edit via Chat: Manage Language Models)"
 fi
 
+# Agent Host chat sessions (the default since the 1.14x agents UX) hide
+# BYOK models unless chat.agentHost.byokModels.enabled is true (default
+# false) -- without it, selecting strata silently falls back to Auto/Copilot.
+# Seed/add the key; never override an explicit user choice.
+SET="$HOME/.vscode-server/data/User/settings.json"
+if [ ! -f "$SET" ]; then
+  printf '{\n  "chat.agentHost.byokModels.enabled": true\n}\n' > "$SET"
+elif command -v jq >/dev/null && ! grep -q 'agentHost.byokModels' "$SET"; then
+  tmp=$(mktemp)
+  if jq '. + {"chat.agentHost.byokModels.enabled": true}' "$SET" > "$tmp" 2>/dev/null; then
+    cat "$tmp" > "$SET"; echo "settings.json: enabled chat.agentHost.byokModels.enabled"
+  fi
+  rm -f "$tmp"
+fi
+
 exec code serve-web \
   --host 0.0.0.0 --port 8000 \
   --connection-token "$VSCODE_CONNECTION_TOKEN" \

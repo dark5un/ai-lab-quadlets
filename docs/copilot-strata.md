@@ -128,6 +128,12 @@ Notes on the fields (all from the docs/config reference):
   key itself is in secret storage, never in this repo.
 - Reload the window after saving; the model picker populates at
   startup.[7][12]
+- **Gotcha hit live (2026-11-04): the Agent Host (the default session
+  type in 1.14x) hides BYOK models unless
+  `chat.agentHost.byokModels.enabled` is true — default false — so
+  selecting strata silently reverts to Auto/Copilot.** VS Code's settings
+  reference confirms the key and its `false` default. The entrypoint now
+  guarantees the key (adds it if absent, respects an explicit `false`).
 
 Then, for the utility features (title generation, commit messages, PR
 descriptions) to also run local, override the utility model settings
