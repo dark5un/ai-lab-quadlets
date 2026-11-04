@@ -88,6 +88,30 @@ in this repo under `kb/` (gitignored - public repo, corpus-derived).
   `"model": "<name>@<instance>@<provider>"` in the body
 - LightRAG has no custom doc ids: join by `file_source`
   (`POST /documents/paginated`, delete via `DELETE /documents/delete_document`)
+- RAGFlow Go line documents report `ingestion_status` ("COMPLETED"/...),
+  not the legacy numeric `run` field — the watcher polls both (fixed
+  2026-11-04; false parse-TIMEOUT errors before that)
+- LightRAG mirror inserts are rejected (409 "already contains ... Status:
+  analyzing") while a same-`file_path` doc exists in any state — watcher now
+  always `lr_delete_by_source` before insert (fixed 2026-11-04)
+- strata is a thinking model: with thinking ON one LightRAG extraction call
+  burns >12k hidden-reasoning tokens, hits `finish=length` (truncated JSON)
+  and blows LightRAG's worker timeout (`2*LLM_TIMEOUT`, default 480 s) — all
+  mirrored docs failed. Verified live: same call with `reasoning_effort=none`
+  → ~22 s, `finish=stop`, clean merge (140 entities). Config fix in
+  `config/lightrag/service.env.example` + live:
+  `EXTRACT/KEYWORD/QUERY_OPENAI_LLM_REASONING_EFFORT=none`, `LLM_TIMEOUT=600`
+  (role env pattern `{ROLE}_OPENAI_LLM_{FIELD}` verified against v1.5.7
+  `binding_options.options_dict_for_role`; startup log confirms
+  `extract: OpenAI {'reasoning_effort': 'none'}`). Failed docs recover via
+  `POST /documents/reprocess_failed`.
+- bge-m3 llama.cpp server rejects embedding inputs over its physical batch
+  size (512 default): `500 input (1212 tokens) is too large to process` —
+  LightRAG's 1200-token chunks therefore failed every PGVector flush
+  (verified live 2026-11-04). Root fix in `quadlets/embeddings.container`:
+  `LLAMA_ARG_UBATCH=2048` (pure-CPU server, 8192 ctx; benefits every embed
+  consumer, not just the KB). Deliberate deviation from plan §13 "do not
+  change the embeddings unit": a capacity flag, not a model/wiring change.
 - `ADMIN_DEFAULT_PASSWORD` init mismatch: reset the scrypt hash directly in
   MySQL (werkzeug format, see git log 2026-11-04)
 

@@ -190,6 +190,7 @@ def classify(path: str) -> dict | None:
         r = httpx.post(f"{STRATA_URL}/chat/completions",
                        headers={"Authorization": f"Bearer {STRATA_KEY}"},
                        json={"model": STRATA_MODEL, "temperature": 0,
+                             "reasoning_effort": "none",
                              "response_format": {"type": "json_object"},
                              "messages": [{"role": "user", "content": prompt}]},
                        timeout=120)
@@ -276,10 +277,14 @@ def rf_wait(ds_id: str, doc_ids: list[str]) -> dict[str, str]:
         payload = r.json().get("data", [])
         docs = payload.get("docs", []) if isinstance(payload, dict) else payload
         for d in docs:
-            run = str(d.get("run", "")).upper()
-            if d.get("id") in status and run in ("DONE", "2", "FAIL", "3",
-                                                 "CANCEL", "CANCELED", "4"):
-                status[d["id"]] = "DONE" if run in ("DONE", "2") else "FAIL"
+            # RAGFlow Go line (v1.0.x) reports ingestion_status, not the
+            # legacy numeric `run` (kept for the v0.27 rollback path)
+            run = str(d.get("ingestion_status") or d.get("run", "")).upper()
+            done = run in ("DONE", "2", "COMPLETED")
+            failed = run in ("FAIL", "3", "FAILED", "CANCEL", "CANCELED",
+                             "4", "CANCELLED")
+            if d.get("id") in status and (done or failed):
+                status[d["id"]] = "DONE" if done else "FAIL"
         time.sleep(5)
     for d in list(status):
         if status[d] == "RUNNING":
@@ -472,9 +477,12 @@ def main() -> int:
                 else:
                     text = rf_chunks(ds_id, doc_id)
                 if text.strip():
-                    # changed file: drop the old content-hashed mirror doc first
-                    if p in changed:
-                        lr_delete_by_source(p)
+                    # Always drop any prior mirror doc for this source before
+                    # insert: LightRAG rejects a new text insert while an
+                    # older doc with the same file_path still exists
+                    # (409 "already contains ... Status: analyzing"), which
+                    # happens when a previous attempt failed or timed out.
+                    lr_delete_by_source(p)
                     lr_insert(text, p)
             except Exception as e:
                 errors.append({"path": p, "op": "mirror", "err": str(e)[:300],

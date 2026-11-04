@@ -27,6 +27,11 @@ Environment=LLAMA_ARG_API_KEY_FILE=/etc/llama-cpp/keys.txt
 Environment=LLAMA_ARG_HOST=0.0.0.0
 Environment=LLAMA_ARG_PORT=8080
 Environment=LLAMA_ARG_CTX_SIZE=8192
+# llama.cpp default physical batch (512) 500-errors any single embedding
+# input over 512 tokens ("increase the physical batch size", verified live
+# 2026-11-04 via LightRAG PGVector flush). Raise to the logical batch size:
+# pure-CPU bge-m3 with 8192 ctx - memory delta is one 2048-token ubatch.
+Environment=LLAMA_ARG_UBATCH=2048
 Environment=LLAMA_ARG_N_GPU_LAYERS=0
 # bge-m3 pooled embeddings (dense retrieval for OpenViking + Honcho).
 Environment=LLAMA_ARG_POOLING_TYPE=LAST
