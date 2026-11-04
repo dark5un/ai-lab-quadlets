@@ -1,0 +1,28 @@
+# n8n 2.46.6 - agentic analysis pipelines (plan W1 discrepancies, W2 gaps,
+# W3 staleness, W4 drift) over RAGFlow + LightRAG + strata. Sustainable Use
+# License: internal business use only, never exposed to clients (plan R8/§11).
+# UI/editor on loopback 3115; workflows persist in the kb-n8n-data volume;
+# N8N_ENCRYPTION_KEY (config/n8n/service.env) protects stored credentials -
+# losing it invalidates every n8n credential, rotate-secrets.sh covers it.
+
+[Unit]
+Description=n8n workflow engine (KB analysis)
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-n8n
+Image=docker.io/n8nio/n8n:2.46.6
+Network=ai.network
+UserNS=keep-id
+PublishPort=127.0.0.1:3115:5678/tcp
+EnvironmentFile=%h/.config/containers/config/n8n/service.env
+Volume=kb-n8n-data:/home/node/.n8n
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=120

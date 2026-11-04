@@ -1,0 +1,33 @@
+# RAGFlow cache/queue backend - Apache Kvrocks 2.16.0 (Redis-protocol,
+# RocksDB-backed; used ONLY by the Go services). Pinned 2.16.0 deliberately:
+# older tags carry a TTL contract bug that breaks the RunTracker CAS lease
+# and reject Redis-style maxmemory settings (upstream comment).
+# The image cannot expand ${ENV} in its config and rejects --requirepass, so
+# the entrypoint renders kvrocks.conf from REDIS_PASSWORD at start - carried
+# from the upstream repo, installed to config/ragflow/kvrocks-entrypoint.sh.
+# user 0:0 keeps config+data writes working regardless of volume ownership.
+# NO host port: reachable only as systemd-ragflow-kvrocks:6379.
+
+[Unit]
+Description=RAGFlow cache (Kvrocks, Redis protocol)
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-ragflow-kvrocks
+Image=docker.io/apache/kvrocks:2.16.0
+Network=ai.network
+User=0
+PodmanArgs=--entrypoint=/bin/sh
+EnvironmentFile=%h/.config/containers/config/ragflow/service.env
+Exec=/etc/kvrocks/entrypoint.sh
+Volume=kb-kvrocks-data:/var/lib/kvrocks
+Volume=%h/.config/containers/config/ragflow/kvrocks-entrypoint.sh:/etc/kvrocks/entrypoint.sh:ro
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=120
+TimeoutStopSec=120

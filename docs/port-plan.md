@@ -43,6 +43,20 @@ Web apps (31xx family, sequential):
 | docling-serve      | 5001 | 3108 | loopback (the docling MCP's remote backend) |
 | vscode             | -    | 3113 | loopback (tailnet door: tailscale serve https :8443; fallback ssh -L) |
 
+Knowledge base (KB group, plan ~/tmp/knowledge_base_plan1.md, added 2026-11-04):
+
+| service            | port  | binding  |
+|--------------------|-------|----------|
+| ragflow (UI)       | 3114  | loopback (API 9380 in-network only: systemd-ragflow:9380) |
+| n8n (editor)       | 3115  | loopback (internal ops tool only, never client-facing - SUL) |
+| lightrag (UI+API)  | 3116  | loopback |
+| ragflow-elasticsearch | -  | none (systemd-ragflow-elasticsearch:9200) |
+| ragflow-mysql      | -     | none (systemd-ragflow-mysql:3306) |
+| ragflow-minio (silo) | -   | none (systemd-ragflow-minio:9000) |
+| ragflow-kvrocks    | -     | none (systemd-ragflow-kvrocks:6379) |
+| ragflow-nats       | -     | none (systemd-ragflow-nats:4222; distinct from host nats 4222/8222) |
+| kb-postgres        | -     | none (systemd-kb-postgres:5432) |
+
 Monitoring (added 2026-10-08, plan ~/Documents/plans/ai-lab-monitoring-plan.md):
 
 | service            | port  | binding  |

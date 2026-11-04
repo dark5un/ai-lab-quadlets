@@ -19,3 +19,13 @@ Thumbs.db
 # Python
 __pycache__/
 *.pyc
+
+# KB group (knowledge-base plan): corpus-derived state lives in the project
+# but is NEVER committed - the repo is public and this content quotes the
+# private ~/workspace + ~/Documents corpus. Only kb/README.md is tracked.
+kb/reports/
+kb/manifest.json
+kb/watcher-errors.json
+kb/state/
+kb/workflows/
+kb/fixtures/

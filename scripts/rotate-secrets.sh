@@ -8,6 +8,9 @@
 #   - llama.cpp API keys            (config/llama-cpp/keys.txt, all 3 servers)
 #   - strata API_KEY                (config/strata/service.env + every
 #                                    ~/.local/share/strata/config-*/strata-*.json)
+#   - KB group                      (ragflow service.env + mysql.env mirror,
+#                                    kb-postgres + lightrag mirror, n8n
+#                                    encryption key)
 # Then restarts the affected services. Existing sessions/cookies tied to the
 # old values are invalidated. Treat any leaked value as burned: rotate first,
 # then hunt for where it leaked.
@@ -44,6 +47,31 @@ echo "Rotating secrets (dry run; pass --yes to apply)..."
 
 rotate_env_key "$CONF/open-webui/service.env" WEBUI_SECRET_KEY
 rotate_env_key "$CONF/strata/service.env" API_KEY
+# KB group: one shared file + two mirrors. The mysql.env / lightrag mirrors
+# MUST be rewritten after their source keys (same trick as strata's json
+# copies below): ragflow mysql.env takes MYSQL_PASSWORD, lightrag env takes
+# kb-postgres POSTGRES_PASSWORD.
+rotate_env_key "$CONF/ragflow/service.env" ELASTIC_PASSWORD
+rotate_env_key "$CONF/ragflow/service.env" MYSQL_PASSWORD
+rotate_env_key "$CONF/ragflow/service.env" MINIO_PASSWORD
+rotate_env_key "$CONF/ragflow/service.env" REDIS_PASSWORD
+rotate_env_key "$CONF/ragflow/service.env" ADMIN_DEFAULT_PASSWORD
+rotate_env_key "$CONF/kb-postgres/service.env" POSTGRES_PASSWORD
+rotate_env_key "$CONF/n8n/service.env" N8N_ENCRYPTION_KEY
+if [ "$APPLY" = 1 ]; then
+    mp=$(sed -n 's/^MYSQL_PASSWORD=//p' "$CONF/ragflow/service.env" 2>/dev/null | tail -1)
+    [ -n "$mp" ] && [ -f "$CONF/ragflow/mysql.env" ] && \
+        awk -v p="$mp" '/^MYSQL_ROOT_PASSWORD=/{print "MYSQL_ROOT_PASSWORD=" p; next} 1' \
+            "$CONF/ragflow/mysql.env" > "$CONF/ragflow/mysql.env.tmp" && \
+        chmod 600 "$CONF/ragflow/mysql.env.tmp" && mv "$CONF/ragflow/mysql.env.tmp" "$CONF/ragflow/mysql.env" && \
+        echo "  ✓ re-mirrored ragflow mysql.env"
+    pgpw=$(sed -n 's/^POSTGRES_PASSWORD=//p' "$CONF/kb-postgres/service.env" 2>/dev/null | tail -1)
+    [ -n "$pgpw" ] && [ -f "$CONF/lightrag/service.env" ] && \
+        awk -v p="$pgpw" '/^POSTGRES_PASSWORD=/{print "POSTGRES_PASSWORD=" p; next} 1' \
+            "$CONF/lightrag/service.env" > "$CONF/lightrag/service.env.tmp" && \
+        chmod 600 "$CONF/lightrag/service.env.tmp" && mv "$CONF/lightrag/service.env.tmp" "$CONF/lightrag/service.env" && \
+        echo "  ✓ re-mirrored lightrag POSTGRES_PASSWORD"
+fi
 # Strata's setup json stores the key too, and it wins over the env: copy the
 # new key into every variant's config so all three keep one key.
 STRATA_DATA="${HOME}/.local/share/strata"
@@ -85,7 +113,9 @@ if [ "$APPLY" = 1 ]; then
     # managed lines): install.sh rewrites them from the new values.
     "$ROOT/install.sh" --no-images >/dev/null && echo "  ✓ client env files updated (install.sh --no-images)"
     for svc in open-webui sketchlab deepseek-harness strata-5090 strata-4070ti strata-both \
-               llama-cpp-5090 llama-cpp-4070ti llama-cpp-both; do
+               llama-cpp-5090 llama-cpp-4070ti llama-cpp-both \
+               ragflow-elasticsearch ragflow-mysql ragflow-minio ragflow-kvrocks \
+               ragflow kb-postgres lightrag n8n; do
         systemctl --user is-active "${svc}.service" &>/dev/null || continue
         systemctl --user restart "${svc}.service" && echo "  ✓ restarted $svc"
     done

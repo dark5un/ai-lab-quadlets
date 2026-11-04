@@ -1,0 +1,30 @@
+# RAGFlow metadata database - MySQL 8.0.40 (image pinned by the v1.0.0-rc3
+# compose). NO host port: reachable only as systemd-ragflow-mysql:3306.
+# MYSQL_ROOT_PASSWORD (in config/ragflow/service.env) is upstream's root
+# credential; init.sql creates the rag_flow schema on first init (copied to
+# ~/.config/containers/config/ragflow/init.sql by install.sh).
+# Server tuning flags mirrored from the upstream compose.
+
+[Unit]
+Description=RAGFlow metadata MySQL
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-ragflow-mysql
+Image=docker.io/library/mysql:8.0.40
+Network=ai.network
+UserNS=keep-id
+EnvironmentFile=%h/.config/containers/config/ragflow/mysql.env
+Exec=--max_connections=1000 --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci --default-authentication-plugin=mysql_native_password --tls_version=TLSv1.2,TLSv1.3 --init-file=/data/application/init.sql --binlog_expire_logs_seconds=604800 --innodb-buffer-pool-size=1G --innodb-io-capacity=2000 --innodb-io-capacity-max=4000 --innodb-redo-log-capacity=1G
+Volume=kb-mysql-data:/var/lib/mysql
+Volume=%h/.config/containers/config/ragflow/init.sql:/data/application/init.sql:ro
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=120
+MemoryMax=2G

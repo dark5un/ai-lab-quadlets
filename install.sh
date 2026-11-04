@@ -99,7 +99,13 @@ copy_examples() {  # copy_examples <svc>
         chmod 600 "$dst"
     done
 }
-for svc in llama-cpp-5090 llama-cpp-4070ti llama-cpp-both sketchlab grafana; do copy_examples "$svc"; done
+for svc in llama-cpp-5090 llama-cpp-4070ti llama-cpp-both sketchlab grafana \
+           ragflow lightrag kb-postgres n8n kb-watcher; do copy_examples "$svc"; done
+# KB group runtime files (not secret templates): the mysql init script and
+# the kvrocks config renderer are bind-mounted by their quadlets from here.
+for f in init.sql kvrocks-entrypoint.sh; do
+    [ -f "$CONF/ragflow/$f" ] || install -m 600 "$ROOT/config/ragflow/$f" "$CONF/ragflow/$f"
+done
 
 # Strata: image (if missing) + its units (5 variants + coder) + service.env with the key.
 say "3/6 strata (scripts/install-strata.sh)"
@@ -208,7 +214,7 @@ umask 022
 
 # ─── 4. Units ────────────────────────────────────────────────────────────────
 say "4/6 units in $QUADLET_DIR"
-UNITS=(ai llama-cpp-5090 llama-cpp-4070ti llama-cpp-both comfyui-5090 comfyui-4070ti rizzo open-webui sketchlab hyperframes docling-cpu docling-4070ti prometheus grafana node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit embeddings openviking honcho-database honcho-api honcho-deriver dufs syncthing vscode)
+UNITS=(ai llama-cpp-5090 llama-cpp-4070ti llama-cpp-both comfyui-5090 comfyui-4070ti rizzo open-webui sketchlab hyperframes docling-cpu docling-4070ti prometheus grafana node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit embeddings openviking honcho-database honcho-api honcho-deriver dufs syncthing vscode ragflow ragflow-elasticsearch ragflow-mysql ragflow-minio ragflow-kvrocks ragflow-nats kb-postgres lightrag n8n kb-watcher)
 [ "$WITH_DSH" = 1 ] && UNITS+=(deepseek-harness)
 [ "$WITH_HERMES" = 1 ] && UNITS+=(hermes)
 "$ROOT/scripts/render-units.sh" "${UNITS[@]}"
@@ -262,6 +268,12 @@ install -m 644 "$ROOT/services/maya-metrics-relay.service" "$HOME/.config/system
 install -m 644 "$ROOT/services/maya-metrics-relay.timer" "$HOME/.config/systemd/user/"
 systemctl --user enable --now maya-metrics-relay.timer >/dev/null 2>&1 || true
 echo "  ✓ maya-metrics-relay.timer (15 s, on demand with maya)"
+# KB group (knowledge-base plan): the units stay dormant; the nightly ingest
+# is driven by this plain user timer activating the quadlet-generated
+# kb-watcher.service (podman 6.1 quadlets have no native [Timer] section).
+install -m 644 "$ROOT/services/kb-watcher.timer" "$HOME/.config/systemd/user/"
+systemctl --user enable --now kb-watcher.timer >/dev/null 2>&1 || true
+echo "  ✓ kb-watcher.timer (nightly ~03:30, wakes the KB group on demand)"
 # Boot tier (plan D1): monitoring units except grafana enable at boot, plus
 # the default strata variant (strata-5090-1m), plus the files tier (dufs,
 # syncthing: no GPU, must not gap while the owner is away at the Mac).

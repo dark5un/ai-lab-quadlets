@@ -1,0 +1,38 @@
+# corpus-watcher (plan section 4): nightly one-shot ingestion pass over
+# ~/workspace + ~/Documents. sha256 manifest diff -> push added/changed docs
+# to RAGFlow (+ mirror into LightRAG), tombstone deletions, write reports
+# under <repo>/kb/. Started by kb-watcher.timer (nightly) or manually via
+# `systemctl --user start kb-watcher.service`.
+# Wants= wakes the whole KB group on demand; the deps then stay up.
+# Corpus roots mount at their HOST paths (same-path rule) read-only; the kb/
+# state dir gets its own rw mount nested on top of the ro workspace mount.
+
+[Unit]
+Description=Knowledge-base corpus watcher (one-shot ingestion pass)
+Wants=ai-network.service
+Wants=ragflow.service
+Wants=lightrag.service
+Wants=embeddings.service
+After=ai-network.service
+After=ragflow.service
+After=lightrag.service
+After=embeddings.service
+
+[Container]
+ContainerName=systemd-kb-watcher
+Image=localhost/kb-watcher:latest
+Network=ai.network
+UserNS=keep-id
+EnvironmentFile=%h/.config/containers/config/kb-watcher/service.env
+Volume=%h/workspace:/home/px/workspace:ro
+Volume=%h/Documents:/home/px/Documents:ro
+Volume=%h/workspace/github.com/dark5un/ai-lab-quadlets/kb:/home/px/workspace/github.com/dark5un/ai-lab-quadlets/kb
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Type=oneshot
+# First full pass over the corpus is long: allow 6h (timer re-arms once the
+# unit goes inactive either way - no RemainAfterExit).
+TimeoutStartSec=21600
+TimeoutStopSec=120

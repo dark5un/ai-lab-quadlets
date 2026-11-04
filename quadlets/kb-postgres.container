@@ -1,0 +1,28 @@
+# Knowledge-base PostgreSQL - pgvector 0.8 on PostgreSQL 18 (LightRAG's docs
+# name this image as sufficient for PGTableGraphStorage + PGVectorStorage).
+# Same family as honcho-database but a SEPARATE instance: deliberate blast-
+# radius split (plan R5), honcho's data must never sit next to the corpus
+# graph. NO host port: reachable only as systemd-kb-postgres:5432.
+# POSTGRES_* live in config/kb-postgres/service.env (600); lightrag's copy of
+# the password is mirrored there by generate-secrets.sh.
+
+[Unit]
+Description=Knowledge-base PostgreSQL (pgvector) for LightRAG
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-kb-postgres
+Image=docker.io/pgvector/pgvector:pg18
+Network=ai.network
+UserNS=keep-id
+EnvironmentFile=%h/.config/containers/config/kb-postgres/service.env
+Volume=kb-lightrag-pg-data:/var/lib/postgresql/data
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=120

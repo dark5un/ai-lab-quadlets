@@ -1,0 +1,26 @@
+# RAGFlow ingestion task queue - NATS 2.14.2 with JetStream (-js, -sd /data).
+# Name and ContainerName are distinct from the existing host `nats` service
+# (duplex-bus, publishes 4222/8222): this unit publishes NO host port, it is
+# reachable only as systemd-ragflow-nats:4222 on ai.network, so the two
+# coexist. Health port 8222 stays container-internal.
+
+[Unit]
+Description=RAGFlow ingestion queue (NATS JetStream)
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-ragflow-nats
+Image=docker.io/library/nats:2.14.2
+Network=ai.network
+UserNS=keep-id
+Exec=-js -sd /data --http_port 8222
+Volume=kb-nats-data:/data
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=120
+TimeoutStopSec=120

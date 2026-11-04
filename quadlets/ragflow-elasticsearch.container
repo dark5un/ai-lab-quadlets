@@ -1,0 +1,43 @@
+# RAGFlow doc engine - Elasticsearch 8.11.3 (the STACK_VERSION shipped with
+# infiniflow/ragflow v1.0.0-rc3). NO host port on purpose: reachable only on
+# ai.network as systemd-ragflow-elasticsearch:9200. xpack security is on
+# (same shape as upstream docker-compose-base.yml); the elastic password
+# lives in config/ragflow/service.env (ELASTIC_PASSWORD), shared with ragflow.
+# Host prerequisite vm.max_map_count>=262144: Arch already ships 1048576 in
+# /usr/lib/sysctl.d/10-arch.conf (verified 2026-11-04) - no sysctl drop-in
+# needed on this box, but a fresh Chaossynergy install must keep that file.
+
+[Unit]
+Description=RAGFlow Elasticsearch doc engine
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-ragflow-elasticsearch
+Image=docker.elastic.co/elasticsearch/elasticsearch:8.11.3
+Network=ai.network
+UserNS=keep-id
+EnvironmentFile=%h/.config/containers/config/ragflow/service.env
+Environment=node.name=es01
+Environment=discovery.type=single-node
+Environment=bootstrap.memory_lock=false
+Environment=xpack.security.enabled=true
+Environment=xpack.security.http.ssl.enabled=false
+Environment=xpack.security.transport.ssl.enabled=false
+Environment=cluster.routing.allocation.disk.watermark.low=5gb
+Environment=cluster.routing.allocation.disk.watermark.high=3gb
+Environment=cluster.routing.allocation.disk.watermark.flood_stage=2gb
+Environment=ES_JAVA_OPTS=-Xms2g -Xmx4g
+# official image's /tmp ACL denies writes to the elasticsearch user; the
+# entrypoint needs a writable temp dir (upstream sets the same tmpfs)
+Tmpfs=/tmp:mode=1777,size=512m
+Volume=kb-es-data:/usr/share/elasticsearch/data
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=120
+MemoryMax=6G

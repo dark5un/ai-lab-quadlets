@@ -1,0 +1,58 @@
+# RAGFlow (Go v1 line, infiniflow/ragflow v1.0.0-rc3) - ingestion, parsing
+# (DeepDoc), chunking, hybrid retrieval and chat API for the knowledge-base
+# plan (~/tmp/knowledge_base_plan1.md). nginx web on 80 (proxies /api too),
+# native API on 9380 - both via the ai.network alias systemd-ragflow; only
+# the UI is published (loopback 3114). The Go line uses kvrocks as its
+# cache/queue backend (REDIS_PASSWORD is kvrocks' requirepass, upstream name
+# kept) and NATS JetStream for ingestion tasks; doc engine is the bundled
+# Elasticsearch; metadata MySQL; object storage MinIO-compatible silo.
+# All credentials + endpoints live in config/ragflow/service.env (600).
+# Image ships its own entrypoint.sh + service_conf.yaml.template; every
+# ${VAR} in the template is satisfied from the env file above.
+
+[Unit]
+Description=RAGFlow server (Go v1.x)
+Wants=ai-network.service
+Wants=ragflow-elasticsearch.service
+Wants=ragflow-mysql.service
+Wants=ragflow-minio.service
+Wants=ragflow-kvrocks.service
+Wants=ragflow-nats.service
+After=ai-network.service
+After=ragflow-elasticsearch.service
+After=ragflow-mysql.service
+After=ragflow-minio.service
+After=ragflow-kvrocks.service
+After=ragflow-nats.service
+
+
+[Container]
+ContainerName=systemd-ragflow
+Image=docker.io/infiniflow/ragflow:v1.0.0-rc3
+Network=ai.network
+UserNS=keep-id
+PublishPort=127.0.0.1:3114:80/tcp
+EnvironmentFile=%h/.config/containers/config/ragflow/service.env
+# same values upstream compose passes (MEM_LIMIT is read by the server;
+# KVROCKS_HOST/PORT are the in-network coordinates of the cache backend)
+Environment=MEM_LIMIT=8589934592
+Environment=KVROCKS_HOST=systemd-ragflow-kvrocks
+Environment=KVROCKS_PORT=6379
+Exec=--enable-adminserver --init-superuser
+# upstream ulimits for the ragflow-cpu service
+Ulimit=nofile=65535:65535
+Ulimit=nproc=65535:65535
+# logs (incl. logs/admin_bootstrap_password.txt on first start) persist in a
+# named volume - repo tree stays clean, home stays untouched
+Volume=kb-ragflow-logs:/ragflow/logs
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+# First start waits for mysql/ES and runs schema migrations.
+TimeoutStartSec=600
+TimeoutStopSec=120
+# No install section by design: on-demand only (ai-lab convention; the KB
+# group is woken by kb-watcher.service's own Wants= chain or by ai-lab start).

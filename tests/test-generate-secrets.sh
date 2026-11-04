@@ -61,6 +61,37 @@ grep -Eq '^[0-9a-f]{32}$' <<<"$v1" || fail "vscode token is not one 32-hex strin
 bash "$ROOT/scripts/generate-secrets.sh" > /dev/null
 [ "$(sed -n 's/^VSCODE_CONNECTION_TOKEN=//p' "$vc" | tail -1)" = "$v1" ] || fail "vscode token changed on re-run"
 
+# KB group: ragflow shared env (5 distinct secrets, no leftover placeholder)
+# + the mysql.env mirror + kb-postgres/lightrag mirror + n8n key.
+rf="$AI_LAB_CONFIG_DIR/ragflow/service.env"
+rfm="$AI_LAB_CONFIG_DIR/ragflow/mysql.env"
+[ "$(stat -c %a "$rf")" = 600 ] || fail "ragflow env not 600"
+[ "$(stat -c %a "$rfm")" = 600 ] || fail "ragflow mysql.env not 600"
+grep -q 'change-me' "$rf" && fail "placeholder left in ragflow env"
+grep -q 'change-me' "$rfm" && fail "placeholder left in ragflow mysql.env"
+mp=$(sed -n 's/^MYSQL_PASSWORD=//p' "$rf" | tail -1)
+mr=$(sed -n 's/^MYSQL_ROOT_PASSWORD=//p' "$rfm" | tail -1)
+[ -n "$mp" ] && [ "$mp" = "$mr" ] || fail "ragflow mysql.env does not mirror MYSQL_PASSWORD"
+[ "$(sed -n 's/^ELASTIC_PASSWORD=//p' "$rf" | tail -1)" != "$mp" ] || fail "ragflow secrets not distinct"
+kbpg="$AI_LAB_CONFIG_DIR/kb-postgres/service.env"
+lr="$AI_LAB_CONFIG_DIR/lightrag/service.env"
+[ "$(stat -c %a "$kbpg")" = 600 ] || fail "kb-postgres env not 600"
+[ "$(stat -c %a "$lr")" = 600 ] || fail "lightrag env not 600"
+grep -q 'change-me' "$lr" && fail "placeholder left in lightrag env"
+lp=$(sed -n 's/^POSTGRES_PASSWORD=//p' "$kbpg" | tail -1)
+lxp=$(sed -n 's/^POSTGRES_PASSWORD=//p' "$lr" | tail -1)
+[ -n "$lp" ] && [ "$lp" = "$lxp" ] || fail "lightrag does not mirror kb-postgres POSTGRES_PASSWORD"
+n8="$AI_LAB_CONFIG_DIR/n8n/service.env"
+[ "$(stat -c %a "$n8")" = 600 ] || fail "n8n env not 600"
+grep -q 'change-me' "$n8" && fail "placeholder left in n8n env"
+
+# Re-run keeps the live KB secrets too.
+rf_h="$(sha256sum < "$rf")"; kb_h="$(sha256sum < "$kbpg")"; n8_h="$(sha256sum < "$n8")"
+bash "$ROOT/scripts/generate-secrets.sh" > /dev/null
+[ "$(sha256sum < "$rf")" = "$rf_h" ] || fail "ragflow env changed on re-run"
+[ "$(sha256sum < "$kbpg")" = "$kb_h" ] || fail "kb-postgres env changed on re-run"
+[ "$(sha256sum < "$n8")" = "$n8_h" ] || fail "n8n env changed on re-run"
+
 # Nothing written into the repo.
 after="$(git -C "$ROOT" status --porcelain --ignored config 2>/dev/null || true)"
 [ "$before" = "$after" ] || fail "generate-secrets.sh touched the repo's config/"

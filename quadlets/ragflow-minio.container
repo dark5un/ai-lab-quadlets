@@ -1,0 +1,28 @@
+# RAGFlow object storage - pgsty/silo RELEASE.2026-08-06 (the MinIO-compatible
+# server the v1.0.0-rc3 compose ships where older releases shipped minio/minio;
+# same MINIO_ROOT_USER/MINIO_ROOT_PASSWORD contract). NO host port: reachable
+# only as systemd-ragflow-minio:9000. Credentials in
+# config/ragflow/service.env (MINIO_USER/MINIO_PASSWORD).
+
+[Unit]
+Description=RAGFlow object storage (silo, MinIO-compatible)
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-ragflow-minio
+Image=docker.io/pgsty/silo:RELEASE.2026-08-06T00-00-00Z
+Network=ai.network
+UserNS=keep-id
+EnvironmentFile=%h/.config/containers/config/ragflow/service.env
+Environment=MINIO_ROOT_USER=ragflow
+Exec=server --console-address :9001 /data
+Volume=kb-minio-data:/data
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=120

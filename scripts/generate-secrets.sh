@@ -13,6 +13,16 @@
 #   honcho/service.env           DB password + JWT secret (memory group)
 #   dufs/config.yaml + service.env  WebDAV px password (hashed + plaintext mirror)
 #   vscode/service.env           VSCODE_CONNECTION_TOKEN (serve-web)
+#   ragflow/service.env          doc-engine/metadata/object-store/cache
+#                                passwords + admin bootstrap password (KB group)
+#   ragflow/mysql.env            mysql SERVER root password (mirrors the
+#                                client MYSQL_PASSWORD; separate file because
+#                                the mysql entrypoint rejects MYSQL_USER=root)
+#   kb-postgres/service.env      LightRAG DB password
+#   lightrag/service.env         DB password mirror + strata/embeddings keys
+#   n8n/service.env              N8N_ENCRYPTION_KEY
+#   kb-watcher/service.env       strata key copy; RAGFLOW_API_KEY stays empty
+#                                until scripts/kb-bootstrap.sh fills it
 #   hermes-service/service.env   only with --with-hermes (opt-in container)
 # Strata's API key is created by install-strata.sh.
 set -euo pipefail
@@ -142,6 +152,92 @@ if [ -f "$CONF/strata/service.env" ] && ! grep -q '^STRATA_API_KEY=..' "$dst"; t
         fi
         echo "  synced STRATA_API_KEY into $dst from config/strata/service.env"
     fi
+fi
+chmod 600 "$dst"
+
+# ─── KB group (knowledge-base plan: ragflow / lightrag / n8n / watcher) ─────
+# One shared env feeds ragflow + its dependency servers; cross-file mirrors
+# keep each server's own variable-name contract satisfied.
+dst="$CONF/ragflow/service.env"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    sed -e "s/change-me-to-a-random-hex-string/$(rand_hex 16)/" \
+        -e "s/change-me-to-another-random-hex-string/$(rand_hex 16)/" \
+        -e "s/change-me-to-a-third-random-hex-string/$(rand_hex 16)/" \
+        -e "s/change-me-to-a-fourth-random-hex-string/$(rand_hex 16)/" \
+        -e "s/change-me-to-a-fifth-random-hex-string/$(rand_hex 16)/" \
+        "$ROOT/config/ragflow/service.env.example" > "$dst"
+    echo "  created $dst"
+else
+    echo "  kept    $dst"
+fi
+dst2="$CONF/ragflow/mysql.env"
+if want "$dst2"; then
+    mp=$(sed -n 's/^MYSQL_PASSWORD=//p' "$dst" | tail -1)
+    awk -v p="$mp" '/^MYSQL_ROOT_PASSWORD=/{print "MYSQL_ROOT_PASSWORD=" p; next} 1' \
+        "$ROOT/config/ragflow/mysql.env.example" > "$dst2"
+    echo "  created $dst2 (mirrors ragflow MYSQL_PASSWORD)"
+else
+    echo "  kept    $dst2"
+fi
+chmod 600 "$dst" "$dst2"
+
+dst="$CONF/kb-postgres/service.env"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    sed "s/change-me-to-a-random-hex-string/$(rand_hex 16)/" \
+        "$ROOT/config/kb-postgres/service.env.example" > "$dst"
+    echo "  created $dst"
+else
+    echo "  kept    $dst"
+fi
+chmod 600 "$dst"
+
+dst="$CONF/lightrag/service.env"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    # same DB password as the kb-postgres server (separate file, one secret)
+    pgpw=$(sed -n 's/^POSTGRES_PASSWORD=//p' "$CONF/kb-postgres/service.env" | tail -1)
+    awk -v p="$pgpw" '/^POSTGRES_PASSWORD=/{print "POSTGRES_PASSWORD=" p; next} 1' \
+        "$ROOT/config/lightrag/service.env.example" > "$dst"
+    echo "  created $dst"
+else
+    echo "  kept    $dst"
+fi
+# Empty API-key lines are filled from the live strata/llama-cpp secrets
+# (same pattern as the vscode STRATA_API_KEY copy; never prints values).
+if [ -f "$CONF/strata/service.env" ] && ! grep -q '^LLM_BINDING_API_KEY=..' "$dst"; then
+    sk=$(sed -n 's/^API_KEY=//p' "$CONF/strata/service.env" | head -1)
+    [ -n "$sk" ] && awk -v k="$sk" '/^LLM_BINDING_API_KEY=/{print "LLM_BINDING_API_KEY=" k; next} 1' "$dst" > "$dst.tmp" && mv "$dst.tmp" "$dst"
+fi
+if [ -f "$CONF/llama-cpp/keys.txt" ] && ! grep -q '^EMBEDDING_BINDING_API_KEY=..' "$dst"; then
+    ek=$(head -1 "$CONF/llama-cpp/keys.txt" | tr -d ' \n')
+    [ -n "$ek" ] && awk -v k="$ek" '/^EMBEDDING_BINDING_API_KEY=/{print "EMBEDDING_BINDING_API_KEY=" k; next} 1' "$dst" > "$dst.tmp" && mv "$dst.tmp" "$dst"
+fi
+chmod 600 "$dst"
+
+dst="$CONF/n8n/service.env"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    sed "s/change-me-to-a-random-hex-string/$(rand_hex 32)/" \
+        "$ROOT/config/n8n/service.env.example" > "$dst"
+    echo "  created $dst"
+else
+    echo "  kept    $dst"
+fi
+chmod 600 "$dst"
+
+dst="$CONF/kb-watcher/service.env"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    cp "$ROOT/config/kb-watcher/service.env.example" "$dst"
+    echo "  created $dst (RAGFLOW_API_KEY filled by scripts/kb-bootstrap.sh)"
+else
+    echo "  kept    $dst"
+fi
+if [ -f "$CONF/strata/service.env" ] && ! grep -q '^STRATA_API_KEY=..' "$dst"; then
+    sk=$(sed -n 's/^API_KEY=//p' "$CONF/strata/service.env" | head -1)
+    [ -n "$sk" ] && awk -v k="$sk" '/^STRATA_API_KEY=/{print "STRATA_API_KEY=" k; next} 1' "$dst" > "$dst.tmp" && mv "$dst.tmp" "$dst"
 fi
 chmod 600 "$dst"
 

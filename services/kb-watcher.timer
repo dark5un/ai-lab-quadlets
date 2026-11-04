@@ -1,0 +1,17 @@
+# Nightly corpus ingestion pass. Plain systemd user timer (podman 6.1
+# quadlets have no native [Timer] support - verified against
+# podman-systemd.unit(5) 6.1.4); it activates the quadlet-generated
+# kb-watcher.service, whose Wants= chain wakes the whole KB group.
+# Installed + enabled by install.sh.
+[Unit]
+Description=Nightly knowledge-base corpus watcher run
+
+[Timer]
+Unit=kb-watcher.service
+OnCalendar=*-*-* 03:30:00
+# spread across the box's quiet window, survives missed runs (boot late)
+RandomizedDelaySec=1800
+Persistent=true
+
+[Install]
+WantedBy=timers.target

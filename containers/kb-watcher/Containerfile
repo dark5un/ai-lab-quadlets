@@ -1,0 +1,16 @@
+# kb-watcher: nightly corpus ingestion one-shot (knowledge-base plan sec.4).
+# Pure stdlib + httpx. Bump the httpx pin deliberately (mise/uv discipline:
+# dependency changes go through this file, never hand-edited locks).
+FROM docker.io/library/python:3.13-slim
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+RUN uv pip install --system --no-cache httpx==0.28.1
+
+WORKDIR /app
+COPY watcher.py /app/watcher.py
+
+# Mounted by the quadlet at identical host paths:
+#   /home/px/workspace            (ro corpus root)
+#   /home/px/Documents            (ro corpus root, may be empty)
+#   .../ai-lab-quadlets/kb        (rw manifest + reports + state)
+ENTRYPOINT ["/app/watcher.py"]
