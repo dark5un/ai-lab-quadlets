@@ -116,7 +116,7 @@ else
 fi
 chmod 600 "$dst" "$CONF/dufs/service.env"
 
-# VS Code Server (serve-web) connection token.
+# VS Code Server (serve-web) connection token + strata BYOK key for the box.
 dst="$CONF/vscode/service.env"
 mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
 if want "$dst"; then
@@ -125,6 +125,20 @@ if want "$dst"; then
     echo "  created $dst"
 else
     echo "  kept    $dst"
+fi
+# Copy the live strata key (created by install-strata.sh) into the vscode
+# env when that line is empty/missing -- same pattern as sketchlab's
+# STRATA_API_KEY. Never prints the value.
+if [ -f "$CONF/strata/service.env" ] && ! grep -q '^STRATA_API_KEY=..' "$dst"; then
+    sk=$(sed -n 's/^API_KEY=//p' "$CONF/strata/service.env" | head -1)
+    if [ -n "$sk" ]; then
+        if grep -q '^STRATA_API_KEY=' "$dst"; then
+            sed -i "s|^STRATA_API_KEY=.*|STRATA_API_KEY=${sk}|" "$dst"
+        else
+            printf 'STRATA_API_KEY=%s\n' "$sk" >> "$dst"
+        fi
+        echo "  synced STRATA_API_KEY into $dst from config/strata/service.env"
+    fi
 fi
 chmod 600 "$dst"
 

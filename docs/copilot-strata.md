@@ -73,10 +73,17 @@ BYOK works there):
 
 ## 3. Exact config for this box
 
-Open the box's VS Code (browser), Command Palette → **Chat: Manage
-Language Models** → **Add Models → Custom Endpoint**, name it `strata`,
-choose **Chat Completions**, and paste the strata API key at the prompt
-(VS Code stores it in secret storage and writes a `${input:...}`
+**SETUP IS AUTOMATED (2026-11-04)**: the box entrypoint seeds this file at
+first start from `STRATA_API_KEY` in the on-target env file
+(`config/vscode/service.env`, copied there by `generate-secrets.sh` from
+`config/strata/service.env` — sketchlab's pattern). No secret ever
+enters the image, the Containerfile, or this repo. The seeded file lives
+in the persisted home (`~/.vscode-server/data/User/chatLanguageModels.json`,
+mode 600); after first seed the box owns it and UI edits win. The
+alternative UI path (wizard + secret storage) remains:
+Command Palette → **Chat: Manage Language Models** → **Add Models →
+Custom Endpoint**. In that path, VS Code stores the key you paste at the
+prompt in secret storage and writes a `${input:...}`
 reference — enter the key in the wizard rather than pasting it into the
 JSON, per Coder's guide.[12] Note the vendors conflict on this: a
 MindsHub test on VS Code 1.131 saw the secret reference passed through
