@@ -1,0 +1,16 @@
+summary: W1 discrepancy pass (fallback; watcher hook is primary)
+args:
+  budget: 100
+cron_version: v2
+email: panos@ai.local
+enabled: true
+is_flow: false
+no_flow_overlap: false
+retry:
+  constant:
+    attempts: 2
+    seconds: 120
+schedule: 0 30 4 * * *
+script_path: f/kb/w1_discrepancy
+timezone: UTC
+ws_error_handler_muted: false

@@ -1,2 +1,7 @@
 version: v2
-locks: {}
+locks:
+  f/gate/hello: 8c9074400cc64d444bfe7ef849d37be92ccd4fd0d5ed2c5850725a48ba5fbcb0
+  f/kb/w1_discrepancy: 550a62e363bc8870d88522867a8ca03b8c003b351981e2d1afc7963bc4137ebf
+  f/kb/w2_gaps: b2725dad14d68ba875ba53473b988385bb15f5c04d0656778307da74539ee792
+  f/kb/w3_staleness: 7b2c4cc685fd2bb9ab90dbd49ca5ea842921a564eb5255224f353245ca683d1a
+  f/kb/w4_drift: bfc0e54f2a94ae0d8a4fd7ec948b77b3b74bba03645f8ae0222a99f5a3ce5105

@@ -1,0 +1,15 @@
+summary: W3 staleness/update chains
+args: {}
+cron_version: v2
+email: panos@ai.local
+enabled: true
+is_flow: false
+no_flow_overlap: false
+retry:
+  constant:
+    attempts: 2
+    seconds: 120
+schedule: 0 45 5 * * *
+script_path: f/kb/w3_staleness
+timezone: UTC
+ws_error_handler_muted: false

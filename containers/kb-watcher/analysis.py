@@ -89,7 +89,7 @@ def retrieval_pairs(c: sqlite3.Connection, budget: int) -> int:
     """high-similarity cross-document chunk pairs via RAGFlow retrieval over
     each docs-notes/docs-general document's own top text (rotating queue)."""
     added = 0
-    seen = {r[0] for r in c.execute("SELECT doc_a||'|'||doc_b||'|'||kind FROM pairs").fetchall()}
+    seen = {r[0] for r in c.execute("SELECT doc_a||'|'||doc_b FROM pairs").fetchall()}
     for name, ds_id in datasets().items():
         r = httpx.get(f"{RAGFLOW_URL}/api/v1/datasets/{ds_id}/documents",
                       headers=rf_headers(), params={"page": 1, "page_size": 20}, timeout=30)
@@ -112,7 +112,7 @@ def retrieval_pairs(c: sqlite3.Connection, budget: int) -> int:
                 if not other or other == d["id"]:
                     continue
                 a, b = sorted([d["id"], other])
-                key = f"{a}|{b}|retrieval"
+                key = f"{a}|{b}"
                 if key in seen:
                     continue
                 seen.add(key)
@@ -126,7 +126,10 @@ def retrieval_pairs(c: sqlite3.Connection, budget: int) -> int:
 
 def _name_index() -> dict[str, str]:
     """basename -> ragflow doc id (first match); maps LightRAG file_source
-    back to RAGFlow documents for co-occurrence pairing."""
+    back to RAGFlow documents for co-occurrence pairing.
+    RAGFlow auto-renames same-name re-uploads to 'foo(1).ext' while LightRAG
+    keeps the ORIGINAL file_source - normalize the ' (N)' suffix off the
+    RAGFlow name before indexing (join on ids elsewhere, never names)."""
     idx: dict[str, str] = {}
     for ds_id in datasets().values():
         try:
@@ -135,33 +138,49 @@ def _name_index() -> dict[str, str]:
                           timeout=30)
             payload = r.json().get("data", [])
             for d in (payload.get("docs", []) if isinstance(payload, dict) else payload):
-                idx.setdefault(d.get("name", ""), d["id"])
+                name = d.get("name", "")
+                idx.setdefault(name, d["id"])
+                base = re.sub(r"\(\d+\)(?=\.\w+$)", "", name)
+                if base != name:
+                    idx.setdefault(base, d["id"])
         except Exception:
             continue
     return idx
 
 
 def graph_pairs(c: sqlite3.Connection) -> int:
-    """entities linked in >=2 documents from LightRAG (co-occurrence)."""
+    """entities linked in >=2 documents from LightRAG (co-occurrence).
+    API verified live on 1.5.7: the endpoint is /graphs (NOT /graph - 404);
+    node attrs live under properties{} and file_path joins sources with
+    <SEP> (also tolerate legacy ;/,-splitting for safety)."""
     added = 0
     try:
-        g = httpx.get(f"{LIGHTRAG_URL}/graph", headers=lr_headers(), params={"label": "*",
+        g = httpx.get(f"{LIGHTRAG_URL}/graphs", headers=lr_headers(), params={"label": "*",
                       "max_depth": 1, "max_nodes": 2000}, timeout=120)
         names = _name_index()
         ent_docs: dict[str, set] = defaultdict(set)
         for node in g.json().get("nodes", []):
-            srcs = [s.strip() for s in re.split(r"[;,]", node.get("file_path") or "")
-                    if s.strip()]
-            key = node.get("entity_id") or node.get("id") or ""
+            props = node.get("properties") or {}
+            fp = props.get("file_path") or node.get("file_path") or ""
+            srcs = [s.strip() for s in re.split(r"<SEP>|[;,]", fp) if s.strip()]
+            key = props.get("entity_id") or node.get("entity_id") or node.get("id") or ""
             for s in srcs:
                 doc_id = names.get(Path(s).name)
                 if doc_id:
                     ent_docs[key].add(doc_id)
+        existing = {(x, y) for x, y in c.execute(
+            "SELECT doc_a, doc_b FROM pairs").fetchall()}
         for docs in ent_docs.values():
             ds = sorted(docs)
             for i in range(len(ds)):
                 for j in range(i + 1, len(ds)):
                     a, b = ds[i], ds[j]
+                    # pair-level dedupe across channels (the unique index is
+                    # (doc_a,doc_b,kind) - without this a pair already queued
+                    # by the retrieval channel would be judged twice)
+                    if (a, b) in existing:
+                        continue
+                    existing.add((a, b))
                     c.execute("INSERT OR IGNORE INTO pairs(doc_a,doc_b,kind,src,sim) "
                               "VALUES(?,?,?,?,?)", (a, b, "graph", "co-occurrence", 0.9))
                     added += c.execute("SELECT changes()").fetchone()[0]
@@ -276,13 +295,15 @@ def coverage() -> dict:
     """W2: entity inventory (LightRAG) x doc counts + retrieval probes."""
     gaps = []
     try:
-        g = httpx.get(f"{LIGHTRAG_URL}/graph", headers=lr_headers(), params={"label": "*", "max_depth": 1,
+        g = httpx.get(f"{LIGHTRAG_URL}/graphs", headers=lr_headers(), params={"label": "*", "max_depth": 1,
                       "max_nodes": 3000}, timeout=180)
         for node in g.json().get("nodes", []):
-            ent = node.get("entity_id") or node.get("id") or ""
+            props = node.get("properties") or {}
+            ent = props.get("entity_id") or node.get("entity_id") or node.get("id") or ""
             if not ent or ent == "*":
                 continue
-            srcs = [s.strip() for s in re.split(r"[;,]", node.get("file_path") or "") if s.strip()]
+            fp = props.get("file_path") or node.get("file_path") or ""
+            srcs = [s.strip() for s in re.split(r"<SEP>|[;,]", fp) if s.strip()]
             if len(srcs) <= 1:
                 gaps.append({"entity": ent, "docs": len(srcs), "probe": None,
                              "why": "isolated (single source)"})

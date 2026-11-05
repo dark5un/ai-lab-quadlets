@@ -181,6 +181,12 @@ echo "  sketchlab: /v1 proxy key = strata key"
     set_kv "$CONF/kb-watcher/service.env" KB_LLM_API_KEY "$LLAMA_KEY"
     echo "  kb-watcher: KB_LLM_API_KEY = llama.cpp shared key"
 }
+# Windmill completion hook (plan windmill-jupyter P1): WM_API_TOKEN is a
+# managed copy of the agent token created by windmill-bootstrap.sh.
+[ -f "$CONF/kb-watcher/service.env" ] && [ -f "$CONF/windmill/agent-token" ] && {
+    set_kv "$CONF/kb-watcher/service.env" WM_API_TOKEN "$(head -1 "$CONF/windmill/agent-token" | tr -d ' \n')"
+    echo "  kb-watcher: WM_API_TOKEN = Windmill agent token"
+}
 # Memory group (plan ~/Documents/plans/ai-memory-services-plan.md):
 # OpenViking + Honcho on CPU. ov.conf is re-rendered from the template with
 # the LIVE keys on every run (values never printed); honcho's LLM key lines

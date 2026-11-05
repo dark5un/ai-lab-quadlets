@@ -1,0 +1,15 @@
+summary: W4 corpus drift
+args: {}
+cron_version: v2
+email: panos@ai.local
+enabled: true
+is_flow: false
+no_flow_overlap: false
+retry:
+  constant:
+    attempts: 2
+    seconds: 120
+schedule: 0 0 6 * * *
+script_path: f/kb/w4_drift
+timezone: UTC
+ws_error_handler_muted: false

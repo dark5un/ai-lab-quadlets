@@ -538,11 +538,15 @@ def main() -> int:
     print(f"done: ok={len(new_docs)} fail={fail} in "
           f"{m['last_run']['secs']}s; report {rep}")
 
-    # plan sec.6: n8n analysis runs trigger on watcher completion (fallback
-    # is the per-workflow cron). Best-effort; never fails the ingest run.
-    hook = env("N8N_WEBHOOK_URL")
+    # plan sec.6: analysis W1 triggers on watcher completion (fallback is the
+    # Windmill schedule). Best-effort; never fails the ingest run.
+    # Windmill run endpoints take the token as ?token= query arg; the older
+    # N8N_WEBHOOK_URL is honored while n8n is being decommissioned.
+    hook = env("WM_WEBHOOK_URL") or env("N8N_WEBHOOK_URL")
     if hook and (added or changed or deleted):
         try:
+            if env("WM_API_TOKEN"):
+                hook = f"{hook}?token={env('WM_API_TOKEN')}"
             httpx.post(hook, json={"ok": len(new_docs), "fail": fail,
                                    "at": m["last_run"]["at"]}, timeout=15)
         except Exception as e:

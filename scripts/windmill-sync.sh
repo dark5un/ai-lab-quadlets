@@ -24,8 +24,13 @@ export WM_TOKEN="$(cat "$TOKEN_FILE")"
 cd "$ROOT/windmill"
 # CLI quirk (1.862.1): --base-url forces --token in argv; WM_TOKEN env alone
 # is not picked up by sync. Token read from the 600 file at runtime.
+# Variables/secrets/resources are NEVER in the local tree (they hold secrets)
+# - sync must skip them (verified: a plain push DELETED the remote f/kb/
+# router_key variable as "not in source"). Manage via scripts/windmill-vars.py
+# (and the schedule files below, which ARE synced with --include-schedules).
+WM_SKIP="--skip-variables --skip-secrets --skip-resources"
 case "$cmd" in
-    push) wmill sync push --yes --base-url "$BASE" --workspace "$WS" --token "$WM_TOKEN" ;;
-    pull) wmill sync pull --base-url "$BASE" --workspace "$WS" --token "$WM_TOKEN" ;;
+    push) wmill sync push --yes $WM_SKIP --include-schedules --base-url "$BASE" --workspace "$WS" --token "$WM_TOKEN" ;;
+    pull) wmill sync pull --yes $WM_SKIP --include-schedules --base-url "$BASE" --workspace "$WS" --token "$WM_TOKEN" ;;
     *) echo "usage: windmill-sync.sh push|pull" >&2; exit 1 ;;
 esac

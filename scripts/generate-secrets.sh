@@ -249,6 +249,12 @@ if [ -f "$CONF/llama-cpp/keys.txt" ] && ! grep -q '^KB_LLM_API_KEY=..' "$dst"; t
     lk=$(head -1 "$CONF/llama-cpp/keys.txt" | tr -d ' \n')
     [ -n "$lk" ] && awk -v k="$lk" '/^KB_LLM_API_KEY=/{print "KB_LLM_API_KEY=" k; next} 1' "$dst" > "$dst.tmp" && mv "$dst.tmp" "$dst"
 fi
+# WM_API_TOKEN: Windmill agent token (completion hook -> f/kb/w1_discrepancy;
+# created by scripts/windmill-bootstrap.sh)
+if [ -f "$CONF/windmill/agent-token" ] && ! grep -q '^WM_API_TOKEN=..' "$dst"; then
+    wt=$(head -1 "$CONF/windmill/agent-token" | tr -d ' \n')
+    [ -n "$wt" ] && awk -v k="$wt" '/^WM_API_TOKEN=/{print "WM_API_TOKEN=" k; next} 1' "$dst" > "$dst.tmp" && mv "$dst.tmp" "$dst"
+fi
 chmod 600 "$dst"
 
 # ─── automation group (Windmill: windmill-jupyter plan P0) ────────────────

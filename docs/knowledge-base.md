@@ -19,7 +19,8 @@ box (strata + bge-m3 via ai.network).
 | ragflow-nats | nats 2.14.2 JetStream | none | ingestion queue |
 | kb-postgres | pgvector/pgvector pg18 | none | LightRAG storage |
 | lightrag | hkuds/lightrag v1.5.7 | 127.0.0.1:3116 | exportable knowledge graph |
-| n8n | n8nio/n8n 2.46.6 | 127.0.0.1:3115 | W1-W4 analysis workflows |
+| n8n | n8nio/n8n 2.46.6 | 127.0.0.1:3115 | W1-W4 workflows (MID-TEARDOWN: superseded by Windmill, see docs/windmill.md) |
+| windmill-* (automation group) | windmill-labs/windmill 1.862.0 + pg18 | 127.0.0.1:3117 | W1-W4 analysis scripts/schedules (P1 since 2026-11-05) |
 | kb-analysis | built (kb-watcher image) | none | queue/verdicts/tags/report plumbing |
 | kb-watcher | built (same image) | none | nightly one-shot ingest (Type=oneshot) |
 | kb-watcher.timer | plain user unit (`services/`) | - | nightly ~03:30+rand, wakes the group via Wants= chain |
@@ -60,12 +61,23 @@ in this repo under `kb/` (gitignored - public repo, corpus-derived).
   workflows are triggered through published webhooks
   (`POST http://systemd-n8n:5678/webhook/kb-w1..kb-w4` from in-network,
   127.0.0.1:3115/webhook/... from the host) plus their crons.
-- The LLM judging step of W1 runs as n8n HTTP nodes against the
-  llama-cpp-4070ti router (strict JSON + 3 retries); the deterministic side (pair queue, verdict storage,
-  RAGFlow tagging, report rendering) is the `kb-analysis` service in the
-  watcher image. Plan gate holds: documents are never auto-modified, only
-  tagged (`discrepancy`, `gap-adjacent`, `stale-suspect` via meta_fields
-  `tags`), and reports carry chunk provenance.
+- The LLM judging step of W1 runs in **Windmill** (owner decision
+  2026-11-05: n8n -> Windmill; the old n8n HTTP-node path is retired from
+  the nightly flow, n8n itself deleted after 1-2 green nightly runs on
+  Windmill). Scripts f/kb/w1_discrepancy..w4_drift call the llama-cpp-4070ti
+  router (strict JSON + 3 retries; router key as Windmill secret variable
+  f/kb/router_key kept in sync by scripts/windmill-vars.py) and the
+  deterministic side (pair queue, verdict storage, RAGFlow tagging, report
+  rendering) is the `kb-analysis` service in the watcher image. Plan gate
+  holds: documents are never auto-modified, only tagged (`discrepancy`,
+  `gap-adjacent`, `stale-suspect` via meta_fields `tags`), and reports carry
+  chunk provenance. P4 + P5 acceptance VERIFIED 2026-11-05 on Windmill
+  (widget-assembly contradiction pair: both docs tagged, discrepancies.md
+  rows; gaps.md ranks zorblatt single-source entities).
+  Watcher completion hook: `WM_WEBHOOK_URL` (+`?token=`) ->
+  `POST http://systemd-windmill-server:8000/api/w/kb/jobs/run/p/...`;
+  fallback crons are Windmill schedules (6-field crontab, seconds first)
+  materialized as windmill/f/kb/*.schedule.yaml via wmill sync.
 - W4 drift / W2 gaps also render from kb-analysis (`kb/reports/drift.md`,
   `gaps.md`, `stale.md`, `discrepancies.md`).
 - Corpus scope (owner directive 2026-11-05): only the dedicated folder in
@@ -79,7 +91,7 @@ in this repo under `kb/` (gitignored - public repo, corpus-derived).
 
 ## Model wiring (live 2026-11-05)
 
-KB LLM roles (RAGFlow chat/assist, LightRAG extract/keyword/query, n8n W1
+KB LLM roles (RAGFlow chat/assist, LightRAG extract/keyword/query, Windmill W1
 classify, watcher classify) run on the **llama-cpp-4070ti router** with the
 official **Gemma 4 12B-it QAT q4_0** (`google/gemma-4-12B-it-qat-q4_0-gguf`,
 Apache-2.0, router model id = card subdir `gemma-4-12b-it-qat-q4_0`,
