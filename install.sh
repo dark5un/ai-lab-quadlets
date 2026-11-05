@@ -100,7 +100,8 @@ copy_examples() {  # copy_examples <svc>
     done
 }
 for svc in llama-cpp-5090 llama-cpp-4070ti llama-cpp-both sketchlab grafana \
-           ragflow lightrag kb-postgres n8n kb-watcher; do copy_examples "$svc"; done
+           ragflow lightrag kb-postgres n8n kb-watcher \
+           windmill windmill-postgres; do copy_examples "$svc"; done
 # KB group runtime files (not secret templates): the mysql init script and
 # the kvrocks config renderer are bind-mounted by their quadlets from here.
 for f in init.sql kvrocks-entrypoint.sh; do
@@ -226,7 +227,7 @@ umask 022
 
 # ─── 4. Units ────────────────────────────────────────────────────────────────
 say "4/6 units in $QUADLET_DIR"
-UNITS=(ai llama-cpp-5090 llama-cpp-4070ti llama-cpp-both comfyui-5090 comfyui-4070ti rizzo open-webui sketchlab hyperframes docling-cpu docling-4070ti prometheus grafana node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit embeddings openviking honcho-database honcho-api honcho-deriver dufs syncthing vscode ragflow ragflow-elasticsearch ragflow-mysql ragflow-minio ragflow-kvrocks ragflow-nats kb-postgres lightrag n8n kb-watcher kb-analysis)
+UNITS=(ai llama-cpp-5090 llama-cpp-4070ti llama-cpp-both comfyui-5090 comfyui-4070ti rizzo open-webui sketchlab hyperframes docling-cpu docling-4070ti prometheus grafana node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit embeddings openviking honcho-database honcho-api honcho-deriver dufs syncthing vscode ragflow ragflow-elasticsearch ragflow-mysql ragflow-minio ragflow-kvrocks ragflow-nats kb-postgres lightrag n8n kb-watcher kb-analysis windmill-postgres windmill-server windmill-worker)
 [ "$WITH_DSH" = 1 ] && UNITS+=(deepseek-harness)
 [ "$WITH_HERMES" = 1 ] && UNITS+=(hermes)
 "$ROOT/scripts/render-units.sh" "${UNITS[@]}"

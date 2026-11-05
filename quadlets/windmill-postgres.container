@@ -1,0 +1,29 @@
+# Windmill PostgreSQL - stock docker.io/library/postgres:18 (the compose
+# default; Windmill keeps ALL state incl. the job queue in PG).
+# NOT reusing kb-postgres: separate state/backup lifecycle (plan P0.1).
+# NO host port: reachable only as systemd-windmill-postgres:5432.
+# POSTGRES_* live in config/windmill-postgres/service.env (600); the copy
+# inside windmill's DATABASE_URL is mirrored by generate-secrets.sh.
+
+[Unit]
+Description=Windmill PostgreSQL (state + job queue)
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-windmill-postgres
+Image=docker.io/library/postgres:18
+Network=ai.network
+UserNS=keep-id
+EnvironmentFile=%h/.config/containers/config/windmill-postgres/service.env
+# PG 18 official images store data in major-version-specific dirs
+# (/var/lib/postgresql/18/docker) - mount the PARENT (docker-library/postgres#1259).
+Volume=wm-db-data:/var/lib/postgresql
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=120

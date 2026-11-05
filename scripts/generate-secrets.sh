@@ -23,6 +23,9 @@
 #   n8n/service.env              N8N_ENCRYPTION_KEY
 #   kb-watcher/service.env       strata key copy; RAGFLOW_API_KEY stays empty
 #                                until scripts/kb-bootstrap.sh fills it
+#   windmill-postgres/service.env Windmill DB password
+#   windmill/service.env         DATABASE_URL (mirrors the DB password) +
+#                                SUPERADMIN_SECRET (bootstrap bearer token)
 #   hermes-service/service.env   only with --with-hermes (opt-in container)
 # Strata's API key is created by install-strata.sh.
 set -euo pipefail
@@ -245,6 +248,33 @@ fi
 if [ -f "$CONF/llama-cpp/keys.txt" ] && ! grep -q '^KB_LLM_API_KEY=..' "$dst"; then
     lk=$(head -1 "$CONF/llama-cpp/keys.txt" | tr -d ' \n')
     [ -n "$lk" ] && awk -v k="$lk" '/^KB_LLM_API_KEY=/{print "KB_LLM_API_KEY=" k; next} 1' "$dst" > "$dst.tmp" && mv "$dst.tmp" "$dst"
+fi
+chmod 600 "$dst"
+
+# ─── automation group (Windmill: windmill-jupyter plan P0) ────────────────
+dst="$CONF/windmill-postgres/service.env"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    sed "s/change-me-to-a-random-hex-string/$(rand_hex 16)/" \
+        "$ROOT/config/windmill-postgres/service.env.example" > "$dst"
+    echo "  created $dst"
+else
+    echo "  kept    $dst"
+fi
+chmod 600 "$dst"
+
+dst="$CONF/windmill/service.env"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    # the password inside DATABASE_URL is the same secret as the
+    # windmill-postgres server's (separate file, one secret - stack mirror rule)
+    wmpw=$(sed -n 's/^POSTGRES_PASSWORD=//p' "$CONF/windmill-postgres/service.env" | tail -1)
+    sed -e "s|change-me-to-a-random-hex-string|$wmpw|" \
+        -e "s/change-me-to-another-random-hex-string/$(rand_hex 32)/" \
+        "$ROOT/config/windmill/service.env.example" > "$dst"
+    echo "  created $dst"
+else
+    echo "  kept    $dst"
 fi
 chmod 600 "$dst"
 

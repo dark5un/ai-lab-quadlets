@@ -1,0 +1,36 @@
+# Windmill server - UI + REST API (community image, AGPL-3.0, internal use).
+# MODE=server; Postgres (windmill-postgres) holds all state incl. the job
+# queue. LSP/multiplayer routes are served behind the same :8000 origin in
+# current versions (VERIFY live: compose's windmill-extra sidecar is an EE
+# extras aggregator, not required by the community server).
+# Port 8000 published loopback only (3117); tailnet door: Tailscale Service
+# svc:windmill (precedent svc:sketchlab) - see docs/windmill.md.
+# Shared config (DATABASE_URL, BASE_URL, SUPERADMIN_SECRET) in
+# config/windmill/service.env (600). First login is the built-in
+# admin@windmill.dev/changeme (docs 'First time login') - the bootstrap
+# script replaces it; there are NO SETUP_TOKEN/WM_DEFAULT_* env vars.
+
+[Unit]
+Description=Windmill automation server (UI + API)
+Wants=ai-network.service
+Wants=windmill-postgres.service
+After=ai-network.service
+After=windmill-postgres.service
+
+[Container]
+ContainerName=systemd-windmill-server
+Image=ghcr.io/windmill-labs/windmill:1.862.0
+Network=ai.network
+UserNS=keep-id
+PublishPort=127.0.0.1:3117:8000/tcp
+Environment=MODE=server
+EnvironmentFile=%h/.config/containers/config/windmill/service.env
+
+[Service]
+# A container killed by the stop signal exits 143; that is a clean stop.
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+# First start runs the full schema migration set on an empty DB.
+TimeoutStartSec=600
+TimeoutStopSec=120

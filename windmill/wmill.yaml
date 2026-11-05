@@ -1,0 +1,5 @@
+# wmill.yaml — Windmill CLI sync config for the windmill/ folder
+# (source of truth for automation scripts; repo is local-only, sync via
+# scripts/windmill-sync.sh -> wmill sync push/pull).
+includes:
+  - "f/**"

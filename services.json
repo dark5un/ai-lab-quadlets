@@ -993,6 +993,54 @@
       "auth": "none",
       "note": "W1-W4 deterministic helper (pair queue verdicts RAGFlow tagging report rendering); called by n8n over ai.network at systemd-kb-analysis:8090; shares the kb-watcher image; state in repo kb/ dir (gitignored)",
       "group": "kb"
+    },
+    {
+      "name": "windmill-postgres",
+      "unit": "windmill-postgres.service",
+      "container": "systemd-windmill-postgres",
+      "host_port": null,
+      "container_port": 5432,
+      "bind": "none",
+      "health": "-",
+      "tier": "optional",
+      "image": "docker.io/library/postgres:18",
+      "boot": false,
+      "auth": "password",
+      "note": "Windmill state + job queue (all state in PG, compose default pg18); separate from kb-postgres on purpose (blast radius/backup lifecycle); no host port (systemd-windmill-postgres:5432); volume wm-db-data.",
+      "group": "automation",
+      "image_digest": "docker.io/library/postgres@sha256:e923a22ac074261dd73970c57edf659475bf0497cb9456f17d98ed7cdd3ca913"
+    },
+    {
+      "name": "windmill-server",
+      "unit": "windmill-server.service",
+      "container": "systemd-windmill-server",
+      "host_port": 3117,
+      "container_port": 8000,
+      "bind": "127.0.0.1",
+      "health": "/api/health/status",
+      "tier": "web",
+      "image": "ghcr.io/windmill-labs/windmill:1.862.0",
+      "boot": false,
+      "auth": "login",
+      "note": "Windmill automation server (UI+API; replaces n8n per owner directive 2026-11-05, windmill-jupyter plan P0); MODE=server; SUPERADMIN_SECRET bootstrap; tailnet door svc:windmill; env config/windmill/service.env.",
+      "group": "automation",
+      "image_digest": "ghcr.io/windmill-labs/windmill@sha256:c82513915a14c7cf843269c7b6026376e1cb556e49b86b79e16d19ca2aaf9c41"
+    },
+    {
+      "name": "windmill-worker",
+      "unit": "windmill-worker.service",
+      "container": "systemd-windmill-worker",
+      "host_port": null,
+      "container_port": null,
+      "bind": "none",
+      "health": "-",
+      "tier": "optional",
+      "image": "ghcr.io/windmill-labs/windmill:1.862.0",
+      "boot": false,
+      "auth": "none",
+      "note": "Windmill default-group worker; bare-container sandbox (nsjail default off, no privileged - single trusted operator, revisit for team); CPU-only; volume wm-worker-cache.",
+      "group": "automation",
+      "image_digest": "ghcr.io/windmill-labs/windmill@sha256:c82513915a14c7cf843269c7b6026376e1cb556e49b86b79e16d19ca2aaf9c41"
     }
   ]
 }

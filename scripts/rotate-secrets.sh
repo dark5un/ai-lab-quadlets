@@ -11,6 +11,8 @@
 #   - KB group                      (ragflow service.env + mysql.env mirror,
 #                                    kb-postgres + lightrag mirror, n8n
 #                                    encryption key)
+#   - automation group              (windmill-postgres + windmill DATABASE_URL
+#                                    mirror, SUPERADMIN_SECRET)
 # Then restarts the affected services. Existing sessions/cookies tied to the
 # old values are invalidated. Treat any leaked value as burned: rotate first,
 # then hunt for where it leaked.
@@ -58,6 +60,8 @@ rotate_env_key "$CONF/ragflow/service.env" REDIS_PASSWORD
 rotate_env_key "$CONF/ragflow/service.env" ADMIN_DEFAULT_PASSWORD
 rotate_env_key "$CONF/kb-postgres/service.env" POSTGRES_PASSWORD
 rotate_env_key "$CONF/n8n/service.env" N8N_ENCRYPTION_KEY
+rotate_env_key "$CONF/windmill-postgres/service.env" POSTGRES_PASSWORD
+rotate_env_key "$CONF/windmill/service.env" SUPERADMIN_SECRET
 if [ "$APPLY" = 1 ]; then
     mp=$(sed -n 's/^MYSQL_PASSWORD=//p' "$CONF/ragflow/service.env" 2>/dev/null | tail -1)
     [ -n "$mp" ] && [ -f "$CONF/ragflow/mysql.env" ] && \
@@ -71,6 +75,13 @@ if [ "$APPLY" = 1 ]; then
             "$CONF/lightrag/service.env" > "$CONF/lightrag/service.env.tmp" && \
         chmod 600 "$CONF/lightrag/service.env.tmp" && mv "$CONF/lightrag/service.env.tmp" "$CONF/lightrag/service.env" && \
         echo "  ✓ re-mirrored lightrag POSTGRES_PASSWORD"
+    # windmill: the DB password lives inside DATABASE_URL - rewrite that field
+    wm_dbpw=$(sed -n 's/^POSTGRES_PASSWORD=//p' "$CONF/windmill-postgres/service.env" 2>/dev/null | tail -1)
+    [ -n "$wm_dbpw" ] && [ -f "$CONF/windmill/service.env" ] && \
+        awk -v p="$wm_dbpw" '/^DATABASE_URL=/{sub(/:[^:@]*@/, ":" p "@"); print; next} 1' \
+            "$CONF/windmill/service.env" > "$CONF/windmill/service.env.tmp" && \
+        chmod 600 "$CONF/windmill/service.env.tmp" && mv "$CONF/windmill/service.env.tmp" "$CONF/windmill/service.env" && \
+        echo "  ✓ re-mirrored windmill DATABASE_URL password"
 fi
 # Strata's setup json stores the key too, and it wins over the env: copy the
 # new key into every variant's config so all three keep one key.
@@ -115,7 +126,8 @@ if [ "$APPLY" = 1 ]; then
     for svc in open-webui sketchlab deepseek-harness strata-5090 strata-4070ti strata-both \
                llama-cpp-5090 llama-cpp-4070ti llama-cpp-both \
                ragflow-elasticsearch ragflow-mysql ragflow-minio ragflow-kvrocks \
-               ragflow kb-postgres lightrag n8n kb-analysis; do
+               ragflow kb-postgres lightrag n8n kb-analysis \
+               windmill-postgres windmill-server windmill-worker; do
         systemctl --user is-active "${svc}.service" &>/dev/null || continue
         systemctl --user restart "${svc}.service" && echo "  ✓ restarted $svc"
     done

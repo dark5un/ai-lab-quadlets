@@ -85,12 +85,27 @@ n8="$AI_LAB_CONFIG_DIR/n8n/service.env"
 [ "$(stat -c %a "$n8")" = 600 ] || fail "n8n env not 600"
 grep -q 'change-me' "$n8" && fail "placeholder left in n8n env"
 
+# automation group: windmill DB + shared env (DATABASE_URL mirrors the DB pw).
+wmdb="$AI_LAB_CONFIG_DIR/windmill-postgres/service.env"
+wm="$AI_LAB_CONFIG_DIR/windmill/service.env"
+[ "$(stat -c %a "$wmdb")" = 600 ] || fail "windmill-postgres env not 600"
+[ "$(stat -c %a "$wm")" = 600 ] || fail "windmill env not 600"
+grep -q 'change-me' "$wmdb" && fail "placeholder left in windmill-postgres env"
+grep -q 'change-me' "$wm" && fail "placeholder left in windmill env"
+wp=$(sed -n 's/^POSTGRES_PASSWORD=//p' "$wmdb" | tail -1)
+wu=$(sed -n 's|^DATABASE_URL=.*://[^:]*:\([^@]*\)@.*|\1|p' "$wm" | tail -1)
+[ -n "$wp" ] && [ "$wp" = "$wu" ] || fail "windmill DATABASE_URL does not mirror windmill-postgres POSTGRES_PASSWORD"
+[ "$(sed -n 's/^SUPERADMIN_SECRET=//p' "$wm" | tail -1)" != "$wp" ] || fail "windmill secrets not distinct"
+
 # Re-run keeps the live KB secrets too.
 rf_h="$(sha256sum < "$rf")"; kb_h="$(sha256sum < "$kbpg")"; n8_h="$(sha256sum < "$n8")"
+wm_h="$(sha256sum < "$wm")"; wmdb_h="$(sha256sum < "$wmdb")"
 bash "$ROOT/scripts/generate-secrets.sh" > /dev/null
 [ "$(sha256sum < "$rf")" = "$rf_h" ] || fail "ragflow env changed on re-run"
 [ "$(sha256sum < "$kbpg")" = "$kb_h" ] || fail "kb-postgres env changed on re-run"
 [ "$(sha256sum < "$n8")" = "$n8_h" ] || fail "n8n env changed on re-run"
+[ "$(sha256sum < "$wm")" = "$wm_h" ] || fail "windmill env changed on re-run"
+[ "$(sha256sum < "$wmdb")" = "$wmdb_h" ] || fail "windmill-postgres env changed on re-run"
 
 # Nothing written into the repo.
 after="$(git -C "$ROOT" status --porcelain --ignored config 2>/dev/null || true)"

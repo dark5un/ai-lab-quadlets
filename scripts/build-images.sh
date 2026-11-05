@@ -5,8 +5,8 @@
 #   scripts/build-images.sh [--rebuild] [NAME...]
 #
 # NAME: open-webui llama-cpp comfyui rizzo sketchlab hyperframes
-#       deepseek-harness hermes memory vscode kb
-#       (default: the first six + files + vscode + kb)
+#       deepseek-harness hermes memory vscode kb automation
+#       (default: the first six + files + vscode + kb + automation)
 # Pulled images (open-webui, llama-cpp, hermes) are pulled only when missing;
 # a pulled digest that differs from the registry's image_digest is reported.
 # Built images are skipped when present unless --rebuild; comfyui also
@@ -19,7 +19,7 @@ REG="$ROOT/services.json"
 CONF="${HOME}/.config/containers/config"
 SKETCHLAB_REPO="${SKETCHLAB_REPO:-${HOME}/workspace/github.com/dark5un/sketchlab.app}"
 HYPERFRAMES_REPO="${HYPERFRAMES_REPO:-${HOME}/workspace/github.com/heygen-com/hyperframes}"
-DEFAULT=(open-webui llama-cpp comfyui rizzo sketchlab hyperframes dufs syncthing vscode kb)
+DEFAULT=(open-webui llama-cpp comfyui rizzo sketchlab hyperframes dufs syncthing vscode kb automation)
 
 REBUILD=0 NAMES=()
 for arg in "$@"; do
@@ -106,6 +106,7 @@ for name in "${NAMES[@]}"; do
                 pull kb-postgres; pull lightrag; pull n8n;
                 build kb-watcher "$ROOT/containers/kb-watcher" \
                       -f "$ROOT/containers/kb-watcher/Containerfile" ;;
+        automation) pull windmill-postgres; pull windmill-server; pull windmill-worker ;;
         *) echo "  ! unknown image '$name'"; fail=1 ;;
     esac
 done
