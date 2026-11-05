@@ -65,6 +65,7 @@ Windmill replaces n8n for KB W1-W4 - n8n 3115 stays until teardown):
 | windmill-server (UI+API) | 3117 | loopback (tailnet door planned: svc:windmill) |
 | windmill-worker    | -     | none (no published port) |
 | windmill-postgres  | -     | none (systemd-windmill-postgres:5432) |
+| notebook (JupyterLab+marimo) | 3118 | loopback (token file auth; tailnet door planned: svc:notebook) |
 
 Tailnet doors for the KB (tailscale serve; real FQDN never committed):
 ragflow -> `https://ai.<tailnet>.ts.net:8444`, n8n -> `:8445`,

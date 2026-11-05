@@ -97,6 +97,14 @@ wu=$(sed -n 's|^DATABASE_URL=.*://[^:]*:\([^@]*\)@.*|\1|p' "$wm" | tail -1)
 [ -n "$wp" ] && [ "$wp" = "$wu" ] || fail "windmill DATABASE_URL does not mirror windmill-postgres POSTGRES_PASSWORD"
 [ "$(sed -n 's/^SUPERADMIN_SECRET=//p' "$wm" | tail -1)" != "$wp" ] || fail "windmill secrets not distinct"
 
+# notebook server: token file + env (600, kept on re-run).
+ntk="$AI_LAB_CONFIG_DIR/notebook/jupyter-token"
+ne="$AI_LAB_CONFIG_DIR/notebook/service.env"
+[ "$(stat -c %a "$ntk")" = 600 ] || fail "notebook jupyter-token not 600"
+[ -s "$ntk" ] || fail "notebook jupyter-token empty"
+[ "$(stat -c %a "$ne")" = 600 ] || fail "notebook env not 600"
+tk_h="$(sha256sum < "$ntk")"
+
 # Re-run keeps the live KB secrets too.
 rf_h="$(sha256sum < "$rf")"; kb_h="$(sha256sum < "$kbpg")"; n8_h="$(sha256sum < "$n8")"
 wm_h="$(sha256sum < "$wm")"; wmdb_h="$(sha256sum < "$wmdb")"
@@ -106,6 +114,7 @@ bash "$ROOT/scripts/generate-secrets.sh" > /dev/null
 [ "$(sha256sum < "$n8")" = "$n8_h" ] || fail "n8n env changed on re-run"
 [ "$(sha256sum < "$wm")" = "$wm_h" ] || fail "windmill env changed on re-run"
 [ "$(sha256sum < "$wmdb")" = "$wmdb_h" ] || fail "windmill-postgres env changed on re-run"
+[ "$(sha256sum < "$ntk")" = "$tk_h" ] || fail "notebook jupyter-token changed on re-run"
 
 # Nothing written into the repo.
 after="$(git -C "$ROOT" status --porcelain --ignored config 2>/dev/null || true)"

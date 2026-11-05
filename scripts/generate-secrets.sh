@@ -26,6 +26,8 @@
 #   windmill-postgres/service.env Windmill DB password
 #   windmill/service.env         DATABASE_URL (mirrors the DB password) +
 #                                SUPERADMIN_SECRET (bootstrap bearer token)
+#   notebook/jupyter-token       notebook server auth token (FILE)
+#   notebook/service.env         platform URLs; key copies filled by install.sh
 #   hermes-service/service.env   only with --with-hermes (opt-in container)
 # Strata's API key is created by install-strata.sh.
 set -euo pipefail
@@ -279,6 +281,30 @@ if want "$dst"; then
         -e "s/change-me-to-another-random-hex-string/$(rand_hex 32)/" \
         "$ROOT/config/windmill/service.env.example" > "$dst"
     echo "  created $dst"
+else
+    echo "  kept    $dst"
+fi
+chmod 600 "$dst"
+
+# ─── notebook server (windmill-jupyter plan P2) ───────────────────────────
+# Server auth is a token FILE (jupyter ServerApp.token_file); the env file
+# carries platform URLs + managed key copies (filled by install.sh from the
+# owning services' secrets - never minted here).
+dst="$CONF/notebook/jupyter-token"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    rand_hex 32 > "$dst"
+    echo "  created $dst"
+else
+    echo "  kept    $dst"
+fi
+chmod 600 "$dst"
+
+dst="$CONF/notebook/service.env"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    cp "$ROOT/config/notebook/service.env.example" "$dst"
+    echo "  created $dst (key copies filled by install.sh)"
 else
     echo "  kept    $dst"
 fi

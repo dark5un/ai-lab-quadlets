@@ -1041,6 +1041,21 @@
       "note": "Windmill default-group worker; bare-container sandbox (nsjail default off, no privileged - single trusted operator, revisit for team); CPU-only; volume wm-worker-cache.",
       "group": "automation",
       "image_digest": "ghcr.io/windmill-labs/windmill@sha256:c82513915a14c7cf843269c7b6026376e1cb556e49b86b79e16d19ca2aaf9c41"
+    },
+    {
+      "name": "notebook",
+      "unit": "notebook.service",
+      "container": "systemd-notebook",
+      "host_port": 3118,
+      "container_port": 8888,
+      "bind": "127.0.0.1",
+      "health": "/api/status",
+      "tier": "web",
+      "image": "localhost/notebook:latest",
+      "boot": false,
+      "auth": "token",
+      "note": "Notebook server (JupyterLab + marimo-jupyter-extension, windmill-jupyter plan P2): CPU-only kernels, notebooks in ~/workspace/notebooks (own git repo, same-path mount), token file config/notebook/jupyter-token; VS Code boxes attach as existing Jupyter server; tailnet door planned svc:notebook; volume notebook-state.",
+      "group": "automation"
     }
   ]
 }

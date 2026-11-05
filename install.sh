@@ -101,12 +101,15 @@ copy_examples() {  # copy_examples <svc>
 }
 for svc in llama-cpp-5090 llama-cpp-4070ti llama-cpp-both sketchlab grafana \
            ragflow lightrag kb-postgres n8n kb-watcher \
-           windmill windmill-postgres; do copy_examples "$svc"; done
+           windmill windmill-postgres notebook; do copy_examples "$svc"; done
 # KB group runtime files (not secret templates): the mysql init script and
 # the kvrocks config renderer are bind-mounted by their quadlets from here.
 for f in init.sql kvrocks-entrypoint.sh; do
     [ -f "$CONF/ragflow/$f" ] || install -m 600 "$ROOT/config/ragflow/$f" "$CONF/ragflow/$f"
 done
+# notebook runtime file (non-secret; pins the token file into jupyter config)
+[ -f "$CONF/notebook/jupyter_server_config.py" ] || \
+    install -m 600 "$ROOT/config/notebook/jupyter_server_config.py" "$CONF/notebook/jupyter_server_config.py"
 
 # Strata: image (if missing) + its units (5 variants + coder) + service.env with the key.
 say "3/6 strata (scripts/install-strata.sh)"
@@ -187,6 +190,19 @@ echo "  sketchlab: /v1 proxy key = strata key"
     set_kv "$CONF/kb-watcher/service.env" WM_API_TOKEN "$(head -1 "$CONF/windmill/agent-token" | tr -d ' \n')"
     echo "  kb-watcher: WM_API_TOKEN = Windmill agent token"
 }
+# Notebook server (windmill-jupyter plan P2): platform key COPIES for kernels,
+# each mirrored from its owning service's secret (never re-minted).
+[ -f "$CONF/notebook/service.env" ] && {
+    [ -f "$CONF/llama-cpp/keys.txt" ] && \
+        set_kv "$CONF/notebook/service.env" KB_ROUTER_KEY "$(head -1 "$CONF/llama-cpp/keys.txt" | tr -d ' \n')"
+    [ -f "$CONF/kb-watcher/service.env" ] && {
+        set_kv "$CONF/notebook/service.env" RAGFLOW_API_KEY "$(sed -n 's/^RAGFLOW_API_KEY=//p' "$CONF/kb-watcher/service.env" | tail -1)"
+        set_kv "$CONF/notebook/service.env" LIGHTRAG_API_KEY "$(sed -n 's/^LIGHTRAG_API_KEY=//p' "$CONF/kb-watcher/service.env" | tail -1)"
+    }
+    [ -f "$CONF/windmill/agent-token" ] && \
+        set_kv "$CONF/notebook/service.env" WM_AGENT_TOKEN "$(head -1 "$CONF/windmill/agent-token" | tr -d ' \n')"
+    echo "  notebook: platform key copies mirrored"
+}
 # Memory group (plan ~/Documents/plans/ai-memory-services-plan.md):
 # OpenViking + Honcho on CPU. ov.conf is re-rendered from the template with
 # the LIVE keys on every run (values never printed); honcho's LLM key lines
@@ -233,7 +249,7 @@ umask 022
 
 # ─── 4. Units ────────────────────────────────────────────────────────────────
 say "4/6 units in $QUADLET_DIR"
-UNITS=(ai llama-cpp-5090 llama-cpp-4070ti llama-cpp-both comfyui-5090 comfyui-4070ti rizzo open-webui sketchlab hyperframes docling-cpu docling-4070ti prometheus grafana node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit embeddings openviking honcho-database honcho-api honcho-deriver dufs syncthing vscode ragflow ragflow-elasticsearch ragflow-mysql ragflow-minio ragflow-kvrocks ragflow-nats kb-postgres lightrag n8n kb-watcher kb-analysis windmill-postgres windmill-server windmill-worker)
+UNITS=(ai llama-cpp-5090 llama-cpp-4070ti llama-cpp-both comfyui-5090 comfyui-4070ti rizzo open-webui sketchlab hyperframes docling-cpu docling-4070ti prometheus grafana node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit embeddings openviking honcho-database honcho-api honcho-deriver dufs syncthing vscode ragflow ragflow-elasticsearch ragflow-mysql ragflow-minio ragflow-kvrocks ragflow-nats kb-postgres lightrag n8n kb-watcher kb-analysis windmill-postgres windmill-server windmill-worker notebook)
 [ "$WITH_DSH" = 1 ] && UNITS+=(deepseek-harness)
 [ "$WITH_HERMES" = 1 ] && UNITS+=(hermes)
 "$ROOT/scripts/render-units.sh" "${UNITS[@]}"

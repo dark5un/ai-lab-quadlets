@@ -106,7 +106,9 @@ for name in "${NAMES[@]}"; do
                 pull kb-postgres; pull lightrag; pull n8n;
                 build kb-watcher "$ROOT/containers/kb-watcher" \
                       -f "$ROOT/containers/kb-watcher/Containerfile" ;;
-        automation) pull windmill-postgres; pull windmill-server; pull windmill-worker ;;
+        automation) pull windmill-postgres; pull windmill-server; pull windmill-worker;
+                build notebook "$ROOT/containers/notebook" \
+                      -f "$ROOT/containers/notebook/Containerfile" ;;
         *) echo "  ! unknown image '$name'"; fail=1 ;;
     esac
 done

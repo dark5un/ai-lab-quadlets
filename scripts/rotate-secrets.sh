@@ -63,6 +63,11 @@ rotate_env_key "$CONF/n8n/service.env" N8N_ENCRYPTION_KEY
 rotate_env_key "$CONF/windmill-postgres/service.env" POSTGRES_PASSWORD
 rotate_env_key "$CONF/windmill/service.env" SUPERADMIN_SECRET
 if [ "$APPLY" = 1 ]; then
+    rand_hex 32 > "$CONF/notebook/jupyter-token" 2>/dev/null && \
+        chmod 600 "$CONF/notebook/jupyter-token" && \
+        echo "  ✓ rotated notebook/jupyter-token"
+fi
+if [ "$APPLY" = 1 ]; then
     mp=$(sed -n 's/^MYSQL_PASSWORD=//p' "$CONF/ragflow/service.env" 2>/dev/null | tail -1)
     [ -n "$mp" ] && [ -f "$CONF/ragflow/mysql.env" ] && \
         awk -v p="$mp" '/^MYSQL_ROOT_PASSWORD=/{print "MYSQL_ROOT_PASSWORD=" p; next} 1' \
@@ -127,7 +132,7 @@ if [ "$APPLY" = 1 ]; then
                llama-cpp-5090 llama-cpp-4070ti llama-cpp-both \
                ragflow-elasticsearch ragflow-mysql ragflow-minio ragflow-kvrocks \
                ragflow kb-postgres lightrag n8n kb-analysis \
-               windmill-postgres windmill-server windmill-worker; do
+               windmill-postgres windmill-server windmill-worker notebook; do
         systemctl --user is-active "${svc}.service" &>/dev/null || continue
         systemctl --user restart "${svc}.service" && echo "  ✓ restarted $svc"
     done

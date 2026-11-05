@@ -1,0 +1,21 @@
+# notebook - shared AI-lab notebook server: JupyterLab + marimo first-class
+# (windmill-jupyter plan P2, owner decision 2026-11-05).
+# Base: jupyter docker-stacks scipy-notebook (numpy/pandas/sklearn/matplotlib
+# kernels, CPU-only - no CUDA, per decision). marimo >=0.25 is the notebook
+# authoring format (reactive .py files); marimo-jupyter-extension (CURRENT
+# integration package - the old marimo[jupyterlab] extra no longer exists, and
+# it replaced jupyter-marimo-proxy) brings the marimo launcher/sessions/convert
+# into JupyterLab through jupyter-server-proxy on the SAME port.
+# Built image (kb-watcher precedent): no digest pin here; base tag
+# lab-4.6.4 verified live on quay.io 2026-11-05 (manifest sha256:d416eea5...).
+# To bump: check https://quay.io/repository/jupyter/scipy-notebook/tags.
+FROM quay.io/jupyter/scipy-notebook:lab-4.6.4
+
+USER ${NB_USER}
+
+RUN python -m pip install --no-cache-dir "marimo>=0.25.0" marimo-jupyter-extension openai
+
+# Notebook source of truth is the repo folder mounted at the SAME host path
+# (/home/px/workspace/notebooks, own git repo - see docs/notebooks.md);
+# server/token state stays in image/volumes. platform.py helper in the repo
+# gives kernels the router/RAGFlow/LightRAG/Windmill clients.
