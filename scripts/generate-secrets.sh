@@ -20,7 +20,6 @@
 #                                the mysql entrypoint rejects MYSQL_USER=root)
 #   kb-postgres/service.env      LightRAG DB password
 #   lightrag/service.env         DB password mirror + strata/embeddings keys
-#   n8n/service.env              N8N_ENCRYPTION_KEY
 #   kb-watcher/service.env       strata key copy; RAGFLOW_API_KEY stays empty
 #                                until scripts/kb-bootstrap.sh fills it
 #   windmill-postgres/service.env Windmill DB password
@@ -160,7 +159,7 @@ if [ -f "$CONF/strata/service.env" ] && ! grep -q '^STRATA_API_KEY=..' "$dst"; t
 fi
 chmod 600 "$dst"
 
-# ─── KB group (knowledge-base plan: ragflow / lightrag / n8n / watcher) ─────
+# ─── KB group (knowledge-base plan: ragflow / lightrag / watcher) ───────────
 # One shared env feeds ragflow + its dependency servers; cross-file mirrors
 # keep each server's own variable-name contract satisfied.
 dst="$CONF/ragflow/service.env"
@@ -223,16 +222,6 @@ if [ -f "$CONF/llama-cpp/keys.txt" ] && ! grep -q '^EMBEDDING_BINDING_API_KEY=..
 fi
 chmod 600 "$dst"
 
-dst="$CONF/n8n/service.env"
-mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
-if want "$dst"; then
-    sed "s/change-me-to-a-random-hex-string/$(rand_hex 32)/" \
-        "$ROOT/config/n8n/service.env.example" > "$dst"
-    echo "  created $dst"
-else
-    echo "  kept    $dst"
-fi
-chmod 600 "$dst"
 
 dst="$CONF/kb-watcher/service.env"
 mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"

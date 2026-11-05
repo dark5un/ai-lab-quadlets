@@ -1,6 +1,6 @@
 # kb-analysis: deterministic state/plumbing service for the W1-W4 analysis
 # pipelines (queue+verdicts in kb/state/queue.sqlite, RAGFlow tagging, report
-# rendering). n8n workflows call it over ai.network; it publishes NO host
+# rendering). Windmill W1-W4 scripts call it over ai.network; it publishes NO host
 # port. Shares the kb-watcher image (different entrypoint arg) and its env
 # file (RAGFLOW_API_KEY / LIGHTRAG_BASE_URL), plus the kb/ dir mounted rw.
 

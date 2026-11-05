@@ -5,9 +5,10 @@ what is actually deployed and how to operate it.
 
 ## What runs
 
-Twelve new units, group `kb` in `services.json`, all on-demand (no
-`[Install]`; dormancy per stack convention). Every model call stays on this
-box (strata + bge-m3 via ai.network).
+Twelve units, group `kb` in `services.json`, all on-demand (no
+`[Install]`; dormancy per stack convention) — n8n was the thirteenth until
+the 2026-11-05 teardown (P1.4, windmill-jupyter plan). Every model call
+stays on this box.
 
 | unit | image | host port | role |
 |---|---|---|---|
@@ -19,25 +20,27 @@ box (strata + bge-m3 via ai.network).
 | ragflow-nats | nats 2.14.2 JetStream | none | ingestion queue |
 | kb-postgres | pgvector/pgvector pg18 | none | LightRAG storage |
 | lightrag | hkuds/lightrag v1.5.7 | 127.0.0.1:3116 | exportable knowledge graph |
-| n8n | n8nio/n8n 2.46.6 | 127.0.0.1:3115 | W1-W4 workflows (MID-TEARDOWN: superseded by Windmill, see docs/windmill.md) |
-| windmill-* (automation group) | windmill-labs/windmill 1.862.0 + pg18 | 127.0.0.1:3117 | W1-W4 analysis scripts/schedules (P1 since 2026-11-05) |
+| windmill-* (automation group) | windmill-labs/windmill 1.862.0 + pg18 | 127.0.0.1:3117 | W1-W4 analysis scripts/schedules (P1 since 2026-11-05; replaced n8n, which is deleted) |
 | kb-analysis | built (kb-watcher image) | none | queue/verdicts/tags/report plumbing |
 | kb-watcher | built (same image) | none | nightly one-shot ingest (Type=oneshot) |
 | kb-watcher.timer | plain user unit (`services/`) | - | nightly ~03:30+rand, wakes the group via Wants= chain |
 
 Tailnet doors (added 2026-11-04, verified end-to-end from this node):
 `tailscale serve --bg --https=8444 -> 127.0.0.1:3114` (RAGFlow),
-`:8445 -> 3115` (n8n), `:8446 -> 3116` (LightRAG). Real FQDN never
+`:8446 -> 3116` (LightRAG). (An `:8445 -> 3115` n8n door existed until the
+2026-11-05 teardown; removed via `tailscale serve --https=8445 off`.)
+Real FQDN never
 committed; form: `https://ai.<tailnet>.ts.net:8444` etc. 443 stays dufs,
 8443 stays vscode. LightRAG was loopback-unauthenticated by design; before
 exposing it we enabled `LIGHTRAG_API_KEY` (generated + mirrored into
 kb-watcher/service.env by `scripts/kb-lightrag-auth.py`; clients auth with
 the **X-API-Key** header - v1.5.7's Bearer scheme is guest-JWT, not the
-api key). RAGFlow + n8n keep their own logins.
+api key). RAGFlow keeps its own login.
 
 Storage: all heavy state in named volumes `kb-es-data kb-mysql-data
 kb-minio-data kb-kvrocks-data kb-nats-data kb-lightrag-pg-data
-kb-lightrag-data kb-n8n-data kb-ragflow-logs`. Light human-readable state
+kb-lightrag-data kb-ragflow-logs` (the former kb-n8n-data volume was
+backed up to ~/.local/share/ai-lab-backups/ and deleted 2026-11-05). Light human-readable state
 in this repo under `kb/` (gitignored - public repo, corpus-derived).
 
 ## Deviations from the plan (verified live at install)
@@ -54,17 +57,17 @@ in this repo under `kb/` (gitignored - public repo, corpus-derived).
 - podman 6.1 quadlets have no native `[Timer]` section: scheduling uses a
   plain user timer (`services/kb-watcher.timer`, install.sh enables it)
   activating the quadlet-generated `kb-watcher.service`.
-- n8n (SUL) stays loopback-only and client-invisible. The owner account
-  (kb-admin@local.ai) was created headlessly via `POST /rest/owner/setup`
-  (no CLI owner-create exists; password in `config/n8n/.owner_pw_once`).
-  `n8n execute` cannot run beside the live server (task broker port), so
-  workflows are triggered through published webhooks
-  (`POST http://systemd-n8n:5678/webhook/kb-w1..kb-w4` from in-network,
-  127.0.0.1:3115/webhook/... from the host) plus their crons.
+- n8n (SUL) stayed loopback-only and client-invisible until the 2026-11-05
+  teardown (kept as a quirks record, it informed the Windmill wiring): the
+  owner account was created headlessly via `POST /rest/owner/setup` (no CLI
+  owner-create exists); `n8n execute` cannot run beside the live server
+  (task broker port), so workflows ran through published webhooks plus
+  their crons; generic HTTP nodes strip plaintext Authorization headers
+  (httpHeaderAuth credential required, and one-shot-POSTed credentials fail
+  at runtime — "Credentials not found").
 - The LLM judging step of W1 runs in **Windmill** (owner decision
-  2026-11-05: n8n -> Windmill; the old n8n HTTP-node path is retired from
-  the nightly flow, n8n itself deleted after 1-2 green nightly runs on
-  Windmill). Scripts f/kb/w1_discrepancy..w4_drift call the llama-cpp-4070ti
+  2026-11-05: n8n -> Windmill; n8n fully deleted 2026-11-05 after green
+  Windmill runs — plan P1.4). Scripts f/kb/w1_discrepancy..w4_drift call the llama-cpp-4070ti
   router (strict JSON + 3 retries; router key as Windmill secret variable
   f/kb/router_key kept in sync by scripts/windmill-vars.py) and the
   deterministic side (pair queue, verdict storage, RAGFlow tagging, report
@@ -154,20 +157,22 @@ from strata-coder (arbiter rule).
   boot-tier) or start pieces via `ai-lab start ragflow`.
 - Re-bootstrap models/datasets/PAT: `scripts/kb-bootstrap.sh`
 - Nightly: 03:30 timer -> watcher pass -> completion webhook -> W1 ->
-  crons 05:15/05:30/05:45 run W2/W3/W4. Reports land in `kb/reports/`
+  W2/W3/W4; Windmill fallback schedules (6-field cron, UTC): W1 04:30,
+  W2 05:30, W3 05:45, W4 06:00. Reports land in `kb/reports/`
   (Syncthing replicates them to your other devices for free - plan D3).
 - Backups: named volumes (podman) + `kb/` dir (gitignored, but it is the
   corpus state - include it in volume snapshots).
 - Rotating KB secrets: `scripts/rotate-secrets.sh` covers the ragflow env
-  (5 keys), kb-postgres/lightrag mirror, n8n key, then restarts the group.
+  (5 keys) and the kb-postgres/lightrag mirror, then restarts the group.
 
 ## GCP transfer (plan sec.9, condensed)
 
 All twelve units are standard linux/amd64 containers -> GKE Deployments/
-StatefulSets (ES, MySQL, PG, silo) or Cloud Run (LightRAG, n8n stays
+StatefulSets (ES, MySQL, PG, silo) or Cloud Run (LightRAG, Windmill stays
 self-hosted container, watcher becomes Cloud Run job + Cloud Scheduler,
 Pub/Sub from GCS for the corpus). Managed swap-ins: Vertex AI for strata/
 bge-m3 slots (re-index on embedding change), Elastic Cloud, Cloud SQL
 MySQL/PostgreSQL (pgvector GA - PGTableGraphStorage was chosen exactly for
 this), GCS S3-interop for object storage. ADK/Vertex Agent Engine replaces
-n8n if the KB ever ships in a client deliverable (never ship the editor).
+Windmill if the KB ever ships in a client deliverable (never ship the
+editor).

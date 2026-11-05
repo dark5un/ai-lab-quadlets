@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """kb-analysis: deterministic state/plumbing side of the W1-W4 analysis
-pipelines (knowledge-base plan sec.6). n8n hosts the agentic LLM steps and
+pipelines (knowledge-base plan sec.6). Windmill hosts the agentic LLM steps and
 calls this service; this service owns the queue, verdicts, tags and reports.
 
 Endpoints (ai.network only, no host publish - like the other KB internals):

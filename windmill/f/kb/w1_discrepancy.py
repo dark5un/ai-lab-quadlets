@@ -30,7 +30,7 @@ def classify(client: httpx.Client, key: str, pair: dict) -> dict:
         + f"\n\n=== DOC B ===\n{pair['text_b']}"
     )
     last_err = None
-    for _ in range(3):  # n8n flow-step retry policy = 3
+    for _ in range(3):  # retry policy = 3 (inherited from the old n8n flow)
         try:
             r = client.post(
                 f"{LLM}/chat/completions",

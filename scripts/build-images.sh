@@ -103,7 +103,7 @@ for name in "${NAMES[@]}"; do
         vscode) build vscode "$ROOT/containers/vscode" -f "$ROOT/containers/vscode/Containerfile" ;;
         kb)     pull ragflow; pull ragflow-elasticsearch; pull ragflow-mysql;
                 pull ragflow-minio; pull ragflow-kvrocks; pull ragflow-nats;
-                pull kb-postgres; pull lightrag; pull n8n;
+                pull kb-postgres; pull lightrag;
                 build kb-watcher "$ROOT/containers/kb-watcher" \
                       -f "$ROOT/containers/kb-watcher/Containerfile" ;;
         automation) pull windmill-postgres; pull windmill-server; pull windmill-worker;

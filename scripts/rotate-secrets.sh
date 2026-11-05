@@ -9,8 +9,7 @@
 #   - strata API_KEY                (config/strata/service.env + every
 #                                    ~/.local/share/strata/config-*/strata-*.json)
 #   - KB group                      (ragflow service.env + mysql.env mirror,
-#                                    kb-postgres + lightrag mirror, n8n
-#                                    encryption key)
+#                                    kb-postgres + lightrag mirror)
 #   - automation group              (windmill-postgres + windmill DATABASE_URL
 #                                    mirror, SUPERADMIN_SECRET)
 # Then restarts the affected services. Existing sessions/cookies tied to the
@@ -59,7 +58,6 @@ rotate_env_key "$CONF/ragflow/service.env" MINIO_PASSWORD
 rotate_env_key "$CONF/ragflow/service.env" REDIS_PASSWORD
 rotate_env_key "$CONF/ragflow/service.env" ADMIN_DEFAULT_PASSWORD
 rotate_env_key "$CONF/kb-postgres/service.env" POSTGRES_PASSWORD
-rotate_env_key "$CONF/n8n/service.env" N8N_ENCRYPTION_KEY
 rotate_env_key "$CONF/windmill-postgres/service.env" POSTGRES_PASSWORD
 rotate_env_key "$CONF/windmill/service.env" SUPERADMIN_SECRET
 if [ "$APPLY" = 1 ]; then
@@ -131,7 +129,7 @@ if [ "$APPLY" = 1 ]; then
     for svc in open-webui sketchlab deepseek-harness strata-5090 strata-4070ti strata-both \
                llama-cpp-5090 llama-cpp-4070ti llama-cpp-both \
                ragflow-elasticsearch ragflow-mysql ragflow-minio ragflow-kvrocks \
-               ragflow kb-postgres lightrag n8n kb-analysis \
+               ragflow kb-postgres lightrag kb-analysis \
                windmill-postgres windmill-server windmill-worker notebook; do
         systemctl --user is-active "${svc}.service" &>/dev/null || continue
         systemctl --user restart "${svc}.service" && echo "  ✓ restarted $svc"

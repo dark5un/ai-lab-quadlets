@@ -540,9 +540,8 @@ def main() -> int:
 
     # plan sec.6: analysis W1 triggers on watcher completion (fallback is the
     # Windmill schedule). Best-effort; never fails the ingest run.
-    # Windmill run endpoints take the token as ?token= query arg; the older
-    # N8N_WEBHOOK_URL is honored while n8n is being decommissioned.
-    hook = env("WM_WEBHOOK_URL") or env("N8N_WEBHOOK_URL")
+    # Windmill run endpoints take the token as ?token= query arg.
+    hook = env("WM_WEBHOOK_URL")
     if hook and (added or changed or deleted):
         try:
             if env("WM_API_TOKEN"):

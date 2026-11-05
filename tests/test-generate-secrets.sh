@@ -62,7 +62,7 @@ bash "$ROOT/scripts/generate-secrets.sh" > /dev/null
 [ "$(sed -n 's/^VSCODE_CONNECTION_TOKEN=//p' "$vc" | tail -1)" = "$v1" ] || fail "vscode token changed on re-run"
 
 # KB group: ragflow shared env (5 distinct secrets, no leftover placeholder)
-# + the mysql.env mirror + kb-postgres/lightrag mirror + n8n key.
+# + the mysql.env mirror + kb-postgres/lightrag mirror.
 rf="$AI_LAB_CONFIG_DIR/ragflow/service.env"
 rfm="$AI_LAB_CONFIG_DIR/ragflow/mysql.env"
 [ "$(stat -c %a "$rf")" = 600 ] || fail "ragflow env not 600"
@@ -81,9 +81,6 @@ grep -q 'change-me' "$lr" && fail "placeholder left in lightrag env"
 lp=$(sed -n 's/^POSTGRES_PASSWORD=//p' "$kbpg" | tail -1)
 lxp=$(sed -n 's/^POSTGRES_PASSWORD=//p' "$lr" | tail -1)
 [ -n "$lp" ] && [ "$lp" = "$lxp" ] || fail "lightrag does not mirror kb-postgres POSTGRES_PASSWORD"
-n8="$AI_LAB_CONFIG_DIR/n8n/service.env"
-[ "$(stat -c %a "$n8")" = 600 ] || fail "n8n env not 600"
-grep -q 'change-me' "$n8" && fail "placeholder left in n8n env"
 
 # automation group: windmill DB + shared env (DATABASE_URL mirrors the DB pw).
 wmdb="$AI_LAB_CONFIG_DIR/windmill-postgres/service.env"
@@ -106,12 +103,11 @@ ne="$AI_LAB_CONFIG_DIR/notebook/service.env"
 tk_h="$(sha256sum < "$ntk")"
 
 # Re-run keeps the live KB secrets too.
-rf_h="$(sha256sum < "$rf")"; kb_h="$(sha256sum < "$kbpg")"; n8_h="$(sha256sum < "$n8")"
+rf_h="$(sha256sum < "$rf")"; kb_h="$(sha256sum < "$kbpg")"
 wm_h="$(sha256sum < "$wm")"; wmdb_h="$(sha256sum < "$wmdb")"
 bash "$ROOT/scripts/generate-secrets.sh" > /dev/null
 [ "$(sha256sum < "$rf")" = "$rf_h" ] || fail "ragflow env changed on re-run"
 [ "$(sha256sum < "$kbpg")" = "$kb_h" ] || fail "kb-postgres env changed on re-run"
-[ "$(sha256sum < "$n8")" = "$n8_h" ] || fail "n8n env changed on re-run"
 [ "$(sha256sum < "$wm")" = "$wm_h" ] || fail "windmill env changed on re-run"
 [ "$(sha256sum < "$wmdb")" = "$wmdb_h" ] || fail "windmill-postgres env changed on re-run"
 [ "$(sha256sum < "$ntk")" = "$tk_h" ] || fail "notebook jupyter-token changed on re-run"

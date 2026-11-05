@@ -949,22 +949,6 @@
       "image_digest": "ghcr.io/hkuds/lightrag@sha256:31437bcfb1c5842c5a7e496d5b7414dd43b1db861a00abdfa133c1dd43a19243"
     },
     {
-      "name": "n8n",
-      "unit": "n8n.service",
-      "container": "systemd-n8n",
-      "host_port": 3115,
-      "container_port": 5678,
-      "bind": "127.0.0.1",
-      "health": "/healthz",
-      "tier": "web",
-      "image": "docker.io/n8nio/n8n:2.46.6",
-      "boot": false,
-      "auth": "login",
-      "note": "KB agentic analysis workflows (W1 discrepancies, W2 gaps, W3 staleness, W4 drift); editor loopback 3115 only, never client-facing (SUL); N8N_ENCRYPTION_KEY config/n8n/service.env; volume kb-n8n-data.",
-      "group": "kb",
-      "image_digest": "docker.io/n8nio/n8n@sha256:256a0fca38c4f0ab02524bcebf77b8ed5acc7aa99a28c4cbca7a4034a76d4b97"
-    },
-    {
       "name": "kb-watcher",
       "unit": "kb-watcher.service",
       "container": "systemd-kb-watcher",
@@ -991,7 +975,7 @@
       "image": "localhost/kb-watcher:latest",
       "boot": false,
       "auth": "none",
-      "note": "W1-W4 deterministic helper (pair queue verdicts RAGFlow tagging report rendering); called by n8n over ai.network at systemd-kb-analysis:8090; shares the kb-watcher image; state in repo kb/ dir (gitignored)",
+      "note": "W1-W4 deterministic helper (pair queue verdicts RAGFlow tagging report rendering); called by the Windmill W1-W4 scripts over ai.network at systemd-kb-analysis:8090; shares the kb-watcher image; state in repo kb/ dir (gitignored)",
       "group": "kb"
     },
     {

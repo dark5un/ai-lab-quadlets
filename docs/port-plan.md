@@ -48,7 +48,6 @@ Knowledge base (KB group, plan ~/tmp/knowledge_base_plan1.md, added 2026-11-04):
 | service            | port  | binding  |
 |--------------------|-------|----------|
 | ragflow (UI)       | 3114  | loopback (API 9380 in-network only: systemd-ragflow:9380) |
-| n8n (editor)       | 3115  | loopback (internal ops tool only, never client-facing - SUL) |
 | lightrag (UI+API)  | 3116  | loopback |
 | ragflow-elasticsearch | -  | none (systemd-ragflow-elasticsearch:9200) |
 | ragflow-mysql      | -     | none (systemd-ragflow-mysql:3306) |
@@ -58,7 +57,7 @@ Knowledge base (KB group, plan ~/tmp/knowledge_base_plan1.md, added 2026-11-04):
 | kb-postgres        | -     | none (systemd-kb-postgres:5432) |
 
 Automation (automation group, plan ~/tmp/windmill-jupyter-plan1.md, added 2026-11-05;
-Windmill replaces n8n for KB W1-W4 - n8n 3115 stays until teardown):
+Windmill replaced n8n for KB W1-W4 - n8n 3115 deleted 2026-11-05, port free):
 
 | service            | port  | binding  |
 |--------------------|-------|----------|
@@ -68,8 +67,9 @@ Windmill replaces n8n for KB W1-W4 - n8n 3115 stays until teardown):
 | notebook (JupyterLab+marimo) | 3118 | loopback (token file auth; tailnet door planned: svc:notebook) |
 
 Tailnet doors for the KB (tailscale serve; real FQDN never committed):
-ragflow -> `https://ai.<tailnet>.ts.net:8444`, n8n -> `:8445`,
-lightrag (`X-API-Key` auth enabled) -> `:8446`.
+ragflow -> `https://ai.<tailnet>.ts.net:8444`,
+lightrag (`X-API-Key` auth enabled) -> `:8446`. (The n8n door `:8445`
+was removed with the teardown.)
 
 Tailscale Services (subdomain doors; migration one service at a time per
 owner directive 2026-11-05, sketchlab first):

@@ -1,8 +1,8 @@
 # Windmill automation group (deployed reality, 2026-11-05)
 
 Plan: `~/tmp/windmill-jupyter-plan1.md` (P0). Replaces n8n for the KB's W1-W4
-agentic pipelines (owner directive 2026-11-05); n8n stays running until W1-W4
-run green here, then is deleted (plan P1.4).
+agentic pipelines (owner directive 2026-11-05); n8n was deleted 2026-11-05
+after W1-W4 ran green here (plan P1.4 teardown complete).
 
 ## Units (group `automation`, all dormant - no [Install])
 
@@ -76,9 +76,12 @@ exists in 1.862):
     POST /api/w/{ws}/jobs/run_wait_result/p/{path}  sync -> result
     POST /api/w/{ws}/jobs/run_wait_result/h/{hash}  version-pinned
 
-Auth: `Authorization: Bearer <token>` (agent-token) or `?token=`. The KB
-watcher's completion hook will move from N8N_WEBHOOK_URL to a Windmill
-schedule/webhook in plan P1 (rename pending, watcher env still points at n8n).
+Auth: `Authorization: Bearer *** (agent-token) or `?token=`. The KB
+watcher's completion hook uses WM_WEBHOOK_URL (+WM_API_TOKEN as ?token=;
+the N8N_WEBHOOK_URL fallback was removed with the n8n teardown). Fallback
+crons are Windmill schedules (6-field crontab, seconds first: W1 04:30,
+W2 05:30, W3 05:45, W4 06:00 UTC) materialized as windmill/f/kb/*.schedule.yaml
+via wmill sync.
 
 ## Tailnet door (planned, not yet created)
 
