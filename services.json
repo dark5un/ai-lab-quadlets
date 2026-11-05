@@ -465,7 +465,7 @@
       "image": "localhost/sketchlab:v0.6.2",
       "boot": true,
       "auth": "none",
-      "note": "same-origin /v1 AI proxy -> strata (key injected by nginx from config/sketchlab/service.env); boot tier per owner directive 2026-11-05; tailnet door: tailscale serve https :8447 -> 127.0.0.1:3102 (form: https://ai.<tailnet>.ts.net:8447, real FQDN never committed)"
+      "note": "same-origin /v1 AI proxy -> strata (key injected by nginx from config/sketchlab/service.env); boot tier per owner directive 2026-11-05; tailnet: Tailscale Service svc:sketchlab (https://sketchlab.<tailnet>.ts.net, node tagged tag:server; the old serve :8447 door retired)"
     },
     {
       "name": "hyperframes",

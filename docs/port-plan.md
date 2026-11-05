@@ -36,7 +36,7 @@ Web apps (31xx family, sequential):
 |--------------------|------|------|----------|
 | open-webui         | 3000 | 3100 | LAN      |
 | comfyui            | 8188 | 3101 | LAN      |
-| sketchlab          | 3004 | 3102 | LAN (tailnet door: tailscale serve https :8447; boot tier per owner directive 2026-11-05) |
+| sketchlab          | 3004 | 3102 | LAN (tailnet: Tailscale Service svc:sketchlab -> https://sketchlab.<tailnet>.ts.net; boot tier per owner directive 2026-11-05) |
 | hyperframes        | 3006 | 3103 | LAN      |
 | hermes (opt-in)    | 3003 | 3104 | LAN      |
 | deepseek-harness   | 3080 | 3105 | loopback (Network=host, dsh binds 127.0.0.1 itself) |
@@ -60,6 +60,24 @@ Knowledge base (KB group, plan ~/tmp/knowledge_base_plan1.md, added 2026-11-04):
 Tailnet doors for the KB (tailscale serve; real FQDN never committed):
 ragflow -> `https://ai.<tailnet>.ts.net:8444`, n8n -> `:8445`,
 lightrag (`X-API-Key` auth enabled) -> `:8446`.
+
+Tailscale Services (subdomain doors; migration one service at a time per
+owner directive 2026-11-05, sketchlab first):
+`svc:sketchlab` -> `https://sketchlab.<tailnet>.ts.net` (port 443 per
+service VIP; no port suffix). Setup verified live:
+1. node must be a TAGGED device: `tailscale up --advertise-tags=tag:server
+   --hostname=ai` + policy `"tagOwners": {"tag:server": ["autogroup:owner"]}`
+   (browser login once; existing per-node serve doors keep working)
+2. console Services page -> Define Service (name `sketchlab`, port 443)
+3. policy auto-approver: `"autoApprovers": {"services": {"svc:sketchlab":
+   ["tag:server"]}}`
+4. host side: `tailscale serve --service=svc:sketchlab --https=443
+   http://127.0.0.1:3102`
+Known bug (tailscale/tailscale#18821, open Feb 2026): after approval the
+daemon may keep saying "approval required" until `tailscale serve clear
+svc:<name>` + a few seconds + re-advertise. Verify via
+`tailscale status --json` Self.CapMap."service-host" (shows the VIP).
+The old serve-port door for sketchlab (:8447) is retired.
 
 Monitoring (added 2026-10-08, plan ~/Documents/plans/ai-lab-monitoring-plan.md):
 
