@@ -36,7 +36,7 @@ Web apps (31xx family, sequential):
 |--------------------|------|------|----------|
 | open-webui         | 3000 | 3100 | LAN      |
 | comfyui            | 8188 | 3101 | LAN      |
-| sketchlab          | 3004 | 3102 | LAN      |
+| sketchlab          | 3004 | 3102 | LAN (tailnet door: tailscale serve https :8447; boot tier per owner directive 2026-11-05) |
 | hyperframes        | 3006 | 3103 | LAN      |
 | hermes (opt-in)    | 3003 | 3104 | LAN      |
 | deepseek-harness   | 3080 | 3105 | loopback (Network=host, dsh binds 127.0.0.1 itself) |
