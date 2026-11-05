@@ -275,9 +275,11 @@ install -m 644 "$ROOT/services/kb-watcher.timer" "$HOME/.config/systemd/user/"
 systemctl --user enable --now kb-watcher.timer >/dev/null 2>&1 || true
 echo "  ✓ kb-watcher.timer (nightly ~03:30, wakes the KB group on demand)"
 # Boot tier (plan D1): monitoring units except grafana enable at boot, plus
-# the default strata variant (strata-5090-1m), plus the files tier (dufs,
-# syncthing: no GPU, must not gap while the owner is away at the Mac).
-for u in prometheus node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit strata-5090-1m dufs syncthing; do
+# the files tier (dufs, syncthing: no GPU, must not gap while the owner is
+# away at the Mac), plus sketchlab (owner directive 2026-11-05: diagramming
+# SPA must always be available; CPU-only, proxies to strata per request).
+# The one GPU exception: the default strata variant (strata-5090-1m).
+for u in prometheus node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit strata-5090-1m dufs syncthing sketchlab; do
     systemctl --user enable "$u.service" >/dev/null 2>&1 || true
 done
 systemctl --user daemon-reload
