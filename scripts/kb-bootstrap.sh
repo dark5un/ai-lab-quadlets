@@ -21,12 +21,12 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
 CONF="${AI_LAB_CONFIG_DIR:-${HOME}/.config/containers/config}"
 B="http://127.0.0.1:3114"
-SK_KEY="$(sed -n 's/^API_KEY=//p' "$CONF/strata/service.env" | head -1)"
 EMB_KEY="$(head -1 "$CONF/llama-cpp/keys.txt" | tr -d ' \n')"
-LLM_ID="qwen3.8-flash-next-iq3_s"
+SK_KEY="$EMB_KEY"   # KB LLM slot: llama-cpp-4070ti router (shared keys.txt key)
+LLM_ID="gemma-4-12b-it-qat-q4_0"   # router model id = card subdir name (hf-download)
 EMB_ID="bge-m3"
 
-[ -n "$SK_KEY" ] || { echo "kb-bootstrap: strata API_KEY missing" >&2; exit 1; }
+[ -n "$SK_KEY" ] || { echo "kb-bootstrap: llama-cpp shared key missing" >&2; exit 1; }
 for s in embeddings; do
     systemctl --user is-active --quiet "$s.service" || systemctl --user start "$s.service"
 done
@@ -80,21 +80,21 @@ fi
 echo "4. provider + instances + defaults"
 curl -s -X PUT "$B/api/v1/providers" -H "Authorization: Bearer $PAT" -H 'Content-Type: application/json' \
     -d '{"provider_name":"OpenAI-API-Compatible"}' >/dev/null
-cat > "$T/strata.json" <<EOF
-{"instance_name":"strata","base_url":"http://systemd-strata:8080/v1","api_key":"$SK_KEY",
- "model_info":[{"model_name":"$LLM_ID","model_type":["chat"],"max_tokens":1048576}]}
+cat > "$T/llama.json" <<EOF
+{"instance_name":"llama4070ti","base_url":"http://systemd-llama-cpp-4070ti:8080/v1","api_key":"$SK_KEY",
+ "model_info":[{"model_name":"$LLM_ID","model_type":["chat"],"max_tokens":262144}]}
 EOF
 cat > "$T/emb.json" <<EOF
 {"instance_name":"embeddings","base_url":"http://systemd-embeddings:8080/v1","api_key":"$EMB_KEY",
  "model_info":[{"model_name":"$EMB_ID","model_type":["embedding"],"max_tokens":8192}]}
 EOF
-for spec in strata emb; do
+for spec in llama emb; do
     out=$(curl -s -X POST "$B/api/v1/providers/OpenAI-API-Compatible/instances" \
         -H "Authorization: Bearer $PAT" -H 'Content-Type: application/json' -d @"$T/$spec.json")
     [[ "$out" == *'"code":0'* || "$out" == *"already exists"* ]] && echo "  instance $spec ok" || { echo "  ! $out" >&2; exit 1; }
 done
 for t in chat embedding; do
-    if [ "$t" = chat ]; then body="{\"model_type\":\"chat\",\"model_provider\":\"OpenAI-API-Compatible\",\"model_instance\":\"strata\",\"model_name\":\"$LLM_ID\"}";
+    if [ "$t" = chat ]; then body="{\"model_type\":\"chat\",\"model_provider\":\"OpenAI-API-Compatible\",\"model_instance\":\"llama4070ti\",\"model_name\":\"$LLM_ID\"}";
     else body="{\"model_type\":\"embedding\",\"model_provider\":\"OpenAI-API-Compatible\",\"model_instance\":\"embeddings\",\"model_name\":\"$EMB_ID\"}"; fi
     curl -s -X PATCH "$B/api/v1/models/default" -H "Authorization: Bearer $PAT" -H 'Content-Type: application/json' -d "$body" >/dev/null
 done

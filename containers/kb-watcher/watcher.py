@@ -37,9 +37,9 @@ def env(k: str, d: str = "") -> str:
 RAGFLOW_URL = env("RAGFLOW_BASE_URL", "http://systemd-ragflow:9380").rstrip("/")
 RAGFLOW_KEY = env("RAGFLOW_API_KEY")
 LIGHTRAG_URL = env("LIGHTRAG_BASE_URL", "http://systemd-lightrag:9621").rstrip("/")
-STRATA_URL = env("STRATA_BASE_URL", "http://systemd-strata:8080/v1").rstrip("/")
-STRATA_KEY = env("STRATA_API_KEY")
-STRATA_MODEL = env("STRATA_MODEL", "qwen3.8-flash-next-iq3_s")
+STRATA_URL = env("KB_LLM_BASE_URL", env("STRATA_BASE_URL", "http://systemd-strata:8080/v1")).rstrip("/")
+STRATA_KEY = env("KB_LLM_API_KEY", env("STRATA_API_KEY"))
+STRATA_MODEL = env("KB_LLM_MODEL", env("STRATA_MODEL", "qwen3.8-flash-next-iq3_s"))
 ROOTS = [Path(p) for p in (env("CORPUS_ROOT", "/home/px/workspace"),
                            env("CORPUS_ROOT_2", "/home/px/Documents")) if p]
 KB = Path(env("KB_STATE_DIR", "/home/px/workspace/github.com/dark5un/ai-lab-quadlets/kb"))

@@ -204,10 +204,12 @@ if want "$dst"; then
 else
     echo "  kept    $dst"
 fi
-# Empty API-key lines are filled from the live strata/llama-cpp secrets
+# Empty API-key lines are filled from the live llama-cpp/strata secrets
 # (same pattern as the vscode STRATA_API_KEY copy; never prints values).
-if [ -f "$CONF/strata/service.env" ] && ! grep -q '^LLM_BINDING_API_KEY=..' "$dst"; then
-    sk=$(sed -n 's/^API_KEY=//p' "$CONF/strata/service.env" | head -1)
+# KB LLM slot = llama-cpp-4070ti router (Gemma 4): LLM_BINDING_API_KEY takes
+# the shared llama-cpp key, not strata's.
+if [ -f "$CONF/llama-cpp/keys.txt" ] && ! grep -q '^LLM_BINDING_API_KEY=..' "$dst"; then
+    sk=$(head -1 "$CONF/llama-cpp/keys.txt" | tr -d ' \n')
     [ -n "$sk" ] && awk -v k="$sk" '/^LLM_BINDING_API_KEY=/{print "LLM_BINDING_API_KEY=" k; next} 1' "$dst" > "$dst.tmp" && mv "$dst.tmp" "$dst"
 fi
 if [ -f "$CONF/llama-cpp/keys.txt" ] && ! grep -q '^EMBEDDING_BINDING_API_KEY=..' "$dst"; then
@@ -238,6 +240,11 @@ fi
 if [ -f "$CONF/strata/service.env" ] && ! grep -q '^STRATA_API_KEY=..' "$dst"; then
     sk=$(sed -n 's/^API_KEY=//p' "$CONF/strata/service.env" | head -1)
     [ -n "$sk" ] && awk -v k="$sk" '/^STRATA_API_KEY=/{print "STRATA_API_KEY=" k; next} 1' "$dst" > "$dst.tmp" && mv "$dst.tmp" "$dst"
+fi
+# KB_LLM_API_KEY: shared llama-cpp key (router-backed KB LLM slot, 2026-11-05)
+if [ -f "$CONF/llama-cpp/keys.txt" ] && ! grep -q '^KB_LLM_API_KEY=..' "$dst"; then
+    lk=$(head -1 "$CONF/llama-cpp/keys.txt" | tr -d ' \n')
+    [ -n "$lk" ] && awk -v k="$lk" '/^KB_LLM_API_KEY=/{print "KB_LLM_API_KEY=" k; next} 1' "$dst" > "$dst.tmp" && mv "$dst.tmp" "$dst"
 fi
 chmod 600 "$dst"
 

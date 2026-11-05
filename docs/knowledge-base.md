@@ -71,6 +71,20 @@ in this repo under `kb/` (gitignored - public repo, corpus-derived).
 - Watcher corpus budget: `INGEST_LIMIT=3000` files/run (the scan found
   ~83k files under `~/workspace`); first passes drain the backlog gradually.
 
+## Model wiring (live 2026-11-05)
+
+KB LLM roles (RAGFlow chat/assist, LightRAG extract/keyword/query, n8n W1
+classify, watcher classify) run on the **llama-cpp-4070ti router** with the
+official **Gemma 4 12B-it QAT q4_0** (`google/gemma-4-12B-it-qat-q4_0-gguf`,
+Apache-2.0, router model id = card subdir `gemma-4-12b-it-qat-q4_0`,
+ctx 262144 via refresh-presets.py — the script now understands gemma4's
+per-layer hybrid attention arrays). Owner directive 2026-11-05: KB must not
+occupy strata. Embeddings stay bge-m3/systemd-embeddings (1024d frozen).
+Auth: shared llama.cpp key (config/llama-cpp/keys.txt), mirrored into
+lightrag + kb-watcher envs by generate-secrets.sh and kept current by
+install.sh managed lines. Note: starting llama-cpp-4070ti takes the card
+from strata-coder (arbiter rule).
+
 ## RAGFlow 1.0 API quirks (all verified live; codified in
 ## `containers/kb-watcher/watcher.py` and `scripts/kb-bootstrap.sh`)
 

@@ -99,32 +99,56 @@ class ModelInfo:
         self.ft = g.meta.get("general.file_type")
         a = self.arch + "."
         self.n_layer = int(g.meta.get(f"{a}block_count", 0) or 0)
-        self.n_head_kv = int(
-            g.meta.get(f"{a}attention.head_count_kv", 0)
-            or g.meta.get(f"{a}attention.head_count", 0)
-            or 0
-        )
-        self.hd_k = int(
-            g.meta.get(f"{a}attention.key_length", 0)
-            or g.meta.get(f"{a}attention.head_count", 0)
-            or 0
-        )
+        hc = (g.meta.get(f"{a}attention.head_count_kv")
+              or g.meta.get(f"{a}attention.head_count") or 0)
+        pat = g.meta.get(f"{a}attention.sliding_window_pattern", 0)
+        # Hybrid per-layer models (e.g. gemma4): head_count_kv and the
+        # sliding-window pattern are per-layer ARRAYS, and sliding layers
+        # use their own key/value dims (key_length_swa/value_length_swa).
+        self.hybrid = None
+        if isinstance(hc, list) and isinstance(pat, list):
+            k_full = int(g.meta.get(f"{a}attention.key_length", 0) or 0)
+            v_full = int(g.meta.get(f"{a}attention.value_length", 0) or k_full)
+            k_swa = int(g.meta.get(f"{a}attention.key_length_swa", 0) or k_full)
+            v_swa = int(g.meta.get(f"{a}attention.value_length_swa", 0) or v_full)
+            self.hybrid = [(int(n), bool(s), k_full, v_full, k_swa, v_swa)
+                           for n, s in zip(hc, pat)]
+            self.n_head_kv = max(int(x) for x in hc) or 0
+            self.hd_k = k_full
+        else:
+            self.n_head_kv = int(hc or 0)
+            self.hd_k = int(
+                g.meta.get(f"{a}attention.key_length", 0)
+                or g.meta.get(f"{a}attention.head_count", 0)
+                or 0
+            )
         self.n_ctx_train = int(
             g.meta.get(f"{a}context_length", 0) or g.meta.get(f"{a}ctx_length", 0) or 0
         )
         self.interval = int(g.meta.get(f"{a}full_attention_interval", 0) or 0)
-        self.sw_pattern = int(
-            g.meta.get(f"{a}attention.sliding_window_pattern", 0) or 0
-        )
+        swp_raw = g.meta.get(f"{a}attention.sliding_window_pattern", 0)
+        self.sw_pattern = 0 if isinstance(swp_raw, list) else int(swp_raw or 0)
         self.sw_win = int(g.meta.get(f"{a}attention.sliding_window", 0) or 0)
         crit = self.interval or self.sw_pattern or 1
         self.linear_layers = (self.n_layer // crit) if crit > 1 else self.n_layer
+        if self.hybrid:
+            self.linear_layers = sum(1 for _, s, *_ in self.hybrid if not s)
         self.bytes = os.path.getsize(path)
 
     def atom(self, cache):
         return 2 * self.n_head_kv * self.hd_k * CACHE_BPE[cache]
 
     def max_ctx(self, cache, vram_mib, reserve_mib):
+        bpe = CACHE_BPE[cache]
+        if self.hybrid:
+            lin = sum(n * (kf + vf) for n, s, kf, vf, ks, vs in self.hybrid
+                      if not s) * bpe
+            swa = 0
+            if self.sw_win > 0:
+                swa = sum(n * (ks + vs) for n, s, kf, vf, ks, vs in self.hybrid
+                          if s) * bpe * self.sw_win
+            avail = (vram_mib - reserve_mib) * 1024 * 1024 - self.bytes - swa
+            return max(0, int(avail // lin)) if lin > 0 else 0
         atom = self.atom(cache)
         linear_bpt = atom * self.linear_layers
         swa = 0

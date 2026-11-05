@@ -115,7 +115,7 @@ if [ "$APPLY" = 1 ]; then
     for svc in open-webui sketchlab deepseek-harness strata-5090 strata-4070ti strata-both \
                llama-cpp-5090 llama-cpp-4070ti llama-cpp-both \
                ragflow-elasticsearch ragflow-mysql ragflow-minio ragflow-kvrocks \
-               ragflow kb-postgres lightrag n8n; do
+               ragflow kb-postgres lightrag n8n kb-analysis; do
         systemctl --user is-active "${svc}.service" &>/dev/null || continue
         systemctl --user restart "${svc}.service" && echo "  ✓ restarted $svc"
     done
