@@ -12,7 +12,8 @@ COPY analysis.py /app/analysis.py
 RUN chmod +x /app/watcher.py /app/analysis.py
 
 # Mounted by the quadlet at identical host paths:
-#   /home/px/workspace            (ro corpus root)
-#   /home/px/Documents            (ro corpus root, may be empty)
+#   /home/px/KB                   (ro corpus root - dedicated folder)
 #   .../ai-lab-quadlets/kb        (rw manifest + reports + state)
+# (No workspace/Documents mounts: owner directive 2026-11-05 - only the
+#  dedicated corpus folder is corpus.)
 ENTRYPOINT ["/app/watcher.py"]

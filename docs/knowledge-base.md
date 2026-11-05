@@ -60,16 +60,22 @@ in this repo under `kb/` (gitignored - public repo, corpus-derived).
   workflows are triggered through published webhooks
   (`POST http://systemd-n8n:5678/webhook/kb-w1..kb-w4` from in-network,
   127.0.0.1:3115/webhook/... from the host) plus their crons.
-- The LLM judging step of W1 runs as n8n HTTP nodes against strata (strict
-  JSON + 3 retries); the deterministic side (pair queue, verdict storage,
+- The LLM judging step of W1 runs as n8n HTTP nodes against the
+  llama-cpp-4070ti router (strict JSON + 3 retries); the deterministic side (pair queue, verdict storage,
   RAGFlow tagging, report rendering) is the `kb-analysis` service in the
   watcher image. Plan gate holds: documents are never auto-modified, only
   tagged (`discrepancy`, `gap-adjacent`, `stale-suspect` via meta_fields
   `tags`), and reports carry chunk provenance.
 - W4 drift / W2 gaps also render from kb-analysis (`kb/reports/drift.md`,
   `gaps.md`, `stale.md`, `discrepancies.md`).
-- Watcher corpus budget: `INGEST_LIMIT=3000` files/run (the scan found
-  ~83k files under `~/workspace`); first passes drain the backlog gradually.
+- Corpus scope (owner directive 2026-11-05): only the dedicated folder in
+  `CORPUS_ROOT` is corpus - `~/KB` for now (configurable env + quadlet mount,
+  so it can move to a permanent location later). No pre-existing server files
+  (`~/workspace`, `~/Documents`) are scanned; the earlier ~83k-file backlog
+  decision was retired and all previously-ingested server files are
+  tombstoned. RAGFlow v1.0-rc3 cannot ingest `.rs/.cc/.hpp/.yaml/.toml`
+  uploads ("type not supported") - the watcher allowlist matches exactly
+  what RAGFlow accepts (live-probed 2026-11-05).
 
 ## Model wiring (live 2026-11-05)
 

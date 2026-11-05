@@ -1,11 +1,12 @@
 # corpus-watcher (plan section 4): nightly one-shot ingestion pass over
-# ~/workspace + ~/Documents. sha256 manifest diff -> push added/changed docs
+# the dedicated corpus folder (CORPUS_ROOT env; ~/KB for now). sha256 manifest diff -> push added/changed docs
 # to RAGFlow (+ mirror into LightRAG), tombstone deletions, write reports
 # under <repo>/kb/. Started by kb-watcher.timer (nightly) or manually via
 # `systemctl --user start kb-watcher.service`.
 # Wants= wakes the whole KB group on demand; the deps then stay up.
-# Corpus roots mount at their HOST paths (same-path rule) read-only; the kb/
-# state dir gets its own rw mount nested on top of the ro workspace mount.
+# Corpus root mounts at its HOST path (same-path rule) read-only; the kb/
+# state dir gets its own rw mount (owner directive 2026-11-05: only the
+# dedicated corpus folder is scanned - no pre-existing server files).
 
 [Unit]
 Description=Knowledge-base corpus watcher (one-shot ingestion pass)
@@ -24,8 +25,7 @@ Image=localhost/kb-watcher:latest
 Network=ai.network
 UserNS=keep-id
 EnvironmentFile=%h/.config/containers/config/kb-watcher/service.env
-Volume=%h/workspace:/home/px/workspace:ro
-Volume=%h/Documents:/home/px/Documents:ro
+Volume=%h/KB:/home/px/KB:ro
 Volume=%h/workspace/github.com/dark5un/ai-lab-quadlets/kb:/home/px/workspace/github.com/dark5un/ai-lab-quadlets/kb
 
 [Service]

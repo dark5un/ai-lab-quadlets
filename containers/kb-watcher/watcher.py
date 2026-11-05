@@ -40,8 +40,12 @@ LIGHTRAG_URL = env("LIGHTRAG_BASE_URL", "http://systemd-lightrag:9621").rstrip("
 STRATA_URL = env("KB_LLM_BASE_URL", env("STRATA_BASE_URL", "http://systemd-strata:8080/v1")).rstrip("/")
 STRATA_KEY = env("KB_LLM_API_KEY", env("STRATA_API_KEY"))
 STRATA_MODEL = env("KB_LLM_MODEL", env("STRATA_MODEL", "qwen3.8-flash-next-iq3_s"))
-ROOTS = [Path(p) for p in (env("CORPUS_ROOT", "/home/px/workspace"),
-                           env("CORPUS_ROOT_2", "/home/px/Documents")) if p]
+# owner directive 2026-11-05: the corpus is a dedicated, configurable folder
+# (~/KB for now) - no pre-existing server files are corpus. Point CORPUS_ROOT
+# at the permanent location when one is chosen; CORPUS_ROOT_2 stays available
+# as an optional additional root (empty = not scanned).
+ROOTS = [Path(p) for p in (env("CORPUS_ROOT", "/home/px/KB"),
+                           env("CORPUS_ROOT_2", "")) if p]
 KB = Path(env("KB_STATE_DIR", "/home/px/workspace/github.com/dark5un/ai-lab-quadlets/kb"))
 MANIFEST_PATH = KB / "manifest.json"
 ERRORS_PATH = KB / "watcher-errors.json"
@@ -54,8 +58,14 @@ MAX_ATTEMPTS = 3                       # per-doc failures before recording
 # allowlist by extension (plan sec.4)
 DOC_EXT = {".pdf", ".docx", ".xlsx", ".pptx", ".eml", ".png", ".jpg", ".jpeg"}
 TEXT_EXT = {".md", ".txt"}
-CODE_EXT = {".py", ".go", ".rs", ".ts", ".js", ".java", ".c", ".cc", ".cpp",
-            ".h", ".hpp", ".sh", ".yaml", ".yml", ".json", ".toml", ".html"}
+CODE_EXT = {".py", ".go", ".ts", ".js", ".java", ".c", ".cpp",
+            ".h", ".sh", ".yml", ".json", ".html"}
+# RAGFlow v1.0-rc3 rejects upload of .rs/.cc/.hpp/.yaml/.toml outright
+# ("This type of file has not been supported yet!") - probed live 2026-11-05;
+# .yml IS accepted but .yaml is not. Keeping them here only burns failed
+# upload attempts each run (upload failures never enter the manifest, so
+# they would retry forever). Consequence: Rust/config-source files are not
+# in the KB corpus until RAGFlow adds these types - known limitation.
 ALLOWED = DOC_EXT | TEXT_EXT | CODE_EXT
 
 # exclude: dir names anywhere; dot-dirs generally (plan: "dot-dirs generally")
@@ -307,8 +317,10 @@ def rf_delete(ds_name: str, doc_ids: list[str], ds: dict[str, str]) -> None:
     """DELETE /api/v1/datasets/{dataset_id}/documents (v0.20+ contract)."""
     if not doc_ids:
         return
-    r = httpx.delete(f"{RAGFLOW_URL}/api/v1/datasets/{ds[ds_name]}/documents",
-                     headers=rf_headers(), json={"ids": doc_ids}, timeout=60)
+    # httpx.delete() helper takes no json body - DELETE with payload must go
+    # through request() (RAGFlow v1.0 contract: {"ids": [...]} body).
+    r = httpx.request("DELETE", f"{RAGFLOW_URL}/api/v1/datasets/{ds[ds_name]}/documents",
+                      headers=rf_headers(), json={"ids": doc_ids}, timeout=60)
     if r.status_code >= 400:
         raise RuntimeError(f"delete failed: {r.status_code} {r.text[:200]}")
 
@@ -330,21 +342,34 @@ def lr_insert(text: str, file_source: str) -> str | None:
 
 
 def lr_delete_by_source(file_source: str) -> int:
-    """LightRAG generates doc ids from the content hash; the stable join key
-    is file_path (== our file_source). Scan the paginated listing and delete
-    every doc for this source (DELETE /documents/delete_document)."""
+    """LightRAG generates doc ids from the content hash and keys its 409
+    dedup on the BASENAME of file_source (the file_path column stores it
+    normalized), so match on basename - a full-path compare silently
+    deletes nothing. Deletion is async (deletion_started); poll until the
+    source is gone, else the immediate re-insert races the 409."""
+    target = Path(file_source).name
+
+    def matching_docs():
+        docs, page = [], 1
+        while True:
+            r = httpx.post(f"{LIGHTRAG_URL}/documents/paginated", headers=lr_headers(),
+                           json={"page": page, "page_size": 200,
+                                 "sort_field": "file_path",
+                                 "sort_direction": "asc"}, timeout=60)
+            if r.status_code >= 400:
+                raise RuntimeError(f"lightrag paginated: {r.status_code} {r.text[:200]}")
+            d = r.json()
+            docs += [doc for doc in d.get("documents", [])
+                     if Path(str(doc.get("file_path") or "")).name == target]
+            if not (d.get("pagination") or {}).get("has_next"):
+                break
+            page += 1
+        return docs
+
     deleted = 0
-    page = 1
-    while True:
-        r = httpx.post(f"{LIGHTRAG_URL}/documents/paginated", headers=lr_headers(),
-                       json={"page": page, "page_size": 200,
-                             "sort_field": "file_path",
-                             "sort_direction": "asc"}, timeout=60)
-        if r.status_code >= 400:
-            raise RuntimeError(f"lightrag paginated: {r.status_code} {r.text[:200]}")
-        d = r.json()
-        ids = [doc["id"] for doc in d.get("documents", [])
-               if doc.get("file_path") == file_source]
+    docs = matching_docs()
+    if docs:
+        ids = [doc["id"] for doc in docs]
         for i in range(0, len(ids), 50):
             dr = httpx.request("DELETE", f"{LIGHTRAG_URL}/documents/delete_document",
                                headers=lr_headers(),
@@ -352,9 +377,12 @@ def lr_delete_by_source(file_source: str) -> int:
             if dr.status_code >= 400:
                 raise RuntimeError(f"lightrag delete: {dr.status_code} {dr.text[:200]}")
             deleted += len(ids[i:i + 50])
-        if not (d.get("pagination") or {}).get("has_next"):
-            break
-        page += 1
+        # wait for the async worker to actually drop the records
+        deadline = time.monotonic() + 120
+        while time.monotonic() < deadline:
+            if not matching_docs():
+                break
+            time.sleep(3)
     return deleted
 
 
