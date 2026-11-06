@@ -9,7 +9,7 @@ box; owners = Panos + agents; team growth path deferred (plan P3).
 |---|---|
 | unit | `notebook.service` (group `automation`, dormant) |
 | image | built: `containers/notebook/Containerfile` = quay.io/jupyter/scipy-notebook:lab-4.6.4 + `marimo>=0.25` + `marimo-jupyter-extension` + openai (base tag+digest verified live 2026-11-05) |
-| port | 127.0.0.1:3118 -> 8888; tailnet door planned: svc:notebook |
+| port | 127.0.0.1:3118 -> 8888; tailnet door LIVE: svc:notebook -> https://notebook.<tailnet>.ts.net (tailscale serve --service=svc:notebook --https=443 http://127.0.0.1:3118; verified HTTPS 200; hit tailscale#18821 at setup - clear+re-advertise remedy, see docs/windmill.md) |
 | auth | token FILE config/notebook/jupyter-token (600, generate-secrets owns it; rotate regenerates) pinned via config/notebook/jupyter_server_config.py - docker-stacks' start-notebook.py MINTS ITS OWN token and shadows --ServerApp.token_file (verified live) |
 | notebooks | `~/workspace/notebooks` - OWN git repo, mounted at the SAME host path (agents edit files directly; Syncthing replicates ~/workspace for free) |
 | state | named volume `notebook-state` (jupyter config/runtime under /home/jovyan/.jupyter) |

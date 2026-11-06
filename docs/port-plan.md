@@ -61,10 +61,10 @@ Windmill replaced n8n for KB W1-W4 - n8n 3115 deleted 2026-11-05, port free):
 
 | service            | port  | binding  |
 |--------------------|-------|----------|
-| windmill-server (UI+API) | 3117 | loopback (tailnet door planned: svc:windmill) |
+| windmill-server (UI+API) | 3117 | loopback (tailnet door LIVE: svc:windmill -> https://windmill.<tailnet>.ts.net) |
 | windmill-worker    | -     | none (no published port) |
 | windmill-postgres  | -     | none (systemd-windmill-postgres:5432) |
-| notebook (JupyterLab+marimo) | 3118 | loopback (token file auth; tailnet door planned: svc:notebook) |
+| notebook (JupyterLab+marimo) | 3118 | loopback (token file auth; tailnet door LIVE: svc:notebook -> https://notebook.<tailnet>.ts.net) |
 
 Tailnet doors for the KB (tailscale serve; real FQDN never committed):
 ragflow -> `https://ai.<tailnet>.ts.net:8444`,
@@ -72,7 +72,8 @@ lightrag (`X-API-Key` auth enabled) -> `:8446`. (The n8n door `:8445`
 was removed with the teardown.)
 
 Tailscale Services (subdomain doors; migration one service at a time per
-owner directive 2026-11-05, sketchlab first):
+owner directive 2026-11-05, sketchlab first; svc:windmill + svc:notebook
+added 2026-11-05):
 `svc:sketchlab` -> `https://sketchlab.<tailnet>.ts.net` (port 443 per
 service VIP; no port suffix). Setup verified live:
 1. node must be a TAGGED device: `tailscale up --advertise-tags=tag:server

@@ -83,11 +83,16 @@ crons are Windmill schedules (6-field crontab, seconds first: W1 04:30,
 W2 05:30, W3 05:45, W4 06:00 UTC) materialized as windmill/f/kb/*.schedule.yaml
 via wmill sync.
 
-## Tailnet door (planned, not yet created)
+## Tailnet door (LIVE 2026-11-05)
 
-Precedent svc:sketchlab: Tailscale Service `svc:windmill` ->
-`https://windmill.<tailnet>.ts.net` (:443, tagged node, console "Define
-Service" first). Until then loopback-only: http://127.0.0.1:3117.
+`svc:windmill` -> `https://windmill.<tailnet>.ts.net` (:443, tag:server
+node, console "Define Service" done by owner). Host side:
+`tailscale serve --service=svc:windmill --https=443 http://127.0.0.1:3117`.
+Verified: HTTPS 200 from the node. Loopback http://127.0.0.1:3117 still works.
+Login: panos@ai.local, password in `config/windmill/admin-password.txt` (600).
+Note: `svc:notebook` hit tailscale/tailscale#18821 (stuck "approval required"
+after console setup) — `tailscale serve clear svc:notebook` + re-advertise
+fixed it; same remedy applies here if a door goes dark.
 
 ## Gotchas (inherited from the n8n lessons, checked against Windmill)
 
