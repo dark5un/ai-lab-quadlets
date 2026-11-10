@@ -792,6 +792,21 @@
       "note": "whole-home WebDAV + browser UI for the Mac; tailnet-only: loopback bind + tailscale serve https://ai.<tailnet>.ts.net (LE cert, 443 -> 127.0.0.1:3112); old ufw allow 3112/tcp deleted; account px, sha-512 hash in config/dufs/config.yaml, plaintext in config/dufs/service.env (DAV_PASSWORD); boots at boot (files tier)"
     },
     {
+      "name": "s3-webdav",
+      "unit": "s3-webdav.service",
+      "container": "systemd-s3-webdav",
+      "host_port": 3124,
+      "container_port": 8080,
+      "bind": "127.0.0.1",
+      "health": "/",
+      "tier": "files",
+      "image": "docker.io/rclone/rclone:latest",
+      "boot": true,
+      "auth": "basic",
+      "image_digest": "docker.io/rclone/rclone@sha256:075cf0e4e0f623996646cfb8a434c71cb4fcfe75bbbe27ccbb296ca04a7cd260",
+      "note": "Garage buckets as WebDAV folders (rclone serve webdav over the garage: S3 remote); tailnet-only: loopback bind + tailscale serve https://ai.<tailnet>.ts.net:8449 -> 127.0.0.1:3124; account webdav, apr1 hash in config/s3-webdav/htpasswd, plaintext mirror in service.env; S3 creds mirrored from s3/service.env; boots at boot (files tier)"
+    },
+    {
       "name": "syncthing",
       "unit": "syncthing.service",
       "container": "systemd-syncthing",

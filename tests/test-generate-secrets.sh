@@ -61,6 +61,18 @@ grep -Eq '^[0-9a-f]{32}$' <<<"$v1" || fail "vscode token is not one 32-hex strin
 bash "$ROOT/scripts/generate-secrets.sh" > /dev/null
 [ "$(sed -n 's/^VSCODE_CONNECTION_TOKEN=//p' "$vc" | tail -1)" = "$v1" ] || fail "vscode token changed on re-run"
 
+# s3-webdav: apr1 htpasswd + mirrored Garage keys, no leftover placeholder.
+swd="$AI_LAB_CONFIG_DIR/s3-webdav"
+[ "$(stat -c %a "$swd/htpasswd")" = 600 ] || fail "s3-webdav htpasswd not 600"
+[ "$(stat -c %a "$swd/service.env")" = 600 ] || fail "s3-webdav env not 600"
+grep -q 'change-me' "$swd/service.env" && fail "placeholder left in s3-webdav env"
+grep -qE '^webdav:\$(apr1|1)\$' "$swd/htpasswd" || fail "s3-webdav htpasswd not MD5-apr1"
+if [ -f "$AI_LAB_CONFIG_DIR/s3/service.env" ]; then
+    gk=$(sed -n 's/^GARAGE_KEY_ID=//p' "$AI_LAB_CONFIG_DIR/s3/service.env" | head -1)
+    wk=$(sed -n 's/^RCLONE_CONFIG_GARAGE_ACCESS_KEY_ID=//p' "$swd/service.env" | tail -1)
+    [ -n "$wk" ] && [ "$wk" = "$gk" ] || fail "s3-webdav does not mirror the Garage key"
+fi
+
 # KB group: ragflow shared env (5 distinct secrets, no leftover placeholder)
 # + the mysql.env mirror + kb-postgres/lightrag mirror.
 rf="$AI_LAB_CONFIG_DIR/ragflow/service.env"

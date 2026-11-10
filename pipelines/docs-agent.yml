@@ -55,7 +55,8 @@ jobs:
     trigger: true
   - get: tooling
   - task: read-summarize-write
-    timeout: 20m
+    timeout: 40m   # a batch of paper-cards (kb-papers) each costs an LLM
+                # summary + KB ingest wait; 20m was tight for 10 docs
     config:
       platform: linux
       image_resource:
@@ -76,6 +77,10 @@ jobs:
         STRATA_URL: http://systemd-strata:8080/v1
         STRATA_API_KEY: ((strata-key))
         STRATA_MODEL: auto
+        RAGFLOW_URL: http://systemd-ragflow:9380   # KB integration: pipeline
+        RAGFLOW_API_KEY: ((kb-ragflow-key))        # artifacts become searchable
+        LIGHTRAG_URL: http://systemd-lightrag:9621 # in the Knowledge Base
+        LIGHTRAG_API_KEY: ((kb-lightrag-key))
       run:
         path: bash
         args:
@@ -84,5 +89,5 @@ jobs:
           set -euo pipefail
           pip install --quiet boto3
           # tooling ships the agent; inbox holds the pending documents
-          cp tooling/agents/summarize_docs.py .
+          cp tooling/agents/summarize_docs.py tooling/agents/kb_ingest.py .
           python summarize_docs.py 2>&1 | tee reports/run.log

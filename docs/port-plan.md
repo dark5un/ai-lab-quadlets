@@ -42,6 +42,7 @@ Web apps (31xx family, sequential):
 | deepseek-harness   | 3080 | 3105 | loopback (Network=host, dsh binds 127.0.0.1 itself) |
 | docling-serve      | 5001 | 3108 | loopback (the docling MCP's remote backend) |
 | vscode             | -    | 3113 | loopback (tailnet door: tailscale serve https :8443; fallback ssh -L) |
+| s3-webdav          | 8080 | 3124 | loopback (tailnet door: tailscale serve https :8449; rclone serve webdav over Garage buckets — added 2026-11-10) |
 
 Knowledge base (KB group, plan ~/tmp/knowledge_base_plan1.md, added 2026-11-04):
 

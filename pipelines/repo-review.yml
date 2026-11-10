@@ -91,6 +91,10 @@ jobs:
         STRATA_URL: http://systemd-strata:8080/v1
         STRATA_API_KEY: ((strata-key))
         STRATA_MODEL: auto
+        RAGFLOW_URL: http://systemd-ragflow:9380   # KB integration: pipeline
+        RAGFLOW_API_KEY: ((kb-ragflow-key))        # artifacts become searchable
+        LIGHTRAG_URL: http://systemd-lightrag:9621 # in the Knowledge Base
+        LIGHTRAG_API_KEY: ((kb-lightrag-key))
       run:
         path: bash
         args:

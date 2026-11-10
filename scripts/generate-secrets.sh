@@ -12,6 +12,8 @@
 #   openviking/service.env       root API key (memory group)
 #   honcho/service.env           DB password + JWT secret (memory group)
 #   dufs/config.yaml + service.env  WebDAV px password (hashed + plaintext mirror)
+#   s3-webdav/htpasswd + service.env  Garage-buckets WebDAV account (apr1
+#                                hash + plaintext mirror) + mirrored GARAGE keys
 #   vscode/service.env           VSCODE_CONNECTION_TOKEN (serve-web)
 #   ragflow/service.env          doc-engine/metadata/object-store/cache
 #                                passwords + admin bootstrap password (KB group)
@@ -143,6 +145,37 @@ else
     echo "  kept    $dst"
 fi
 chmod 600 "$dst" "$CONF/dufs/service.env"
+
+# S3 WebDAV front (rclone serve webdav over Garage): apr1 htpasswd for the
+# webdav account + Garage key pair mirrored from s3/service.env (one-key
+# pattern, no separate bucket credentials). apr1 (openssl passwd -1) is the
+# hash format rclone's htpasswd parser accepts (verified live 2026-11-10;
+# dufs's sha-512-crypt is NOT).
+dst="$CONF/s3-webdav/htpasswd"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    dav_pass="$(openssl rand -hex 16)"
+    printf 'webdav:%s\n' "$(openssl passwd -1 "$dav_pass")" > "$dst"
+    # awk -v (not sed): keys/passwords may contain regex-special characters.
+    # s3/service.env is minted by pipeline-bootstrap.sh; when it does not
+    # exist yet (fresh sandbox install order) leave the mirrors empty —
+    # render-units/install re-runs the generator after the bootstrap.
+    gk=""; gs=""
+    if [ -f "$CONF/s3/service.env" ]; then
+        gk=$(sed -n 's/^GARAGE_KEY_ID=//p' "$CONF/s3/service.env" | head -1)
+        gs=$(sed -n 's/^GARAGE_SECRET=//p' "$CONF/s3/service.env" | head -1)
+    fi
+    awk -v pw="$dav_pass" -v gk="$gk" -v gs="$gs" \
+        '{ if ($0 == "S3_WEBDAV_PASSWORD=change-me-to-a-random-hex-string") print "S3_WEBDAV_PASSWORD=" pw;
+          else if ($0 == "RCLONE_CONFIG_GARAGE_ACCESS_KEY_ID=") print "RCLONE_CONFIG_GARAGE_ACCESS_KEY_ID=" gk;
+          else if ($0 == "RCLONE_CONFIG_GARAGE_SECRET_ACCESS_KEY=") print "RCLONE_CONFIG_GARAGE_SECRET_ACCESS_KEY=" gs;
+          else print }' \
+        "$ROOT/config/s3-webdav/service.env.example" > "$CONF/s3-webdav/service.env"
+    echo "  created $dst (user webdav; plaintext in s3-webdav/service.env, not printed)"
+else
+    echo "  kept    $dst"
+fi
+chmod 600 "$dst" "$CONF/s3-webdav/service.env"
 
 # VS Code Server (serve-web) connection token + strata BYOK key for the box.
 dst="$CONF/vscode/service.env"
