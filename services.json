@@ -1040,6 +1040,20 @@
       "auth": "token",
       "note": "Notebook server (JupyterLab + marimo-jupyter-extension, windmill-jupyter plan P2): CPU-only kernels, notebooks in ~/workspace/notebooks (own git repo, same-path mount), token file config/notebook/jupyter-token; VS Code boxes attach as existing Jupyter server; tailnet door planned svc:notebook; volume notebook-state.",
       "group": "automation"
+    },
+    {
+      "name": "ailab-api",
+      "unit": "ailab-api.service",
+      "container": "systemd-ailab-api",
+      "host_port": 3119,
+      "container_port": 3119,
+      "bind": "127.0.0.1",
+      "health": "/healthz",
+      "tier": "control",
+      "image": "localhost/ailab-api:latest",
+      "boot": true,
+      "auth": "bearer-token",
+      "note": "AI Lab control API, macOS menu-bar widget backend (mac-quadlet-widget plan P0): status/start/stop/toggle/restart + variant switches + arbiter dry-run plans, all delegating to scripts/ai-lab so gpu-arbiter.py is always in the loop. Network=host quadlet binding 127.0.0.1:3119; tailnet door https://ai.<tailnet>.ts.net:8448 (tailscale serve, LE cert); bearer token config/ailab-api/service.env; repo mounted ro + %t/bus session-bus socket for systemctl --user (private socket unusable across pidns). Boot tier (owner directive 2026-11-10: all functionality from the tailnet)."
     }
   ]
 }

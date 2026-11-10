@@ -27,6 +27,7 @@
 #                                SUPERADMIN_SECRET (bootstrap bearer token)
 #   notebook/jupyter-token       notebook server auth token (FILE)
 #   notebook/service.env         platform URLs; key copies filled by install.sh
+#   ailab-api/service.env        AILAB_API_TOKEN (tailnet control API bearer)
 #   hermes-service/service.env   only with --with-hermes (opt-in container)
 # Strata's API key is created by install-strata.sh.
 set -euo pipefail
@@ -294,6 +295,18 @@ mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
 if want "$dst"; then
     cp "$ROOT/config/notebook/service.env.example" "$dst"
     echo "  created $dst (key copies filled by install.sh)"
+else
+    echo "  kept    $dst"
+fi
+chmod 600 "$dst"
+
+# Control API (ailab-api): bearer token for the tailnet door.
+dst="$CONF/ailab-api/service.env"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    sed "s/change-me-to-a-random-hex-string/$(rand_hex 32)/" \
+        "$ROOT/config/ailab-api/service.env.example" > "$dst"
+    echo "  created $dst"
 else
     echo "  kept    $dst"
 fi

@@ -5,7 +5,7 @@
 #   scripts/build-images.sh [--rebuild] [NAME...]
 #
 # NAME: open-webui llama-cpp comfyui rizzo sketchlab hyperframes
-#       deepseek-harness hermes memory vscode kb automation
+#       deepseek-harness hermes memory vscode kb automation ailab-api
 #       (default: the first six + files + vscode + kb + automation)
 # Pulled images (open-webui, llama-cpp, hermes) are pulled only when missing;
 # a pulled digest that differs from the registry's image_digest is reported.
@@ -19,7 +19,7 @@ REG="$ROOT/services.json"
 CONF="${HOME}/.config/containers/config"
 SKETCHLAB_REPO="${SKETCHLAB_REPO:-${HOME}/workspace/github.com/dark5un/sketchlab.app}"
 HYPERFRAMES_REPO="${HYPERFRAMES_REPO:-${HOME}/workspace/github.com/heygen-com/hyperframes}"
-DEFAULT=(open-webui llama-cpp comfyui rizzo sketchlab hyperframes dufs syncthing vscode kb automation)
+DEFAULT=(open-webui llama-cpp comfyui rizzo sketchlab hyperframes dufs syncthing vscode kb automation ailab-api)
 
 REBUILD=0 NAMES=()
 for arg in "$@"; do
@@ -109,6 +109,8 @@ for name in "${NAMES[@]}"; do
         automation) pull windmill-postgres; pull windmill-server; pull windmill-worker;
                 build notebook "$ROOT/containers/notebook" \
                       -f "$ROOT/containers/notebook/Containerfile" ;;
+        ailab-api) build ailab-api "$ROOT/containers/ailab-api" \
+                      -f "$ROOT/containers/ailab-api/Containerfile" ;;
         *) echo "  ! unknown image '$name'"; fail=1 ;;
     esac
 done

@@ -102,6 +102,13 @@ ne="$AI_LAB_CONFIG_DIR/notebook/service.env"
 [ "$(stat -c %a "$ne")" = 600 ] || fail "notebook env not 600"
 tk_h="$(sha256sum < "$ntk")"
 
+# ailab-api control bearer (mode 600, generated 64-hex token, kept on re-run).
+ae="$AI_LAB_CONFIG_DIR/ailab-api/service.env"
+[ "$(stat -c %a "$ae")" = 600 ] || fail "ailab-api env not 600"
+grep -q 'change-me' "$ae" && fail "placeholder left in ailab-api env"
+grep -Eq '^AILAB_API_TOKEN=[0-9a-f]{64}$' "$ae" || fail "ailab-api token is not one 64-hex value"
+ae_h="$(sha256sum < "$ae")"
+
 # Re-run keeps the live KB secrets too.
 rf_h="$(sha256sum < "$rf")"; kb_h="$(sha256sum < "$kbpg")"
 wm_h="$(sha256sum < "$wm")"; wmdb_h="$(sha256sum < "$wmdb")"
@@ -111,6 +118,7 @@ bash "$ROOT/scripts/generate-secrets.sh" > /dev/null
 [ "$(sha256sum < "$wm")" = "$wm_h" ] || fail "windmill env changed on re-run"
 [ "$(sha256sum < "$wmdb")" = "$wmdb_h" ] || fail "windmill-postgres env changed on re-run"
 [ "$(sha256sum < "$ntk")" = "$tk_h" ] || fail "notebook jupyter-token changed on re-run"
+[ "$(sha256sum < "$ae")" = "$ae_h" ] || fail "ailab-api env changed on re-run"
 
 # Nothing written into the repo.
 after="$(git -C "$ROOT" status --porcelain --ignored config 2>/dev/null || true)"

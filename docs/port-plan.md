@@ -127,3 +127,9 @@ only, never deployed.
 - Boot-enablement unchanged (research stays stopped, opt-ins stay out).
 - `ai-lab status` agrees with `systemctl --user list-units`.
 - `ryoku plugin validate` clean; widget visible on the bar.
+
+## Additions (2026-11-10, mac-quadlet-widget plan)
+
+| service    | port  | binding + door |
+|------------|-------|----------------|
+| ailab-api  | 3119  | 127.0.0.1 only (Network=host quadlet, no PublishPort); tailnet door `tailscale serve --https=8448` -> https://ai.<tailnet>.ts.net:8448 (LE cert); bearer token. Control plane consumed by the macOS menu-bar widget. |

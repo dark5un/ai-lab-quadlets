@@ -32,7 +32,8 @@ for f in "$ROOT"/quadlets/*.container "$ROOT"/quadlets/*.container.in; do
             prometheus.container|node-exporter.container|gpu-exporter.container|\
             podman-exporter.container|blackbox-exporter.container|\
             victorialogs.container|fluent-bit.container|strata-5090-1m.container.in|\
-            dufs.container|syncthing.container|sketchlab.container) ;;
+            dufs.container|syncthing.container|sketchlab.container|\
+            ailab-api.container) ;;
             *) err "$n has an [Install] section" ;;
         esac
     fi
@@ -54,7 +55,7 @@ want = {"5090": "__GPU_5090_UUID__", "4070ti": "__GPU_4070TI_UUID__",
         "both": "__GPU_5090_UUID__,__GPU_4070TI_UUID__"}
 BOOT_OK = {"prometheus", "node-exporter", "gpu-exporter", "podman-exporter",
            "blackbox-exporter", "victorialogs", "fluent-bit", "strata-5090-1m",
-           "dufs", "syncthing", "sketchlab"}
+           "dufs", "syncthing", "sketchlab", "ailab-api"}
 GPU_DEVICE_OK = {"gpu-exporter", "vscode"}   # AddDevice without a registry card
 bad = 0
 for s in json.load(open(f"{root}/services.json"))["services"]:

@@ -12,6 +12,8 @@
 #                                    kb-postgres + lightrag mirror)
 #   - automation group              (windmill-postgres + windmill DATABASE_URL
 #                                    mirror, SUPERADMIN_SECRET)
+#   - ailab-api AILAB_API_TOKEN      (config/ailab-api/service.env; the Mac
+#                                    widget must re-pick up the new token)
 # Then restarts the affected services. Existing sessions/cookies tied to the
 # old values are invalidated. Treat any leaked value as burned: rotate first,
 # then hunt for where it leaked.
@@ -60,6 +62,7 @@ rotate_env_key "$CONF/ragflow/service.env" ADMIN_DEFAULT_PASSWORD
 rotate_env_key "$CONF/kb-postgres/service.env" POSTGRES_PASSWORD
 rotate_env_key "$CONF/windmill-postgres/service.env" POSTGRES_PASSWORD
 rotate_env_key "$CONF/windmill/service.env" SUPERADMIN_SECRET
+rotate_env_key "$CONF/ailab-api/service.env" AILAB_API_TOKEN
 if [ "$APPLY" = 1 ]; then
     rand_hex 32 > "$CONF/notebook/jupyter-token" 2>/dev/null && \
         chmod 600 "$CONF/notebook/jupyter-token" && \
@@ -130,7 +133,7 @@ if [ "$APPLY" = 1 ]; then
                llama-cpp-5090 llama-cpp-4070ti llama-cpp-both \
                ragflow-elasticsearch ragflow-mysql ragflow-minio ragflow-kvrocks \
                ragflow kb-postgres lightrag kb-analysis \
-               windmill-postgres windmill-server windmill-worker notebook; do
+               windmill-postgres windmill-server windmill-worker notebook ailab-api; do
         systemctl --user is-active "${svc}.service" &>/dev/null || continue
         systemctl --user restart "${svc}.service" && echo "  ✓ restarted $svc"
     done

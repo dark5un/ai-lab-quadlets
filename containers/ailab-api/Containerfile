@@ -1,0 +1,16 @@
+# ailab-api: authenticated tailnet-only facade over scripts/ai-lab for the
+# macOS menu-bar widget (mac-quadlet-widget plan). Pure stdlib — no pip deps.
+# The image needs: python3 (the API), bash (ai-lab), systemctl (Debian
+# `systemd` package — drives the host user manager via the mounted private
+# socket), curl (ai-lab status loopback health probes).
+# Build with: scripts/build-images.sh ailab-api
+FROM docker.io/library/python:3.13-slim
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends systemd curl \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY api.py /app/api.py
+RUN chmod +x /app/api.py
+
+ENTRYPOINT ["/app/api.py"]
