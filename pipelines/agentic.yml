@@ -1,0 +1,157 @@
+# agentic.yml — the agentic-pipeline smoke/acceptance pipeline
+# (docs/agentic-pipeline-plan.md sec. 5.4 + 7.1 + 8.8).
+#
+# Apply with (team credentials live in config/concourse/pipeline-vars.yml,
+# NEVER in this file — public repo):
+#   fly -t local set-pipeline -p agentic -c pipelines/agentic.yml \
+#       -l ~/.config/containers/config/concourse/pipeline-vars.yml
+#
+# Ops notes (plan sec. 7.1):
+# - Task concurrency shares strata's card with interactive use; llama-cpp-4070ti
+#   is boot=false — the agent-smoke task probes strata ONLY and fails loudly if
+#   it is down (never silently queues).
+# - The pipeline is poll-based (check_every); the Forgejo webhook ->
+#   /api/v1/hooks route is a later phase.
+# - s3-resource compatibility knobs below verified against the resource README.
+
+resources:
+- name: repo
+  type: git
+  check_every: 1m
+  source:
+    uri: http://systemd-forge:3000/pipeline/pipeline-lab.git
+    branch: main
+    username: ((forge-user))
+    password: ((forge-token))
+
+- name: artifacts
+  type: s3
+  source:
+    bucket: ci-artifacts
+    endpoint: http://systemd-s3:3900  # s3-resource v2.5.7 speaks AWS SDK v2:
+    # a bare host:port is REJECTED ("not a valid URI", verified live);
+    # the README's "hostname is fine" predates the v2 SDK.
+    disable_ssl: true             # README param (verified)
+    use_path_style: true          # Garage needs path-style on a bare host:port
+    region_name: garage           # Garage s3_region (garage.toml)
+    access_key_id: ((s3-ak))
+    secret_access_key: ((s3-sk))
+    versioned_file: build/latest.tar.gz
+
+jobs:
+- name: build-and-publish
+  plan:
+  - get: repo
+  - task: compile
+    config:
+      platform: linux
+      image_resource:
+        type: registry-image   # bundled resource type (verified in 8.3.3)
+        source: {repository: docker.io/library/busybox, tag: 1.37}
+      inputs: [{name: repo}]
+      outputs: [{name: build-out}]
+      run:
+        path: sh
+        args:
+        - -c
+        - |
+          set -eu
+          sha=$(cat repo/.git/HEAD 2>/dev/null || echo unknown)
+          echo "agentic pipeline build from repo @ $sha" > build-out/payload.txt
+          date -u > build-out/built-at.txt
+          tar czf build-out/latest.tar.gz -C build-out payload.txt built-at.txt
+  - put: artifacts
+    params:
+      # s3-resource Out semantics (verified live on v2.5.7): `file` is the
+      # LOCAL path uploaded to source.versioned_file; `upload` is a glob for
+      # extra objects. First attempt misread this as the bucket key.
+      file: build-out/latest.tar.gz
+
+- name: agent-smoke
+  # Proves the two in-task agentic paths (plan 7.1/8.8): in-network DNS to
+  # the stack siblings, an MCP handshake + real tool call against
+  # systemd-concourse-mcp with the LOW-PRIVILEGE token, and a model prompt
+  # against strata's OpenAI-compatible endpoint.
+  plan:
+  - get: repo
+  - task: probe
+    config:
+      platform: linux
+      image_resource:
+        type: registry-image
+        source: {repository: docker.io/library/python, tag: 3.14-slim}
+      inputs: [{name: repo}]
+      params:
+        STRATA_URL: http://systemd-strata:8080/v1
+        STRATA_KEY: ((strata-key))
+        MCP_URL: http://systemd-concourse-mcp:8080/mcp
+        MCP_LOWPRIV_TOKEN: ((mcp-lowpriv-token))
+        FORGE_URL: http://systemd-forge:3000
+        S3_URL: http://systemd-s3:3900
+      run:
+        path: python
+        args:
+        - -c
+        - |
+          import json, os, socket, urllib.error, urllib.request
+
+          def req(url, data=None, headers=None, method=None):
+              r = urllib.request.Request(url, data=data, headers=headers or {}, method=method)
+              try:
+                  with urllib.request.urlopen(r, timeout=30) as resp:
+                      return resp.status, resp.read().decode()
+              except urllib.error.HTTPError as e:
+                  return e.code, e.read().decode(errors="replace")
+
+          # 1. in-network name resolution (aardvark via worker containerd DNS)
+          for host in ("systemd-forge", "systemd-s3", "systemd-concourse-web",
+                       "systemd-concourse-mcp", "systemd-strata"):
+              print("dns", host, socket.gethostbyname(host))
+
+          # 2. plain HTTP liveness of the siblings
+          print("forge", req(os.environ["FORGE_URL"] + "/api/v1/version")[0])
+          print("s3", req(os.environ["S3_URL"])[0])  # 403/404 at unauth root = alive
+
+          # 3. MCP: initialize handshake + real tool calls with the LOW-PRIV
+          # token (bound to team `agent` by the server). Proves: (a) the
+          # handshake works from inside a build, (b) trigger_job succeeds
+          # against the agent team's own pipeline, (c) management tools are
+          # denied, (d) team isolation: main's 'agentic' is NOT visible.
+          h = {"Content-Type": "application/json",
+               "Accept": "application/json, text/event-stream",
+               "Authorization": "Bearer " + os.environ["MCP_LOWPRIV_TOKEN"]}
+          def mcp(id, method, params):
+              st, body = req(os.environ["MCP_URL"], json.dumps(
+                  {"jsonrpc": "2.0", "id": id, "method": method, "params": params}).encode(), h)
+              assert st == 200, f"mcp {method} {st}"
+              return body
+          init = {"protocolVersion": "2025-06-18", "capabilities": {},
+                  "clientInfo": {"name": "agent-smoke", "version": "0"}}
+          assert "serverInfo" in mcp(1, "initialize", init)
+          mcp(2, "tools/call", {"name": "list_pipelines", "arguments": {}})
+          assert "agentic-agent" in mcp(3, "tools/call",
+                                        {"name": "list_pipelines", "arguments": {}})
+          trig = mcp(4, "tools/call", {"name": "trigger_job",
+                      "arguments": {"pipeline": "agentic-agent", "job": "noop"}})
+          assert "build_id" in trig and "isError\":true" not in trig, f"trigger failed: {trig[-300:]}"
+          denied = mcp(5, "tools/call", {"name": "set_pipeline",
+                        "arguments": {"pipeline": "x", "yaml_config": "jobs: []"}})
+          assert "isError\":true" in denied or "not permitted" in denied, f"denial missing: {denied[:300]}"
+          print("mcp ok: handshake + list/trigger on agent team, set_pipeline denied")
+
+          # 4. model prompt through the OpenAI-compatible stack router
+          ch = {"Content-Type": "application/json",
+                "Authorization": "Bearer " + os.environ["STRATA_KEY"]}
+          prompt = {"model": "auto", "messages": [
+              {"role": "user", "content": "Reply with exactly: PIPELINE-OK"}],
+              "max_tokens": 400}   # strata serves a REASONING model: a tiny
+                                   # budget truncates inside reasoning_content
+                                   # and leaves content null (verified live)
+          st, body = req(os.environ["STRATA_URL"] + "/chat/completions",
+                         json.dumps(prompt).encode(), ch)
+          assert st == 200, f"strata {st}: {body[:300]}"
+          msg = json.loads(body)["choices"][0]["message"]
+          reply = (msg.get("content") or "") + (msg.get("reasoning_content") or "")
+          assert "PIPELINE-OK" in reply, f"model never produced the token: {reply[:200]!r}"
+          print("model ok (PIPELINE-OK in completion, reasoning-aware parse)")
+          print("AGENT-SMOKE-PASS")

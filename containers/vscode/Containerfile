@@ -48,6 +48,28 @@ RUN curl -fL "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-
     ln -s /opt/google-cloud-sdk/bin/gcloud /usr/local/bin/gcloud && \
     gcloud --version | head -1
 
+# fly (Concourse CLI) for the agentic pipeline (agentic-pipeline plan sec. 6).
+# Pinned to the concourse-web server version (services.json 8.3.3) - fly and
+# the ATC must match. Bump both together; asset names verified live via
+# api.github.com/repos/concourse/concourse/releases/tags/v<X> (fly-<X>-linux-amd64.tgz).
+RUN curl -fL "https://github.com/concourse/concourse/releases/download/v8.3.3/fly-8.3.3-linux-amd64.tgz" \
+      -o /tmp/fly.tgz && \
+    echo "$(curl -fsSL https://github.com/concourse/concourse/releases/download/v8.3.3/fly-8.3.3-linux-amd64.tgz.sha1)  /tmp/fly.tgz" | sha1sum -c - && \
+    tar -xzf /tmp/fly.tgz -C /usr/local/bin fly && \
+    chmod 0755 /usr/local/bin/fly && rm /tmp/fly.tgz
+
+# Pipeline endpoints for the box's users (dotfile-style, in-network names):
+#   git: http://systemd-forge:3000 (token) / ssh://git@<node-tailnet-fqdn>:2223
+#   S3:  http://systemd-s3:3900 (region garage, path-style)
+#   fly: -t ai http://systemd-concourse-web:8080
+RUN printf '%s\n' \
+    '# ai-lab pipeline endpoints (agentic-pipeline plan)' \
+    'export PIPELINE_FORGE_URL=http://systemd-forge:3000' \
+    'export PIPELINE_S3_ENDPOINT=http://systemd-s3:3900' \
+    'export PIPELINE_CONCOURSE_URL=http://systemd-concourse-web:8080' \
+    'export AWS_REGION=garage AWS_S3_ADDRESSING_STYLE=path' \
+    > /etc/profile.d/ai-lab-pipeline.sh
+
 # px = 1000:1000 (keep-id maps it to host px); fish is the login shell;
 # wheel + NOPASSWD = distrobox-style sudo. The fish pacman hook registers
 # /usr/bin/fish in /etc/shells, so useradd -s accepts it.

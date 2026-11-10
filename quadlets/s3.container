@@ -1,0 +1,33 @@
+# Garage S3 object storage (Deuxfleurs, AGPLv3, v2.5.0, single node) —
+# agentic-pipeline plan. Artifact/release bucket for Concourse `s3` resources.
+# Buckets/objects persist in named volumes garage-data/garage-meta (host
+# container storage). Config + secrets live in config/s3/garage.toml
+# (0600, generated on-target). Admin CLI: podman exec systemd-s3 /garage ...
+# Image pin (v2.5.0 index digest) lives in services.json image_digest.
+
+[Unit]
+Description=Garage S3 object storage (single node)
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-s3
+Image=docker.io/dxflrs/garage:v2.5.0
+Network=ai.network
+# image Cmd=["/garage","server"] (verified via registry config blob);
+# podman 6.1.4 quadlets override CMD via Exec= (man table verified live;
+# there is NO Command= key in this version):
+Exec=/garage server --single-node
+Volume=%h/.config/containers/config/s3/garage.toml:/etc/garage.toml:ro
+Volume=garage-meta:/var/lib/garage/meta
+Volume=garage-data:/var/lib/garage/data
+# S3 API loopback (3121). 3902/3903 (web hosting/admin) intentionally not
+# published; admin is the exec CLI.
+PublishPort=127.0.0.1:3121:3900/tcp
+
+[Service]
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=120

@@ -94,6 +94,58 @@ wu=$(sed -n 's|^DATABASE_URL=.*://[^:]*:\([^@]*\)@.*|\1|p' "$wm" | tail -1)
 [ -n "$wp" ] && [ "$wp" = "$wu" ] || fail "windmill DATABASE_URL does not mirror windmill-postgres POSTGRES_PASSWORD"
 [ "$(sed -n 's/^SUPERADMIN_SECRET=//p' "$wm" | tail -1)" != "$wp" ] || fail "windmill secrets not distinct"
 
+# pipeline group (agentic-pipeline plan): forge/garage/concourse secrets,
+# mirrors, tailnet URL fill, and the key trio.
+fgdb="$AI_LAB_CONFIG_DIR/forge/postgres.env"
+fg="$AI_LAB_CONFIG_DIR/forge/service.env"
+[ "$(stat -c %a "$fgdb")" = 600 ] || fail "forge/postgres.env not 600"
+[ "$(stat -c %a "$AI_LAB_CONFIG_DIR/forge")" = 700 ] || fail "forge dir not 700"
+[ "$(stat -c %a "$fg")" = 600 ] || fail "forge/service.env not 600"
+grep -q 'change-me' "$fgdb" && fail "placeholder left in forge/postgres.env"
+grep -q 'change-me' "$fg" && fail "placeholder left in forge/service.env"
+grep -Eq '<tailnet>|<node-tailnet-fqdn>' "$fg" && fail "tailnet placeholder left in forge env"
+[ "$(sed -n 's/^FORGEJO__server__ROOT_URL=//p' "$fg")" = \
+  "https://forge.$(tailscale status --json | python3 -c 'import sys,json;print(json.load(sys.stdin)["Self"]["DNSName"].rstrip(".").split(".",1)[1])')" ] \
+  || fail "forge ROOT_URL not filled from the live tailnet"
+[ "$(sed -n 's/^FORGEJO__security__SECRET_KEY=//p' "$fg")" = \
+  "$(sed -n 's/^FORGEJO__security__SECRET_KEY=//p' "$fg" | head -1 | grep -Eo '^[0-9a-f]{64}$')" ] \
+  || fail "forge SECRET_KEY is not 64 hex"
+fgp=$(sed -n 's/^POSTGRES_PASSWORD=//p' "$fgdb" | tail -1)
+fgm=$(sed -n 's/^FORGEJO__database__PASSWD=//p' "$fg" | tail -1)
+[ -n "$fgp" ] && [ "$fgp" = "$fgm" ] || fail "forge/service.env does not mirror forge/postgres.env password"
+
+gt="$AI_LAB_CONFIG_DIR/s3/garage.toml"
+[ "$(stat -c %a "$gt")" = 600 ] || fail "s3/garage.toml not 600"
+grep -q 'change-me' "$gt" && fail "placeholder left in garage.toml"
+[ "$(grep -cE '^rpc_secret = "[0-9a-f]{64}"' "$gt")" = 1 ] || fail "garage rpc_secret not a 64-hex value"
+[ "$(grep '^admin_token = ' "$gt")" != "$(grep '^metrics_token = ' "$gt")" ] || fail "garage tokens identical"
+
+copg="$AI_LAB_CONFIG_DIR/concourse-postgres/service.env"
+cw="$AI_LAB_CONFIG_DIR/concourse/web.env"
+cwo="$AI_LAB_CONFIG_DIR/concourse/worker.env"
+cm="$AI_LAB_CONFIG_DIR/concourse/mcp.env"
+for f in "$copg" "$cw" "$cwo" "$cm"; do
+    [ "$(stat -c %a "$f")" = 600 ] || fail "$f not 600"
+    grep -q 'change-me' "$f" && fail "placeholder left in $f"
+done
+grep -q '<tailnet>' "$cw" && fail "tailnet placeholder left in concourse web.env"
+[ "$(sed -n 's/^CONCOURSE_POSTGRES_PASSWORD=//p' "$cw")" = \
+  "$(sed -n 's/^POSTGRES_PASSWORD=//p' "$copg" | tail -1)" ] \
+  || fail "concourse web.env does not mirror concourse-postgres password"
+ckeys="$AI_LAB_CONFIG_DIR/concourse/keys"
+[ "$(stat -c %a "$ckeys")" = 700 ] || fail "concourse keys dir not 700"
+for kf in tsa_host_key tsa_host_key.pub session_signing_key worker_key worker_key.pub authorized_worker_keys; do
+    [ -f "$ckeys/$kf" ] || fail "concourse key missing: $kf"
+    [ "$(stat -c %a "$ckeys/$kf")" = 600 ] || fail "concourse key not 600: $kf"
+done
+diff -q "$ckeys/worker_key.pub" "$ckeys/authorized_worker_keys" || fail "authorized_worker_keys != worker_key.pub"
+cppw=$(sed -n 's/^CONCOURSE_ADD_LOCAL_USER=pipeline:\([^,]*\),.*/\1/p' "$cw" | tail -1)
+capw=$(sed -n 's/^CONCOURSE_ADD_LOCAL_USER=[^,]*,agent:\(.*\)$/\1/p' "$cw" | tail -1)
+[ -n "$cppw" ] && [ -n "$capw" ] && [ "$cppw" != "$capw" ] || fail "concourse local users missing/identical"
+[ "$(sed -n 's/^CONCOURSE_PASSWORD=//p' "$cm")" = "$cppw" ] || fail "mcp.env does not mirror pipeline password"
+[ "$(sed -n 's/^CONCOURSE_LOWPRIV_PASSWORD=//p' "$cm")" = "$capw" ] || fail "mcp.env does not mirror agent password"
+[ "$(sed -n 's/^MCP_TOKEN_HERMES=//p' "$cm")" != "$(sed -n 's/^MCP_TOKEN_PIPELINE=//p' "$cm")" ] || fail "mcp tokens identical"
+
 # notebook server: token file + env (600, kept on re-run).
 ntk="$AI_LAB_CONFIG_DIR/notebook/jupyter-token"
 ne="$AI_LAB_CONFIG_DIR/notebook/service.env"
@@ -112,6 +164,8 @@ ae_h="$(sha256sum < "$ae")"
 # Re-run keeps the live KB secrets too.
 rf_h="$(sha256sum < "$rf")"; kb_h="$(sha256sum < "$kbpg")"
 wm_h="$(sha256sum < "$wm")"; wmdb_h="$(sha256sum < "$wmdb")"
+fg_h="$(sha256sum < "$fg")"; gt_h="$(sha256sum < "$gt")"
+cw_h="$(sha256sum < "$cw")"; cm_h="$(sha256sum < "$cm")"
 bash "$ROOT/scripts/generate-secrets.sh" > /dev/null
 [ "$(sha256sum < "$rf")" = "$rf_h" ] || fail "ragflow env changed on re-run"
 [ "$(sha256sum < "$kbpg")" = "$kb_h" ] || fail "kb-postgres env changed on re-run"
@@ -119,6 +173,12 @@ bash "$ROOT/scripts/generate-secrets.sh" > /dev/null
 [ "$(sha256sum < "$wmdb")" = "$wmdb_h" ] || fail "windmill-postgres env changed on re-run"
 [ "$(sha256sum < "$ntk")" = "$tk_h" ] || fail "notebook jupyter-token changed on re-run"
 [ "$(sha256sum < "$ae")" = "$ae_h" ] || fail "ailab-api env changed on re-run"
+[ "$(sha256sum < "$fg")" = "$fg_h" ] || fail "forge env changed on re-run"
+[ "$(sha256sum < "$gt")" = "$gt_h" ] || fail "garage.toml changed on re-run"
+[ "$(sha256sum < "$cw")" = "$cw_h" ] || fail "concourse web.env changed on re-run"
+[ "$(sha256sum < "$cm")" = "$cm_h" ] || fail "concourse mcp.env changed on re-run"
+[ "$(sed -n 's/^CONCOURSE_PASSWORD=//p' "$cm")" = "$(sed -n 's/^CONCOURSE_ADD_LOCAL_USER=pipeline:\([^,]*\),.*/\1/p' "$cw")" ] \
+  || fail "concourse local user password changed on re-run (keys/users must be stable)"
 
 # Nothing written into the repo.
 after="$(git -C "$ROOT" status --porcelain --ignored config 2>/dev/null || true)"

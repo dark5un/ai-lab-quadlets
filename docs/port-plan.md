@@ -66,6 +66,22 @@ Windmill replaced n8n for KB W1-W4 - n8n 3115 deleted 2026-11-05, port free):
 | windmill-postgres  | -     | none (systemd-windmill-postgres:5432) |
 | notebook (JupyterLab+marimo) | 3118 | loopback (token file auth; tailnet door LIVE: svc:notebook -> https://notebook.<tailnet>.ts.net) |
 
+Pipeline (pipeline group, plan docs/agentic-pipeline-plan.md, added 2026-11-10):
+
+| service            | port  | binding  |
+|--------------------|-------|----------|
+| forge (Forgejo web) | 3120 | loopback (tailnet door: svc:forge -> https://forge.<tailnet>.ts.net) |
+| forge git SSH      | 2223  | 0.0.0.0 (LAN-reachable: host carries no nft ruleset; flagged at enable; tailnet clients use ssh://git@<node-tailnet-fqdn>:2223). SSH host keys in named volume forge-ssh |
+| s3 (Garage)        | 3121  | loopback (svc:s3 door optional; host CLIs use 127.0.0.1:3121; in-network systemd-s3:3900) |
+| concourse-web      | 3122  | loopback (tailnet door: svc:concourse -> https://concourse.<tailnet>.ts.net; TSA :2222 in-network only) |
+| concourse-worker   | -     | none (privileged; reaches TSA via systemd-concourse-web:2222) |
+| concourse-postgres | -     | none (systemd-concourse-pg:5432) |
+| forge-postgres     | -     | none (systemd-forge-pg:5432) |
+| concourse-mcp      | 3123  | loopback (Hermes host MCP); in-network systemd-concourse-mcp:8080/mcp for task containers |
+
+2222 is free on this host (plan sec.4 probe); the concourse TSA never
+publishes a host port. 3100-3119 pre-owned, 3120-3123 taken here.
+
 Tailnet doors for the KB (tailscale serve; real FQDN never committed):
 ragflow -> `https://ai.<tailnet>.ts.net:8444`,
 lightrag (`X-API-Key` auth enabled) -> `:8446`. (The n8n door `:8445`

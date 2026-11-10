@@ -1,0 +1,18 @@
+# agentic-agent.yml — minimal pipeline on the restricted `agent` team
+# (agentic-pipeline plan sec. 7: low-privilege MCP token is bound to this
+# team). The agent-smoke job on team main TRIGGERS noop here via the MCP
+# bridge using only the low-priv token — proving the token->team mapping
+# end to end. No resources: pure task.
+
+jobs:
+- name: noop
+  plan:
+  - task: noop
+    config:
+      platform: linux
+      image_resource:
+        type: registry-image
+        source: {repository: docker.io/library/busybox, tag: "1.37"}
+      run:
+        path: sh
+        args: ["-c", "echo noop-ok"]

@@ -28,6 +28,19 @@
 #   notebook/jupyter-token       notebook server auth token (FILE)
 #   notebook/service.env         platform URLs; key copies filled by install.sh
 #   ailab-api/service.env        AILAB_API_TOKEN (tailnet control API bearer)
+#   forge/postgres.env           Forgejo DB password
+#   forge/service.env            Forgejo secrets + tailnet URLs (DB password
+#                                mirrored from forge/postgres.env)
+#   s3/garage.toml               Garage rpc secret + admin/metrics tokens
+#   concourse-postgres/service.env ATC DB password (db/user atc)
+#   concourse/web.env            external URL + local-user passwords +
+#                                DB password mirror
+#   concourse/worker.env         non-secret TSA/DNS settings (copied as-is)
+#   concourse/keys/              tsa_host_key, session_signing_key, worker_key
+#                                (+ authorized_worker_keys); kept on --force
+#                                (rotating them force-re-registers workers)
+#   concourse/mcp.env            two MCP bearer tokens + Concourse credential
+#                                mirrors from web.env (pipeline/agent users)
 #   hermes-service/service.env   only with --with-hermes (opt-in container)
 # Strata's API key is created by install-strata.sh.
 set -euo pipefail
@@ -326,3 +339,138 @@ if [ "$WITH_HERMES" = 1 ]; then
     fi
     chmod 600 "$dst"
 fi
+
+# ─── pipeline group (agentic-pipeline plan) ────────────────────────────────
+# Concourse CI + Garage S3 + Forgejo + the concourse-mcp bridge. Tailnet
+# FQDNs are resolved live from `tailscale status --json` (never committed:
+# public-repo hygiene); placeholders in the templates survive only if the
+# node has no tailscale at generation time.
+ts_fqdn="$(tailscale status --json 2>/dev/null \
+    | python3 -c 'import sys,json;print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' 2>/dev/null || true)"
+ts_base="${ts_fqdn#*.}"   # tailnet domain, e.g. <name>.ts.net
+
+# Forgejo DB sidecar (server env: keep foreign vars OUT of postgres files).
+dst="$CONF/forge/postgres.env"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    sed "s/change-me-to-a-random-hex-string/$(rand_hex 16)/" \
+        "$ROOT/config/forge/postgres.env.example" > "$dst"
+    echo "  created $dst"
+else
+    echo "  kept    $dst"
+fi
+chmod 600 "$dst"
+
+# Forgejo app env: SECRET_KEY (64 hex) + admin bootstrap password + the
+# DB password mirror + tailnet URLs.
+dst="$CONF/forge/service.env"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    fpw=$(sed -n 's/^POSTGRES_PASSWORD=//p' "$CONF/forge/postgres.env" | tail -1)
+    sed -e "s|^FORGEJO__security__SECRET_KEY=.*|FORGEJO__security__SECRET_KEY=$(rand_hex 32)|" \
+        -e "s|^FORGEJO__database__PASSWD=.*|FORGEJO__database__PASSWD=${fpw}|" \
+        -e "s|^FORGEJO_ADMIN_PASSWORD=.*|FORGEJO_ADMIN_PASSWORD=$(rand_hex 16)|" \
+        -e "s|<node-tailnet-fqdn>|${ts_fqdn:-<node-tailnet-fqdn>}|" \
+        -e "s|<tailnet>|${ts_base:-<tailnet>}|g" \
+        "$ROOT/config/forge/service.env.example" > "$dst"
+    echo "  created $dst"
+else
+    echo "  kept    $dst"
+fi
+chmod 600 "$dst"
+
+# Garage config (single node): rpc secret + admin/metrics tokens.
+dst="$CONF/s3/garage.toml"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    sed -e "s|rpc_secret = \"change-me-to-a-random-hex-string\"|rpc_secret = \"$(rand_hex 32)\"|" \
+        -e "s|admin_token = \"change-me-to-another-random-hex-string\"|admin_token = \"$(rand_hex 32)\"|" \
+        -e "s|metrics_token = \"change-me-to-a-third-random-hex-string\"|metrics_token = \"$(rand_hex 32)\"|" \
+        "$ROOT/config/s3/garage.toml.example" > "$dst"
+    echo "  created $dst"
+else
+    echo "  kept    $dst"
+fi
+chmod 600 "$dst"
+
+# Concourse ATC DB sidecar.
+dst="$CONF/concourse-postgres/service.env"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    sed "s/change-me-to-a-random-hex-string/$(rand_hex 16)/" \
+        "$ROOT/config/concourse-postgres/service.env.example" > "$dst"
+    echo "  created $dst"
+else
+    echo "  kept    $dst"
+fi
+chmod 600 "$dst"
+
+# Concourse web: DB password mirror + two local users (pipeline = main team,
+# agent = restricted MCP-team) + external URL from the live tailnet.
+dst="$CONF/concourse/web.env"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    cpw=$(sed -n 's/^POSTGRES_PASSWORD=//p' "$CONF/concourse-postgres/service.env" | tail -1)
+    sed -e "s|^CONCOURSE_POSTGRES_PASSWORD=.*|CONCOURSE_POSTGRES_PASSWORD=${cpw}|" \
+        -e "s|pipeline:change-me-to-another-random-hex-string|pipeline:$(rand_hex 16)|" \
+        -e "s|agent:change-me-to-a-third-random-hex-string|agent:$(rand_hex 16)|" \
+        -e "s|<tailnet>|${ts_base:-<tailnet>}|" \
+        "$ROOT/config/concourse/web.env.example" > "$dst"
+    echo "  created $dst"
+else
+    echo "  kept    $dst"
+fi
+chmod 600 "$dst"
+
+# Concourse worker: no secrets (paths + DNS settings only).
+dst="$CONF/concourse/worker.env"
+mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
+if want "$dst"; then
+    cp "$ROOT/config/concourse/worker.env.example" "$dst"
+    echo "  created $dst"
+else
+    echo "  kept    $dst"
+fi
+chmod 600 "$dst"
+
+# Concourse key trio (official generating-keys roles). Generated once;
+# --force deliberately does NOT rotate them (worker re-registration churn;
+# rotate by hand with the plan's keygen block + a worker restart).
+# ALL THREE are RSA in PEM (-m pem), verified live 2026-11-10 against
+# concourse-ci.org/docs/install/generating-keys ("components use RSA keys")
+# and flag/private_key.go (jwt.ParseRSAPrivateKeyFromPEM: PKCS#1/#8 PEM only;
+# modern ssh-keygen defaults to the OPENSSH format which Concourse rejects;
+# ed25519 fails outright).
+kdir="$CONF/concourse/keys"
+mkdir -p "$kdir"; chmod 700 "$kdir"
+if [ ! -f "$kdir/tsa_host_key" ]; then
+    ssh-keygen -q -t rsa -m pem -C '' -f "$kdir/tsa_host_key" -N ''
+    echo "  created $kdir/tsa_host_key(.pub)"
+fi
+if [ ! -f "$kdir/session_signing_key" ]; then
+    ssh-keygen -q -t rsa -m pem -C '' -f "$kdir/session_signing_key" -N ''
+    echo "  created $kdir/session_signing_key(.pub)"
+fi
+if [ ! -f "$kdir/worker_key" ]; then
+    ssh-keygen -q -t rsa -m pem -C '' -f "$kdir/worker_key" -N ''
+    echo "  created $kdir/worker_key(.pub)"
+fi
+cp -f "$kdir/worker_key.pub" "$kdir/authorized_worker_keys"
+chmod 600 "$kdir"/*
+
+# MCP bridge: two static bearer tokens (Hermes-grade vs in-pipeline
+# low-privilege) + the Concourse credential mirrors from web.env.
+dst="$CONF/concourse/mcp.env"
+if want "$dst"; then
+    ppw=$(sed -n 's/^CONCOURSE_ADD_LOCAL_USER=pipeline:\([^,]*\),.*/\1/p' "$CONF/concourse/web.env" | tail -1)
+    apw=$(sed -n 's/^CONCOURSE_ADD_LOCAL_USER=[^,]*,agent:\(.*\)$/\1/p' "$CONF/concourse/web.env" | tail -1)
+    sed -e "s|^MCP_TOKEN_HERMES=.*|MCP_TOKEN_HERMES=$(rand_hex 32)|" \
+        -e "s|^MCP_TOKEN_PIPELINE=.*|MCP_TOKEN_PIPELINE=$(rand_hex 32)|" \
+        -e "s|^CONCOURSE_PASSWORD=.*|CONCOURSE_PASSWORD=${ppw}|" \
+        -e "s|^CONCOURSE_LOWPRIV_PASSWORD=.*|CONCOURSE_LOWPRIV_PASSWORD=${apw}|" \
+        "$ROOT/config/concourse/mcp.env.example" > "$dst"
+    echo "  created $dst"
+else
+    echo "  kept    $dst"
+fi
+chmod 600 "$dst"

@@ -1,0 +1,26 @@
+# Garage (S3) config — generated on-target (config/s3/garage.toml, 0600;
+# agentic-pipeline plan). Bind-mount read-only as /etc/garage.toml. Secrets
+# (rpc_secret, admin/metrics tokens) are filled by generate-secrets.sh.
+# Keys shape verified against the garage quick-start reference (2026-11-10).
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "sqlite"
+replication_factor = 1
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "127.0.0.1:3901"
+rpc_secret = "change-me-to-a-random-hex-string"
+
+[s3_api]
+s3_region = "garage"
+api_bind_addr = "[::]:3900"
+root_domain = ".s3.ai-lab.localhost"
+
+[s3_web]
+bind_addr = "[::]:3902"
+root_domain = ".web.ai-lab.localhost"
+index = "index.html"
+
+[admin]
+api_bind_addr = "[::]:3903"
+admin_token = "change-me-to-another-random-hex-string"
+metrics_token = "change-me-to-a-third-random-hex-string"

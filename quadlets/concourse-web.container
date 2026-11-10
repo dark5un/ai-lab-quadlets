@@ -1,0 +1,35 @@
+# Concourse v8.3.3 web (ATC + TSA + UI) — agentic-pipeline plan: the
+# orchestrator of the agentic pipeline. Pipeline state persists in
+# concourse-postgres (private). Keys live in config/concourse/keys/ on the
+# host (ro bind, generated on-target by generate-secrets.sh). External URL =
+# svc:concourse door, kept in web.env (never in this file: public repo).
+# Image pin (8.3.3 index digest) lives in services.json image_digest.
+
+[Unit]
+Description=Concourse web (ATC + TSA + UI)
+Wants=ai-network.service
+Wants=concourse-postgres.service
+After=ai-network.service
+After=concourse-postgres.service
+
+[Container]
+ContainerName=systemd-concourse-web
+Image=docker.io/concourse/concourse:8.3.3
+Network=ai.network
+Exec=web
+Volume=%h/.config/containers/config/concourse/keys:/concourse-keys:ro
+EnvironmentFile=%h/.config/containers/config/concourse/web.env
+# web.env (0600, generated) carries: CONCOURSE_EXTERNAL_URL (svc door),
+# CONCOURSE_SESSION_SIGNING_KEY / TSA_HOST_KEY / TSA_AUTHORIZED_KEYS,
+# CONCOURSE_POSTGRES_* (systemd-concourse-pg), ADD_LOCAL_USER +
+# MAIN_TEAM_LOCAL_USER, CLUSTER_NAME.
+PublishPort=127.0.0.1:3122:8080/tcp
+# TSA :2222 stays unpublished: the worker reaches systemd-concourse-web:2222
+# in-network (verified live: sibling names resolve via aardvark on .1)
+
+[Service]
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=300
+TimeoutStopSec=120

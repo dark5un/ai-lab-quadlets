@@ -5,8 +5,8 @@
 #   scripts/build-images.sh [--rebuild] [NAME...]
 #
 # NAME: open-webui llama-cpp comfyui rizzo sketchlab hyperframes
-#       deepseek-harness hermes memory vscode kb automation ailab-api
-#       (default: the first six + files + vscode + kb + automation)
+#       deepseek-harness hermes memory vscode kb automation pipeline ailab-api
+#       (default: the first six + files + vscode + kb + automation + pipeline)
 # Pulled images (open-webui, llama-cpp, hermes) are pulled only when missing;
 # a pulled digest that differs from the registry's image_digest is reported.
 # Built images are skipped when present unless --rebuild; comfyui also
@@ -19,7 +19,7 @@ REG="$ROOT/services.json"
 CONF="${HOME}/.config/containers/config"
 SKETCHLAB_REPO="${SKETCHLAB_REPO:-${HOME}/workspace/github.com/dark5un/sketchlab.app}"
 HYPERFRAMES_REPO="${HYPERFRAMES_REPO:-${HOME}/workspace/github.com/heygen-com/hyperframes}"
-DEFAULT=(open-webui llama-cpp comfyui rizzo sketchlab hyperframes dufs syncthing vscode kb automation ailab-api)
+DEFAULT=(open-webui llama-cpp comfyui rizzo sketchlab hyperframes dufs syncthing vscode kb automation pipeline ailab-api)
 
 REBUILD=0 NAMES=()
 for arg in "$@"; do
@@ -111,6 +111,10 @@ for name in "${NAMES[@]}"; do
                       -f "$ROOT/containers/notebook/Containerfile" ;;
         ailab-api) build ailab-api "$ROOT/containers/ailab-api" \
                       -f "$ROOT/containers/ailab-api/Containerfile" ;;
+        pipeline) pull forge; pull forge-postgres; pull s3;
+                  pull concourse-web; pull concourse-worker; pull concourse-postgres;
+                  build concourse-mcp "$ROOT/containers/concourse-mcp" \
+                        -f "$ROOT/containers/concourse-mcp/Containerfile" ;;
         *) echo "  ! unknown image '$name'"; fail=1 ;;
     esac
 done

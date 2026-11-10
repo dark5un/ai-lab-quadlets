@@ -1,0 +1,29 @@
+# concourse-mcp - thin MCP server (streamable HTTP) over the Concourse ATC
+# REST API (agentic-pipeline plan sec. 2.4/7). No usable upstream Concourse
+# MCP exists (centralci/cci-visual-mcp-server is an Electron desktop app).
+#
+# Dependencies are uv-owned (pyproject.toml + uv.lock, committed; built with
+# uv sync --frozen - do not hand-edit the lock). Upstream SDK: PyPI `mcp`
+# (modelcontextprotocol/python-sdk), FastMCP streamable-http transport.
+#
+# Build: scripts/build-images.sh pipeline   (or --rebuild concourse-mcp via
+# the pipeline group)
+
+FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+# tag form + host verified live on the ghcr registry API 2026-11-10
+# (Docker Hub does NOT host astral-sh/uv; do not "fix" this to docker.io)
+
+WORKDIR /app
+# uv image: uv + python preinstalled; non-root runtime user
+RUN useradd -r -u 10001 -d /app mcp
+
+COPY pyproject.toml uv.lock ./
+COPY server.py ./
+RUN uv sync --frozen --no-dev && \
+    chown -R mcp:mcp /app
+
+USER mcp
+ENV MCP_PORT=8080
+EXPOSE 8080
+
+ENTRYPOINT ["/app/.venv/bin/python", "/app/server.py"]

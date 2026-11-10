@@ -14,6 +14,15 @@
 #                                    mirror, SUPERADMIN_SECRET)
 #   - ailab-api AILAB_API_TOKEN      (config/ailab-api/service.env; the Mac
 #                                    widget must re-pick up the new token)
+#   - pipeline group                (agentic-pipeline plan): forge/postgres.env
+#                                    + forge/service.env mirrors, garage.toml
+#                                    secrets, concourse-postgres + web.env
+#                                    local-user passwords (upserted into the
+#                                    ATC DB on web restart) + mcp.env mirrors.
+#                                    Garage ACCESS KEYS (bucket creds) are
+#                                    minted in Garage's metadata: rotate with
+#                                    `podman exec systemd-s3 /garage key create`
+#                                    + rewrite config/concourse/pipeline-vars.yml.
 # Then restarts the affected services. Existing sessions/cookies tied to the
 # old values are invalidated. Treat any leaked value as burned: rotate first,
 # then hunt for where it leaked.
@@ -63,6 +72,65 @@ rotate_env_key "$CONF/kb-postgres/service.env" POSTGRES_PASSWORD
 rotate_env_key "$CONF/windmill-postgres/service.env" POSTGRES_PASSWORD
 rotate_env_key "$CONF/windmill/service.env" SUPERADMIN_SECRET
 rotate_env_key "$CONF/ailab-api/service.env" AILAB_API_TOKEN
+
+# Pipeline group (agentic-pipeline plan). Sources first, mirrors after.
+rotate_env_key "$CONF/forge/postgres.env" POSTGRES_PASSWORD
+rotate_env_key "$CONF/forge/service.env" FORGEJO__security__SECRET_KEY
+rotate_env_key "$CONF/forge/service.env" FORGEJO_ADMIN_PASSWORD
+rotate_env_key "$CONF/concourse-postgres/service.env" POSTGRES_PASSWORD
+rotate_env_key "$CONF/concourse/mcp.env" MCP_TOKEN_HERMES
+rotate_env_key "$CONF/concourse/mcp.env" MCP_TOKEN_PIPELINE
+# web.env carries both local-user passwords inside one line: rewrite in place.
+if [ -f "$CONF/concourse/web.env" ]; then
+    if [ "$APPLY" = 1 ]; then
+        awk '/^CONCOURSE_ADD_LOCAL_USER=/{
+            gsub(/pipeline:[^,]*/, "pipeline:" rand()); gsub(/agent:[^ ]*/, "agent:" rand())
+        } 1' RNGSEED="$(openssl rand -hex 8)" "$CONF/concourse/web.env" \
+          > "$CONF/concourse/web.env.tmp" && \
+        chmod 600 "$CONF/concourse/web.env.tmp" && \
+        mv "$CONF/concourse/web.env.tmp" "$CONF/concourse/web.env" && \
+        echo "  ✓ rotated concourse local users (pipeline/agent) in web.env"
+    else
+        echo "  ~ would rotate concourse local users in web.env"
+    fi
+fi
+# garage.toml secrets (quoted-key TOML lines, not KEY=VALUE).
+for k in rpc_secret admin_token metrics_token; do
+    f="$CONF/s3/garage.toml"
+    if [ -f "$f" ]; then
+        if [ "$APPLY" = 1 ]; then
+            sed "s|^${k} = .*|${k} = \"$(openssl rand -hex 32)\"|" "$f" > "$f.tmp" && \
+            chmod 600 "$f.tmp" && mv "$f.tmp" "$f" && echo "  ✓ rotated $k in $f"
+        else
+            echo "  ~ would rotate $k in $f"
+        fi
+    fi
+done
+if [ "$APPLY" = 1 ]; then
+    # forge/service.env PASSWD mirrors forge/postgres.env
+    fpw=$(sed -n 's/^POSTGRES_PASSWORD=//p' "$CONF/forge/postgres.env" 2>/dev/null | tail -1)
+    [ -n "$fpw" ] && [ -f "$CONF/forge/service.env" ] && \
+        awk -v p="$fpw" '/^FORGEJO__database__PASSWD=/{print "FORGEJO__database__PASSWD=" p; next} 1' \
+            "$CONF/forge/service.env" > "$CONF/forge/service.env.tmp" && \
+        chmod 600 "$CONF/forge/service.env.tmp" && mv "$CONF/forge/service.env.tmp" "$CONF/forge/service.env" && \
+        echo "  ✓ re-mirrored forge PASSWD"
+    # web.env POSTGRES_PASSWORD mirrors concourse-postgres; the pipeline/agent
+    # passwords in web.env mirror into mcp.env (CONCOURSE_*/LOWPRIV_*).
+    cpw=$(sed -n 's/^POSTGRES_PASSWORD=//p' "$CONF/concourse-postgres/service.env" 2>/dev/null | tail -1)
+    [ -n "$cpw" ] && [ -f "$CONF/concourse/web.env" ] && \
+        awk -v p="$cpw" '/^CONCOURSE_POSTGRES_PASSWORD=/{print "CONCOURSE_POSTGRES_PASSWORD=" p; next} 1' \
+            "$CONF/concourse/web.env" > "$CONF/concourse/web.env.tmp2" && \
+        chmod 600 "$CONF/concourse/web.env.tmp2" && mv "$CONF/concourse/web.env.tmp2" "$CONF/concourse/web.env" && \
+        echo "  ✓ re-mirrored concourse web POSTGRES_PASSWORD"
+    ppw=$(sed -n 's/^CONCOURSE_ADD_LOCAL_USER=pipeline:\([^,]*\),.*/\1/p' "$CONF/concourse/web.env" 2>/dev/null | tail -1)
+    apw=$(sed -n 's/^CONCOURSE_ADD_LOCAL_USER=[^,]*,agent:\(.*\)$/\1/p' "$CONF/concourse/web.env" 2>/dev/null | tail -1)
+    [ -n "$ppw" ] && [ -n "$apw" ] && [ -f "$CONF/concourse/mcp.env" ] && \
+        awk -v p="$ppw" -v a="$apw" '/^CONCOURSE_PASSWORD=/{print "CONCOURSE_PASSWORD=" p; next}
+             /^CONCOURSE_LOWPRIV_PASSWORD=/{print "CONCOURSE_LOWPRIV_PASSWORD=" a; next} 1' \
+            "$CONF/concourse/mcp.env" > "$CONF/concourse/mcp.env.tmp" && \
+        chmod 600 "$CONF/concourse/mcp.env.tmp" && mv "$CONF/concourse/mcp.env.tmp" "$CONF/concourse/mcp.env" && \
+        echo "  ✓ re-mirrored mcp.env concourse credentials"
+fi
 if [ "$APPLY" = 1 ]; then
     rand_hex 32 > "$CONF/notebook/jupyter-token" 2>/dev/null && \
         chmod 600 "$CONF/notebook/jupyter-token" && \
@@ -133,7 +201,8 @@ if [ "$APPLY" = 1 ]; then
                llama-cpp-5090 llama-cpp-4070ti llama-cpp-both \
                ragflow-elasticsearch ragflow-mysql ragflow-minio ragflow-kvrocks \
                ragflow kb-postgres lightrag kb-analysis \
-               windmill-postgres windmill-server windmill-worker notebook ailab-api; do
+               windmill-postgres windmill-server windmill-worker notebook ailab-api \
+               forge-postgres forge s3 concourse-postgres concourse-web concourse-worker concourse-mcp; do
         systemctl --user is-active "${svc}.service" &>/dev/null || continue
         systemctl --user restart "${svc}.service" && echo "  ✓ restarted $svc"
     done
