@@ -1,0 +1,109 @@
+# repo-review.yml — git change -> agentic code review -> PR pipeline.
+#
+# Flow: push to the `review/next` channel branch of pipeline/pilot-cli ->
+# git resource sees a new commit SHA -> exactly one build -> task computes
+# the diff vs main, runs pytest + py_compile gates, builds a Prowl
+# blast-radius packet (binary fetched from s3://ci-artifacts/images/prowl.gz;
+# prowl index/impact run fully local, no gateway) and asks strata for a
+# senior-engineer review, then opens (or annotates) the PR review/next ->
+# main via the Forgejo API. The agent never merges and never pushes: the
+# human stays in the loop.
+#
+# Loop-safety: the task only talks to the FORGE API (PR + comment); it never
+# writes refs, so it can never re-trigger itself.
+#
+# Apply:
+#   fly -t local set-pipeline -p repo-review -c pipelines/repo-review.yml \
+#       -l ~/.config/containers/config/concourse/pipeline-vars.yml
+
+resources:
+- name: change
+  type: git
+  check_every: 30s
+  source:
+    uri: http://systemd-forge:3000/pipeline/pilot-cli.git
+    # git-resource 1.24.1 dropped plural `branches` and does not glob the
+    # singular `branch` (verified live: "Found unknown keys in source
+    # 'branches'"; a glob in `branch` is passed to git clone --branch and
+    # fails). Convention: the review channel is the single branch
+    # `review/next`; push changes there, merge the agent PR, then reuse it.
+    branch: review/next
+    username: ((forge-user))
+    password: ((forge-token))
+
+- name: base
+  type: git
+  check_every: 5m
+  source:
+    uri: http://systemd-forge:3000/pipeline/pilot-cli.git
+    branch: main
+    username: ((forge-user))
+    password: ((forge-token))
+
+- name: tooling
+  type: git
+  check_every: 1m
+  source:
+    uri: http://systemd-forge:3000/pipeline/pipeline-lab.git
+    branch: main
+    username: ((forge-user))
+    password: ((forge-token))
+
+jobs:
+- name: review-change
+  build_log_retention:
+    builds: 20
+  plan:
+  - get: change
+    trigger: true
+  - get: base
+  - get: tooling
+  - task: agent-review
+    timeout: 25m
+    config:
+      platform: linux
+      image_resource:
+        type: registry-image
+        # archlinux, NOT python:slim: the prowl binary is Arch-built and
+        # requires GLIBC_2.43 — Debian trixie (2.41) cannot exec it
+        # (verified live: "version GLIBC_2.43 not found").
+        source: {repository: docker.io/library/archlinux, tag: latest}
+      inputs:
+      - {name: change}
+      - {name: base}
+      - {name: tooling}
+      outputs:
+      - {name: review-out}
+      params:
+        FORGE_URL: http://systemd-forge:3000
+        FORGE_TOKEN: ((forge-review-token))   # write:repository + write:issue
+        FORGE_OWNER: pipeline
+        FORGE_REPO: pilot-cli
+        BASE_BRANCH: main
+        REVIEW_BRANCH: review/next
+        S3_ENDPOINT_URL: http://systemd-s3:3900
+        S3_REGION: garage
+        S3_ACCESS_KEY_ID: ((s3-ak))
+        S3_SECRET_ACCESS_KEY: ((s3-sk))
+        PROWL_BUCKET: ci-artifacts
+        PROWL_KEY: images/prowl.gz
+        PROWL: auto
+        STRATA_URL: http://systemd-strata:8080/v1
+        STRATA_API_KEY: ((strata-key))
+        STRATA_MODEL: auto
+      run:
+        path: bash
+        args:
+        - -c
+        - |
+          set -euo pipefail
+          # git: local diff + prowl 'changed'; pip(pkgs): boto3 to fetch the
+          # prowl binary from Garage, pytest to run the repo suite.
+          # full -Syu: Arch CI with a cached mirror DB must upgrade the whole
+          # system — partial -Sy hits file conflicts (verified live:
+          # openssl-3 vs openssl). Base image has no python at all.
+          pacman -Syu --noconfirm --needed git python python-pip ca-certificates >/dev/null 2>&1
+          # Arch python is PEP668 externally-managed: --break-system-packages
+          python -m pip install --quiet --break-system-packages boto3 pytest
+          python tooling/agents/review_change.py 2>&1 | tee review-out/run.log
+          cp review-notes.md review-out/ 2>/dev/null || true

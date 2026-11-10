@@ -1,0 +1,88 @@
+# docs-agent.yml — S3 document -> agentic summary pipeline.
+#
+# Flow: new object under s3://doc-inbox/pending/ -> s3 resource regex check
+# sees a new version -> exactly one build -> task reads the doc, asks strata
+# (in-network) for a structured KB summary, writes s3://doc-summaries/summaries/
+# <docid>-<name>.md, and archives the original under processed/ so it can
+# never trigger twice (see agents/summarize_docs.py header for the
+# exactly-once argument).
+#
+# Apply:
+#   fly -t local set-pipeline -p docs-agent -c pipelines/docs-agent.yml \
+#       -l ~/.config/containers/config/concourse/pipeline-vars.yml
+#
+# Vars reused from the agentic pipeline (config/concourse/pipeline-vars.yml,
+# 0600, never in git): s3-ak, s3-sk, strata-key.
+# Endpoint form `http://systemd-s3:3900` (scheme+host:port) verified live on
+# s3-resource v2.5.7 — bare host:port is rejected by the AWS SDK v2 in this
+# resource version (agentic.yml comment).
+
+resources:
+- name: inbox
+  type: s3
+  check_every: 15s
+  source:
+    bucket: doc-inbox
+    endpoint: http://systemd-s3:3900
+    disable_ssl: true
+    use_path_style: true
+    region_name: garage
+    access_key_id: ((s3-ak))
+    secret_access_key: ((s3-sk))
+    skip_download: true    # trigger-only get; the task sweeps pending/ itself
+    # NOTE: the source key is `regexp` (NOT `regex` — a wrong key is silently
+    # ignored and the resource falls into versioned_file mode: verified live).
+    # Version = the (?P<version>) capture group (go-semi-semantic), i.e. the
+    # upload epoch in the object key: pending/<epoch>-<name>.md. Each new
+    # document key is a strictly newer version -> exactly one build per doc.
+    regexp: "^pending/(?P<version>[0-9]{9,11})-.*\\.md$"
+
+- name: tooling
+  type: git
+  check_every: 1m
+  source:
+    uri: http://systemd-forge:3000/pipeline/pipeline-lab.git
+    branch: main
+    username: ((forge-user))
+    password: ((forge-token))
+
+jobs:
+- name: summarize-docs
+  build_log_retention:
+    builds: 20
+  plan:
+  - get: inbox
+    trigger: true
+  - get: tooling
+  - task: read-summarize-write
+    timeout: 20m
+    config:
+      platform: linux
+      image_resource:
+        type: registry-image
+        source: {repository: docker.io/library/python, tag: 3.14-slim}
+      inputs:
+      - {name: inbox}
+      - {name: tooling}
+      outputs:
+      - {name: reports}
+      params:
+        S3_ENDPOINT_URL: http://systemd-s3:3900
+        S3_REGION: garage
+        S3_ACCESS_KEY_ID: ((s3-ak))
+        S3_SECRET_ACCESS_KEY: ((s3-sk))
+        INBOX_BUCKET: doc-inbox
+        SUMMARIES_BUCKET: doc-summaries
+        STRATA_URL: http://systemd-strata:8080/v1
+        STRATA_API_KEY: ((strata-key))
+        STRATA_MODEL: auto
+      run:
+        path: bash
+        args:
+        - -c
+        - |
+          set -euo pipefail
+          pip install --quiet boto3
+          # tooling ships the agent; inbox holds the pending documents
+          cp tooling/agents/summarize_docs.py .
+          python summarize_docs.py 2>&1 | tee reports/run.log
