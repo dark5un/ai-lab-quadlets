@@ -54,9 +54,11 @@ RUN curl -fL "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-
 # api.github.com/repos/concourse/concourse/releases/tags/v<X> (fly-<X>-linux-amd64.tgz).
 RUN curl -fL "https://github.com/concourse/concourse/releases/download/v8.3.3/fly-8.3.3-linux-amd64.tgz" \
       -o /tmp/fly.tgz && \
-    echo "$(curl -fsSL https://github.com/concourse/concourse/releases/download/v8.3.3/fly-8.3.3-linux-amd64.tgz.sha1)  /tmp/fly.tgz" | sha1sum -c - && \
+    curl -fsSL "https://github.com/concourse/concourse/releases/download/v8.3.3/fly-8.3.3-linux-amd64.tgz.sha1" \
+      -o /tmp/fly.sha1 && \
+    echo "$(awk '{print $1}' /tmp/fly.sha1)  /tmp/fly.tgz" | sha1sum -c - && \
     tar -xzf /tmp/fly.tgz -C /usr/local/bin fly && \
-    chmod 0755 /usr/local/bin/fly && rm /tmp/fly.tgz
+    chmod 0755 /usr/local/bin/fly && rm /tmp/fly.tgz /tmp/fly.sha1
 
 # Pipeline endpoints for the box's users (dotfile-style, in-network names):
 #   git: http://systemd-forge:3000 (token) / ssh://git@<node-tailnet-fqdn>:2223
