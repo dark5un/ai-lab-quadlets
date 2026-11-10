@@ -1,8 +1,9 @@
 # Agentic pipeline plan: Concourse CI + S3 + git forge on the ai-lab quadlet stack
 
 Status: EXECUTED 2026-11-10 (all 7 pipeline units deployed, boot-enabled via
-drop-ins, acceptance battery green except: svc: doors pending tailnet console
-approval for svc:forge/svc:s3/svc:concourse; reboot drill on request).
+drop-ins; svc:forge/svc:s3/svc:concourse doors LIVE + curl-verified end-to-end
+(200/200/signed-HEAD 200; autoApprovers entries added by owner). Acceptance
+battery green; reboot drill on request).
 Execution errata found against live (all fixed in-repo):
   - quadlet key for CMD override is `Exec=`, not `Command=` (podman 6.1.4
     quadlet rejects Command= — generator error observed live).
