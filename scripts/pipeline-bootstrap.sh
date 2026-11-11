@@ -176,16 +176,45 @@ say "teams: main (pipeline) + agent (low-priv, agentic-agent set)"
 STRATA_KEY=$(envval "$CONF/strata/service.env" API_KEY)
 [ -n "$STRATA_KEY" ] || die "strata API_KEY not found in $CONF/strata/service.env"
 MCP_LOW=$(envval "$CONF/concourse/mcp.env" MCP_TOKEN_PIPELINE)
-python3 - "$VARS" "$ADMIN" "$TOK" "$AK" "$SK" "$STRATA_KEY" "$MCP_LOW" <<'PY'
-import os, sys
-path, user, token, ak, sk, strata, mcp_low = sys.argv[1:8]
+# review token (git + PR comments): write:repository for pushes/clone,
+# write:issue for the review comment + change-scoped deploy-key admin
+# (verified live on 17.0.1: commenting needs write:issue, keys need
+# write:repository).
+REVTOK_FILE="$CONF/forge/review-token"
+if [ ! -s "$REVTOK_FILE" ]; then
+    say "creating forgejo review token"
+    podman exec --user git systemd-forge forgejo admin user generate-access-token \
+        --raw --username "$ADMIN" --token-name "review-$(date +%s)" \
+        --scopes "write:repository,read:repository,write:issue,read:issue" > "$REVTOK_FILE"
+    chmod 600 "$REVTOK_FILE"
+fi
+RAGFLOW_KEY=$(envval "$CONF/kb-watcher/service.env" RAGFLOW_API_KEY)
+LIGHTRAG_KEY=$(envval "$CONF/lightrag/service.env" LIGHTRAG_API_KEY)
+python3 - "$VARS" "$ADMIN" "$TOK" "$AK" "$SK" "$STRATA_KEY" "$MCP_LOW" \
+        "$(cat "$REVTOK_FILE")" "$RAGFLOW_KEY" "$LIGHTRAG_KEY" <<'PY'
+import os, re, sys
+path, user, token, ak, sk, strata, mcp_low, revtok, ragflow, lightrag = sys.argv[1:11]
 vals = {"forge-user": user, "forge-token": token, "s3-ak": ak, "s3-sk": sk,
-        "strata-key": strata, "mcp-lowpriv-token": mcp_low}
+        "strata-key": strata, "mcp-lowpriv-token": mcp_low,
+        "forge-review-token": revtok, "kb-ragflow-key": ragflow,
+        "kb-lightrag-key": lightrag}
+# MERGE, never clobber: keep any extra keys that exist live (drift-proof)
+txt = open(path).read() if os.path.exists(path) else ""
+lines = txt.splitlines()
+for k, v in vals.items():
+    if not v:
+        continue  # source missing: keep the existing key rather than blank it
+    pat = re.compile(r'^%s:.*$' % re.escape(k))
+    entry = f'{k}: "{v}"'
+    if any(l.startswith(k + ":") for l in lines):
+        lines = [entry if l.startswith(k + ":") else l for l in lines]
+    else:
+        lines.append(entry)
 with open(path, "w") as f:
-    for k, v in vals.items():
-        f.write(f"{k}: \"{v}\"\n")
+    f.write("\n".join(lines) + "\n")
 os.chmod(path, 0o600)
-print("  wrote %s (0600, 6 vars, values never printed)" % path)
+print("  merged %s (%d known vars, extra keys preserved, values never printed)"
+      % (path, len(vals)))
 PY
 
 "$FLY" -t local set-pipeline -p agentic -n -c "$ROOT/pipelines/agentic.yml" -l "$VARS" --non-interactive 2>&1 | tail -3
