@@ -27,7 +27,7 @@ MODE="repair"
 [ "${1:-}" = "--rotate" ] && MODE="rotate"
 
 python3 - "$CONF" "$MODE" <<'PYEOF'
-import base64, hashlib, os, pathlib, re, secrets as pysecrets, subprocess, sys
+import base64, hashlib, os, pathlib, re, secrets as pysecrets, subprocess, sys, time
 
 conf, mode = pathlib.Path(sys.argv[1]) / "ragflow", sys.argv[2]
 pwfile = conf / ".admin_pw_once"
@@ -58,19 +58,24 @@ salt = base64.b64encode(pysecrets.token_bytes(12)).decode()
 dk = hashlib.scrypt(pw.encode(), salt=salt.encode(), n=32768, r=8, p=1, dklen=64, maxmem=64*1024*1024)
 newhash = f"scrypt:32768:8:1${salt}${dk.hex()}"
 
-sql = f"UPDATE user SET password='{newhash}' WHERE email='admin@ragflow.io';\n"
-r = subprocess.run(["podman", "exec", "systemd-ragflow-mysql", "sh", "-c",
-                    f"mysql -uroot -p'{mysql_pw}' rag_flow < /dev/stdin"],
+sql = f"UPDATE user SET password='{newhash}', update_time={int(time.time()*1000)} WHERE email='admin@ragflow.io';\n"
+# NOTE (2026-11-11 bug fix): podman exec WITHOUT -i feeds the container
+# /dev/null — the old `sh -c "... < /dev/stdin"` form ran ZERO statements and
+# exited 0, and a format-only readback then "verified" the stale old row.
+# Feed stdin directly and prove the write by EXACT match of the random-salt
+# hash we just generated (format checks cannot distinguish old vs new row).
+r = subprocess.run(["podman", "exec", "-i", "systemd-ragflow-mysql",
+                    "mysql", "-uroot", f"-p{mysql_pw}", "rag_flow"],
                    input=sql, capture_output=True, text=True)
 if r.returncode != 0:
     sys.exit("mysql update failed (is systemd-ragflow-mysql up?)")
 
-# proof: read-back of the row's format/length (the password itself is never used)
-r2 = subprocess.run(["podman", "exec", "systemd-ragflow-mysql", "sh", "-c",
-                     f"mysql -uroot -p'{mysql_pw}' rag_flow -N -B -e \"select substring_index(password,'\\$',1), length(password) from user where email='admin@ragflow.io'\""],
+# proof: the row now equals the hash we wrote (the password itself is never printed)
+r2 = subprocess.run(["podman", "exec", "systemd-ragflow-mysql",
+                     "mysql", "-uroot", f"-p{mysql_pw}", "-N", "-B", "rag_flow", "-e",
+                     "select password from user where email='admin@ragflow.io'"],
                     capture_output=True, text=True)
-out = r2.stdout.strip()
-if not re.match(r"^scrypt:32768:8:1\t162$", out):
-    sys.exit(f"DB read-back unexpected: {out!r}")
-print("password row updated + read-back verified (no login attempted)")
+if r2.stdout.strip() != newhash:
+    sys.exit("DB read-back does NOT match the written hash — update did not land")
+print("password row updated + read-back verified by exact hash match (no login attempted)")
 PYEOF

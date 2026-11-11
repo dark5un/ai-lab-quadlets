@@ -127,6 +127,37 @@ browser but curl with identical values passes)
 Root cause -> fix -> update this doc with a "RESOLVED" section (claim->probe
 -> observed) + skill notes (ai-lab-pipeline-group) if a new pitfall surfaced.
 
+## RESOLVED (2026-11-11, session 2)
+
+Root causes, claim -> probe -> observed:
+1. **kb-bot /login 109**: claim "owner types a value that isn't the live
+   password". Probe: scrypt recompute of `.kbuser_pw_once` vs DB row + SPA
+   bundle payload diff. Observed: hash MATCHES; SPA payload == curl payload.
+   The `ailab-access` card has two kb-bot rows; row 2 (`ragflow-…`-prefixed)
+   is the API PAT, not a login password. Fix: type row 1 (or `ailab-access`
+   ragflow row 1). Owner's browser path was never broken.
+2. **admin trio drift**: root cause = BUG in `scripts/ragflow-fix-admin-
+   password.sh` — `podman exec` WITHOUT `-i` feeds the container `/dev/null`,
+   so the piped `mysql < /dev/stdin` ran ZERO statements (exit 0), while the
+   format-only read-back "verified" the STALE old row. Every DB write the
+   script ever performed was silently a no-op; only the file/env halves of
+   the "trio" were ever written.
+   Fix (owner-authorized "repair"): script now uses `podman exec -i`, sets
+   `update_time`, and proves writes by EXACT match of the freshly generated
+   random-salt hash. Repair re-run -> independent scrypt recompute of the DB
+   row against both `.admin_pw_once` and `ADMIN_DEFAULT_PASSWORD`: both True.
+   Trio fully converged; live admin password == the recorded file value.
+   NOTE: the previous live admin hash (row from 10:13:58Z) is now overwritten
+   — per the standing lesson, flagged so the owner knows if that value was
+   ever his own custom choice.
+3. admin@ragflow.io at `/login` = by design ("super admin ...") — admin
+   console lives at `:8444/admin` only. This remains true and is not a bug.
+
+Residual hygiene: make scripts/ragflow-fix-admin-password.sh executable
+(chmod +x) next touch; browser tooling on this box lacks chromium shared
+libs (sudo-gated) — bundle-reading + offline hash probes cover this class
+of investigation without a live browser.
+
 ## Quick-reference
 
 - Credentials card: `ailab-access` (ragflow rows 1-3).
