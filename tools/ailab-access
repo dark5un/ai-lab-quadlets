@@ -1,0 +1,233 @@
+#!/usr/bin/env python3
+"""ailab-access — one-shot access card for every quadlet service in the
+ai-lab stack: service name, access URL, Tailscale URL + port, host port,
+and EVERY credential the stack stores for that service (login user +
+password, bearer/API tokens, keypairs), one row per credential.
+
+Sources of truth (all live, read-only):
+  * ~/workspace/github.com/dark5un/ai-lab-quadlets/services.json  (registry)
+  * `tailscale serve status`                                      (doors)
+  * ~/.config/containers/config/<svc>/                            (creds)
+  * ~/.workspaces/vscode-pr/*/state.json                          (live PR envs)
+
+Secrets are printed because this is the owner's own machine; the output
+contains real credentials — do not paste it into anything shared.
+"""
+from __future__ import annotations
+
+import json
+import pathlib
+import re
+import subprocess
+import sys
+
+HOME = pathlib.Path.home()
+REGISTRY = HOME / "workspace/github.com/dark5un/ai-lab-quadlets/services.json"
+CONF = HOME / ".config/containers/config"
+PR_ENVS = HOME / ".workspaces/vscode-pr"
+
+# Credential model: service -> list of rows.
+# row = (kind, label, user_spec, secret_spec)
+#   user_spec   ("lit", "text") | ("env", relpath, KEY) | ("-",)
+#   secret_spec ("env", relpath, KEY) | ("file", relpath) | ("firstline", relpath)
+#   pairs_spec  ("pairs", relpath, KEY, sep)  -> expands to one row per user:pass
+CRED: dict[str, list] = {
+    "dufs":          [("basic", "WebDAV login", ("env", "dufs/service.env", "DAV_USER"),
+                       ("env", "dufs/service.env", "DAV_PASSWORD"))],
+    "s3-webdav":     [("basic", "WebDAV (Garage) login", ("env", "s3-webdav/service.env", "S3_WEBDAV_USER"),
+                       ("env", "s3-webdav/service.env", "S3_WEBDAV_PASSWORD"))],
+    "vscode":        [("token", "connection token", ("-",), ("env", "vscode/service.env", "VSCODE_CONNECTION_TOKEN"))],
+    "ragflow": [
+        ("login", "console login (kb-bot)", ("lit", "kb-bot@local.ai"),
+         ("file", "ragflow/.kbuser_pw_once")),
+        ("apikey", "API PAT (kb-bot; canonical copy)", ("lit", "kb-bot@local.ai"),
+         ("env", "kb-watcher/service.env", "RAGFLOW_API_KEY")),
+        ("svc", "internal super-admin — service-only, CANNOT console-login", ("lit", "admin@ragflow.io"),
+         ("file", "ragflow/.admin_pw_once")),
+    ],
+    "lightrag":      [("apikey", "X-API-Key", ("-",), ("env", "lightrag/service.env", "LIGHTRAG_API_KEY"))],
+    "concourse-web": [
+        ("pairs", "local users (main team = the ones marked main)", ("pairs", "concourse/web.env", "CONCOURSE_ADD_LOCAL_USER", ","),
+         None),
+    ],
+    "concourse-mcp": [
+        ("bearer", "MCP token (hermes, main-team rights)", ("-",), ("env", "concourse/mcp.env", "MCP_TOKEN_HERMES")),
+        ("bearer", "MCP token (pipeline, read/trigger)", ("-",), ("env", "concourse/mcp.env", "MCP_TOKEN_PIPELINE")),
+        ("basic", "low-priv Concourse user (agent team)", ("env", "concourse/mcp.env", "CONCOURSE_LOWPRIV_USER"),
+         ("env", "concourse/mcp.env", "CONCOURSE_LOWPRIV_PASSWORD")),
+    ],
+    "forge": [
+        ("basic", "instance admin login", ("env", "forge/service.env", "FORGEJO_ADMIN_USER"),
+         ("env", "forge/service.env", "FORGEJO_ADMIN_PASSWORD")),
+        ("token", "API token (pipeline scopes)", ("-",), ("file", "forge/token")),
+    ],
+    "s3":            [("s3key", "Garage key pair", ("env", "s3/service.env", "GARAGE_KEY_ID"),
+                       ("env", "s3/service.env", "GARAGE_SECRET"))],
+    "notebook":      [("token", "Jupyter server token", ("lit", "(any/blank)"), ("file", "notebook/jupyter-token"))],
+    "ailab-api":     [("bearer", "control API token", ("-",), ("env", "ailab-api/service.env", "AILAB_API_TOKEN"))],
+    "strata-5090":   [("apikey", "API key (all strata variants)", ("-",), ("env", "strata/service.env", "API_KEY"))],
+    "embeddings":    [("apikey", "API key", ("-",), ("env", "lightrag/service.env", "EMBEDDING_BINDING_API_KEY"))],
+    "openviking":    [("apikey", "root API key", ("-",), ("env", "openviking/service.env", "OPENVIKING_ROOT_API_KEY"))],
+    "windmill-server": [
+        ("login", "console login (instance admin)", ("lit", "panos@ai.local"),
+         ("file", "windmill/admin-password.txt")),
+        ("bearer", "agent token (workspace kb)", ("lit", "panos@ai.local"),
+         ("file", "windmill/agent-token")),
+        ("bearer", "SUPERADMIN_SECRET (virtual superadmin, bootstrap only)", ("lit", "superadmin@windmill.dev"),
+         ("env", "windmill/service.env", "SUPERADMIN_SECRET")),
+    ],
+    "grafana":       [("basic", "admin login", ("env", "grafana/service.env", "GF_SECURITY_ADMIN_USER"),
+                       ("env", "grafana/service.env", "GF_SECURITY_ADMIN_PASSWORD"))],
+    "syncthing":     [("apikey", "GUI API key", ("lit", "(gui)"), ("syncthingkey",))],
+    "open-webui":    [("note", "admin = first account that signs up (no env creds)", ("-",), ("-",))],
+}
+# strata-*/llama-cpp-* variants share credential families
+FAMILY: dict[str, list] = {
+    "strata":      CRED["strata-5090"],
+    "llama-cpp":   [("apikey", "API key (keys.txt first line)", ("-",), ("firstline", "llama-cpp/keys.txt"))],
+}
+
+
+def env_value(rel: str, key: str) -> str:
+    p = CONF / rel
+    if not p.is_file():
+        return ""
+    for line in p.read_text().splitlines():
+        if line.startswith(key + "="):
+            return line.split("=", 1)[1].strip().strip('"')
+    return ""
+
+
+def file_value(rel: str) -> str:
+    p = CONF / rel
+    return p.read_text().strip() if p.is_file() else ""
+
+
+def first_line(rel: str) -> str:
+    p = CONF / rel
+    if p.is_file() and p.read_text().strip():
+        return p.read_text().splitlines()[0].strip()
+    return ""
+
+
+def syncthing_key() -> str:
+    p = HOME / ".local/share/syncthing/config/config.xml"
+    if p.is_file():
+        m = re.search(r"<apikey>([^<]+)</apikey>", p.read_text())
+        if m:
+            return m.group(1)
+    return ""
+
+
+def resolve(spec) -> str:
+    if not spec or spec[0] == "-":
+        return ""
+    kind = spec[0]
+    if kind == "lit":
+        return spec[1]
+    if kind == "env":
+        return env_value(spec[1], spec[2])
+    if kind == "file":
+        return file_value(spec[1])
+    if kind == "firstline":
+        return first_line(spec[1])
+    if kind == "syncthingkey":
+        return syncthing_key()
+    return ""
+
+
+def cred_rows(name: str):
+    """[(kind, label, user, secret)] for a service (may be 0..n rows)."""
+    rows: list = []
+    specs = CRED.get(name)
+    if specs is None:
+        for fam, s in FAMILY.items():
+            if name.startswith(fam):
+                specs = s
+                break
+    if not specs:
+        return rows
+    for kind, label, uspec, sspec in specs:
+        if kind == "pairs":  # one row per user:pass pair (Concourse local users)
+            raw = env_value(uspec[1], uspec[2])
+            main_users = set(env_value("concourse/web.env", "CONCOURSE_MAIN_TEAM_LOCAL_USER").split(","))
+            for pair in [x for x in raw.split(uspec[3]) if ":" in x]:
+                u, pw = pair.split(":", 1)
+                team = "main" if u in main_users else "agent"
+                rows.append(("basic", f"local user ({team} team)", u, pw))
+            continue
+        rows.append((kind, label, resolve(uspec), resolve(sspec)))
+    return rows
+
+
+def tailscale_map() -> dict[int, tuple[str, str]]:
+    """host_port -> (listener URL, tailscale port)."""
+    try:
+        out = subprocess.run(["tailscale", "serve", "status"], capture_output=True,
+                             text=True, timeout=15).stdout
+    except Exception:
+        return {}
+    m: dict[int, tuple[str, str]] = {}
+    listener = ""
+    for line in out.splitlines():
+        s = line.strip()
+        if s.startswith("http"):  # listener header
+            listener = s.split(" (")[0]
+        elif "proxy http://127.0.0.1:" in s and listener:
+            hp = int(s.rsplit(":", 1)[1].split("/")[0])
+            port = listener.rsplit(":", 1)[1] if ":" in listener.split("//", 1)[1] else "443"
+            m[hp] = (listener, port)
+    return m
+
+
+def main() -> int:
+    reg = json.loads(REGISTRY.read_text())
+    services = reg["services"] if isinstance(reg, dict) else reg
+    doors = tailscale_map()
+    rows = []
+    for s in services:
+        hp = s.get("host_port")
+        if not hp:
+            continue
+        bind = s.get("bind", "127.0.0.1")
+        host = "127.0.0.1" if bind == "127.0.0.1" else "<this-host-lan>"
+        url = f"http://{host}:{hp}"
+        ts_url, ts_port = doors.get(hp, ("", ""))
+        creds = cred_rows(s["name"])
+        if not creds:
+            rows.append((s["name"], url, ts_url, ts_port, str(hp), "-", ""))
+        for kind, label, user, secret in creds:
+            rows.append((s["name"], url, ts_url, ts_port, str(hp),
+                         f"{user}" if user else "-", secret))
+    # live per-PR VS Code envs (created by the vscode-pr pipelines)
+    if PR_ENVS.is_dir():
+        for d in sorted(PR_ENVS.iterdir()):
+            st = d / "state.json"
+            if not st.is_file():
+                continue
+            try:
+                j = json.loads(st.read_text())
+            except ValueError:
+                continue
+            ts_url, ts_port = doors.get(j.get("host_port", 0), ("", ""))
+            rows.append((f"vscode-pr:{j.get('slug', d.name)}",
+                         j.get("access_url", ""), ts_url, ts_port,
+                         str(j.get("host_port", "")),
+                         j.get("git_author", ""), j.get("connection_token", "")))
+
+    w = [max(len(str(r[i])) for r in rows) for i in range(5)]
+    print(f"{'SERVICE':<{w[0]}}  {'ACCESS URL':<{w[1]}}  {'TAILSCALE URL':<{w[2]}}  "
+          f"{'TS PORT':<{w[3]}}  {'HOST PORT':<{w[4]}}  {'USER':<24}  SECRET")
+    print("-" * 160)
+    for name, url, ts_url, ts_port, hp, user, secret in rows:
+        print(f"{name:<{w[0]}}  {url:<{w[1]}}  {ts_url or '-':<{w[2]}}  "
+              f"{ts_port or '-':<{w[3]}}  {hp:<{w[4]}}  {user or '-':<24}  {secret or '-'}")
+    print("-" * 160)
+    print("TS URL '-': no tailscale serve door (loopback or LAN only). "
+          "Forge git SSH: ssh://git@<tailnet-fqdn>:2223. Secrets live under "
+          f"{CONF}/<service>/ — this output is live-read, never cached.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
