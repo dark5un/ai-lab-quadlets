@@ -1,0 +1,25 @@
+# max-bridge: audio->blendshape WS hub (v2 avatar plan Phase 1).
+# Fan-out hub between clients (browser app, max-call bot) and the A2F-3D NIM
+# (systemd-max-face:52000). CPU-only. Loopback publish 8990 for local clients;
+# tailnet access via existing doors (Phase 4 decision).
+# Order: starts after ai-network; does NOT hard-depend on max-face (bridge
+# retries per clip; can serve stale-while-reconnect).
+
+[Unit]
+Description=Max Headroom blendshape bridge (audio in / ARKit frames out)
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-max-bridge
+Image=localhost/max-bridge:latest
+Network=ai.network
+PublishPort=127.0.0.1:8990:8990/tcp
+
+[Service]
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+
+# No [Install] section by design: opt-in via ai-lab (avatar group, boot=false).

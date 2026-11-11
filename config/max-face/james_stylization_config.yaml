@@ -1,0 +1,418 @@
+# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# These are the default emotions applied at the beginning of any audio clip.
+# Their values range from 0.0 to 1.0
+default_beginning_emotions:
+  amazement: 0.0
+  anger: 0.0
+  cheekiness: 0.0
+  disgust: 0.0
+  fear: 0.0
+  grief: 0.0
+  joy: 0.0
+  outofbreath: 0.0
+  pain: 0.0
+  sadness: 0.0
+
+a2e:
+  enabled: true
+  live_transition_time: 0.5
+  post_processing_params:
+    emotion_contrast: 1.0 # Increases the spread between emotion values by pushing them higher or lower
+    emotion_strength: 0.6 # Sets the strength of generated emotions relative to neutral emotion
+    enable_preferred_emotion: true # Activate blending preferred emotion with auto-emotion
+    live_blend_coef: 0.7 # Coefficient for exponential smoothing of emotion
+    max_emotions: 3 # Sets a firm limit on the quantity of emotion sliders engaged by A2E - emotions with the highest weight will be prioritized
+    preferred_emotion_strength: 0.5 # Sets the strength of the preferred emotion (if is loaded) relative to generated emotions
+
+a2f:
+  # regression / diffusion
+  inference_type: regression
+
+  regression_model:
+    inference_model_id: james_v2.3.1
+
+  diffusion_model:
+    inference_model_id: multi_v3.2
+    identity: james
+
+  face_params:
+    eyelid_offset: 0.06 # Adjusts the default pose of eyelid open-close
+    face_mask_level: 0.6 # Determines the boundary between the upper and lower regions of the face
+    face_mask_softness: 0.0085 # Determines how smoothly the upper and lower face regions blend on the boundary
+    input_strength: 1.0 # Controls the magnitude of the input audio
+    lip_close_offset: -0.02 # Adjusts the default pose of lip close-open
+    lower_face_smoothing: 0.006 # Applies temporal smoothing to the lower face motion
+    lower_face_strength: 1.2 # Controls the range of motion on the lower regions of the face
+    skin_strength: 1.0 # Controls the range of motion of the skin
+    upper_face_smoothing: 0.001 # Applies temporal smoothing to the upper face motion
+    upper_face_strength: 1.0 # Controls the range of motion on the upper regions of the face
+    tongue_strength: 1.3
+    tongue_height_offset: 0.0
+    tongue_depth_offset: 0.0
+
+  blendshape_params: # Modulates the effect of each blendshapes. Gain * w + offset
+    enable_clamping_bs_weight: false
+    
+    weight_multipliers:
+      EyeBlinkLeft: 1.0
+      EyeLookDownLeft: 1.0
+      EyeLookInLeft: 1.0
+      EyeLookOutLeft: 1.0
+      EyeLookUpLeft: 1.0
+      EyeSquintLeft: 1.0
+      EyeWideLeft: 1.0
+      EyeBlinkRight: 1.0
+      EyeLookDownRight: 1.0
+      EyeLookInRight: 1.0
+      EyeLookOutRight: 1.0
+      EyeLookUpRight: 1.0
+      EyeSquintRight: 1.0
+      EyeWideRight: 1.0
+      JawForward: 1.0
+      JawLeft: 1.0
+      JawRight: 1.0
+      JawOpen: 1.0
+      MouthClose: 1.0
+      MouthFunnel: 1.0
+      MouthPucker: 1.0
+      MouthLeft: 1.0
+      MouthRight: 1.0
+      MouthSmileLeft: 1.0
+      MouthSmileRight: 1.0
+      MouthFrownLeft: 1.0
+      MouthFrownRight: 1.0
+      MouthDimpleLeft: 1.0
+      MouthDimpleRight: 1.0
+      MouthStretchLeft: 1.0
+      MouthStretchRight: 1.0
+      MouthRollLower: 1.0
+      MouthRollUpper: 1.0
+      MouthShrugLower: 1.0
+      MouthShrugUpper: 1.0
+      MouthPressLeft: 1.0
+      MouthPressRight: 1.0
+      MouthLowerDownLeft: 1.0
+      MouthLowerDownRight: 1.0
+      MouthUpperUpLeft: 1.0
+      MouthUpperUpRight: 1.0
+      BrowDownLeft: 1.0
+      BrowDownRight: 1.0
+      BrowInnerUp: 1.0
+      BrowOuterUpLeft: 1.0
+      BrowOuterUpRight: 1.0
+      CheekPuff: 1.0
+      CheekSquintLeft: 1.0
+      CheekSquintRight: 1.0
+      NoseSneerLeft: 1.0
+      NoseSneerRight: 1.0
+      TongueOut: 1.0
+      TongueTipUp: 1.0
+      TongueTipDown: 1.0
+      TongueTipLeft: 1.0
+      TongueTipRight: 1.0
+      TongueRollUp: 1.0
+      TongueRollDown: 1.0
+      TongueRollLeft: 1.0
+      TongueRollRight: 1.0
+      TongueUp: 1.0
+      TongueDown: 1.0
+      TongueLeft: 1.0
+      TongueRight: 1.0
+      TongueIn: 1.0
+      TongueStretch: 1.0
+      TongueWide: 1.0
+      TongueNarrow: 1.0
+
+    weight_offsets:
+      EyeBlinkLeft: 0.0
+      EyeLookDownLeft: 0.0
+      EyeLookInLeft: 0.0
+      EyeLookOutLeft: 0.0
+      EyeLookUpLeft: 0.0
+      EyeSquintLeft: 0.0
+      EyeWideLeft: 0.0
+      EyeBlinkRight: 0.0
+      EyeLookDownRight: 0.0
+      EyeLookInRight: 0.0
+      EyeLookOutRight: 0.0
+      EyeLookUpRight: 0.0
+      EyeSquintRight: 0.0
+      EyeWideRight: 0.0
+      JawForward: 0.0
+      JawLeft: 0.0
+      JawRight: 0.0
+      JawOpen: 0.0
+      MouthClose: 0.0
+      MouthFunnel: 0.0
+      MouthPucker: 0.0
+      MouthLeft: 0.0
+      MouthRight: 0.0
+      MouthSmileLeft: 0.0
+      MouthSmileRight: 0.0
+      MouthFrownLeft: 0.0
+      MouthFrownRight: 0.0
+      MouthDimpleLeft: 0.0
+      MouthDimpleRight: 0.0
+      MouthStretchLeft: 0.0
+      MouthStretchRight: 0.0
+      MouthRollLower: 0.0
+      MouthRollUpper: 0.0
+      MouthShrugLower: 0.0
+      MouthShrugUpper: 0.0
+      MouthPressLeft: 0.0
+      MouthPressRight: 0.0
+      MouthLowerDownLeft: 0.0
+      MouthLowerDownRight: 0.0
+      MouthUpperUpLeft: 0.0
+      MouthUpperUpRight: 0.0
+      BrowDownLeft: 0.0
+      BrowDownRight: 0.0
+      BrowInnerUp: 0.0
+      BrowOuterUpLeft: 0.0
+      BrowOuterUpRight: 0.0
+      CheekPuff: 0.0
+      CheekSquintLeft: 0.0
+      CheekSquintRight: 0.0
+      NoseSneerLeft: 0.0
+      NoseSneerRight: 0.0
+      TongueOut: 0.0
+      TongueTipUp: 0.0
+      TongueTipDown: 0.0
+      TongueTipLeft: 0.0
+      TongueTipRight: 0.0
+      TongueRollUp: 0.0
+      TongueRollDown: 0.0
+      TongueRollLeft: 0.0
+      TongueRollRight: 0.0
+      TongueUp: 0.0
+      TongueDown: 0.0
+      TongueLeft: 0.0
+      TongueRight: 0.0
+      TongueIn: 0.0
+      TongueStretch: 0.0
+      TongueWide: 0.0
+      TongueNarrow: 0.0
+
+    active_poses:
+      EyeBlinkLeft: 1
+      EyeLookDownLeft: 0
+      EyeLookInLeft: 0
+      EyeLookOutLeft: 0
+      EyeLookUpLeft: 0
+      EyeSquintLeft: 1
+      EyeWideLeft: 1
+      EyeBlinkRight: 1
+      EyeLookDownRight: 0
+      EyeLookInRight: 0
+      EyeLookOutRight: 0
+      EyeLookUpRight: 0
+      EyeSquintRight: 1
+      EyeWideRight: 1
+      JawForward: 1
+      JawLeft: 1
+      JawRight: 1
+      JawOpen: 1
+      MouthClose: 1
+      MouthFunnel: 1
+      MouthPucker: 1
+      MouthLeft: 1
+      MouthRight: 1
+      MouthSmileLeft: 1
+      MouthSmileRight: 1
+      MouthFrownLeft: 1
+      MouthFrownRight: 1
+      MouthDimpleLeft: 1
+      MouthDimpleRight: 1
+      MouthStretchLeft: 1
+      MouthStretchRight: 1
+      MouthRollLower: 1
+      MouthRollUpper: 1
+      MouthShrugLower: 1
+      MouthShrugUpper: 1
+      MouthPressLeft: 1
+      MouthPressRight: 1
+      MouthLowerDownLeft: 1
+      MouthLowerDownRight: 1
+      MouthUpperUpLeft: 1
+      MouthUpperUpRight: 1
+      BrowDownLeft: 1
+      BrowDownRight: 1
+      BrowInnerUp: 1
+      BrowOuterUpLeft: 1
+      BrowOuterUpRight: 1
+      CheekPuff: 1
+      CheekSquintLeft: 1
+      CheekSquintRight: 1
+      NoseSneerLeft: 1
+      NoseSneerRight: 1
+      TongueOut: 0
+      TongueTipUp: 1
+      TongueTipDown: 1
+      TongueTipLeft: 1
+      TongueTipRight: 1
+      TongueRollUp: 1
+      TongueRollDown: 1
+      TongueRollLeft: 1
+      TongueRollRight: 1
+      TongueUp: 1
+      TongueDown: 1
+      TongueLeft: 1
+      TongueRight: 1
+      TongueIn: 1
+      TongueStretch: 1
+      TongueWide: 1
+      TongueNarrow: 1
+
+    cancel_poses:
+      EyeBlinkLeft: -1
+      EyeLookDownLeft: -1
+      EyeLookInLeft: -1
+      EyeLookOutLeft: -1
+      EyeLookUpLeft: -1
+      EyeSquintLeft: -1
+      EyeWideLeft: -1
+      EyeBlinkRight: -1
+      EyeLookDownRight: -1
+      EyeLookInRight: -1
+      EyeLookOutRight: -1
+      EyeLookUpRight: -1
+      EyeSquintRight: -1
+      EyeWideRight: -1
+      JawForward: -1
+      JawLeft: -1
+      JawRight: -1
+      JawOpen: -1
+      MouthClose: -1
+      MouthFunnel: -1
+      MouthPucker: -1
+      MouthLeft: -1
+      MouthRight: -1
+      MouthSmileLeft: -1
+      MouthSmileRight: -1
+      MouthFrownLeft: -1
+      MouthFrownRight: -1
+      MouthDimpleLeft: -1
+      MouthDimpleRight: -1
+      MouthStretchLeft: -1
+      MouthStretchRight: -1
+      MouthRollLower: -1
+      MouthRollUpper: -1
+      MouthShrugLower: -1
+      MouthShrugUpper: -1
+      MouthPressLeft: -1
+      MouthPressRight: -1
+      MouthLowerDownLeft: -1
+      MouthLowerDownRight: -1
+      MouthUpperUpLeft: -1
+      MouthUpperUpRight: -1
+      BrowDownLeft: -1
+      BrowDownRight: -1
+      BrowInnerUp: -1
+      BrowOuterUpLeft: -1
+      BrowOuterUpRight: -1
+      CheekPuff: -1
+      CheekSquintLeft: -1
+      CheekSquintRight: -1
+      NoseSneerLeft: -1
+      NoseSneerRight: -1
+      TongueOut: -1
+      TongueTipUp: -1
+      TongueTipDown: -1
+      TongueTipLeft: -1
+      TongueTipRight: -1
+      TongueRollUp: -1
+      TongueRollDown: -1
+      TongueRollLeft: -1
+      TongueRollRight: -1
+      TongueUp: -1
+      TongueDown: -1
+      TongueLeft: -1
+      TongueRight: -1
+      TongueIn: -1
+      TongueStretch: -1
+      TongueWide: -1
+      TongueNarrow: -1
+
+    symmetry_poses:
+      EyeBlinkLeft: 0
+      EyeLookDownLeft: -1
+      EyeLookInLeft: -1
+      EyeLookOutLeft: -1
+      EyeLookUpLeft: -1
+      EyeSquintLeft: -1
+      EyeWideLeft: 1
+      EyeBlinkRight: 0
+      EyeLookDownRight: -1
+      EyeLookInRight: -1
+      EyeLookOutRight: -1
+      EyeLookUpRight: -1
+      EyeSquintRight: -1
+      EyeWideRight: 1
+      JawForward: -1
+      JawLeft: -1
+      JawRight: -1
+      JawOpen: -1
+      MouthClose: -1
+      MouthFunnel: -1
+      MouthPucker: -1
+      MouthLeft: -1
+      MouthRight: -1
+      MouthSmileLeft: 2
+      MouthSmileRight: 2
+      MouthFrownLeft: 3
+      MouthFrownRight: 3
+      MouthDimpleLeft: 4
+      MouthDimpleRight: 4
+      MouthStretchLeft: 5
+      MouthStretchRight: 5
+      MouthRollLower: -1
+      MouthRollUpper: -1
+      MouthShrugLower: -1
+      MouthShrugUpper: -1
+      MouthPressLeft: 6
+      MouthPressRight: 6
+      MouthLowerDownLeft: 7
+      MouthLowerDownRight: 7
+      MouthUpperUpLeft: 8
+      MouthUpperUpRight: 8
+      BrowDownLeft: 10
+      BrowDownRight: 10
+      BrowInnerUp: -1
+      BrowOuterUpLeft: 9
+      BrowOuterUpRight: 9
+      CheekPuff: -1
+      CheekSquintLeft: 11
+      CheekSquintRight: 11
+      NoseSneerLeft: 12
+      NoseSneerRight: 12
+      TongueOut: -1
+      TongueTipUp: -1
+      TongueTipDown: -1
+      TongueTipLeft: -1
+      TongueTipRight: -1
+      TongueRollUp: -1
+      TongueRollDown: -1
+      TongueRollLeft: -1
+      TongueRollRight: -1
+      TongueUp: -1
+      TongueDown: -1
+      TongueLeft: -1
+      TongueRight: -1
+      TongueIn: -1
+      TongueStretch: -1
+      TongueWide: -1
+      TongueNarrow: -1

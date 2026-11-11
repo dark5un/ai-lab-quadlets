@@ -1,0 +1,16 @@
+# max-bridge: audio->blendshape fan-out hub for the avatar (v2 plan Phase 1).
+# websockets + SYNC grpc + NVIDIA nvidia_ace 1.2.0 proto wheel installed with
+# --no-deps (its metadata hard-pins protobuf==4.24.1 + junk; the gencode runs
+# happily on 7.36.2 - verified live 2026-11-11). Do NOT use the PyPI
+# nvidia-audio2face-3d wheel: different message dialect than the NIM serves.
+# Oneof dispatch via WhichOneof only (upb pitfall, fact #78).
+# No GPU; talks to systemd-max-face:52000 on ai.network.
+FROM docker.io/library/python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir --no-deps \
+      https://raw.githubusercontent.com/NVIDIA/Audio2Face-3D-Samples/v1.3/proto/sample_wheel/nvidia_ace-1.2.0-py3-none-any.whl \
+    && pip install --no-cache-dir -r requirements.txt
+COPY server.py .
+EXPOSE 8990
+CMD ["python", "-u", "server.py"]

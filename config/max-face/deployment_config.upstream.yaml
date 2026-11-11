@@ -1,0 +1,96 @@
+# SPDX-FileCopyrightText: Copyright (c) 2024 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+common:
+  # Number of stream to use simultaneously
+  # The recommended value depends on the gpu and your latency constraints
+  # Higher value means: more concurrent users and higher overall throughput
+  # Lower value means: less concurrent users, higher throughput per stream, lower latencies
+  stream_number: 10
+
+  # Pad each audio file with some 1.5 seconds of silent audio
+  add_silence_padding_after_audio: false
+  silence_padding_duration_second: 1.5
+
+logging:
+  # Level of log wanted, info is recommended
+  # Can be one of:
+  # => trace
+  # => debug
+  # => info
+  # => warn
+  # => error
+  # => critical
+  # => disabled
+  log_level: info
+  # How often should FPS logs be printed per stream
+  fps_logging_interval_second: 1
+
+endpoints:
+  # use the bidirectional endpoint instead of 2 connections (server to receive audio + client to send animation data)
+  use_bidirectional: true
+
+  # server to perform the bidirectional streaming connection
+  # Used only if use_bidirectional_endpoint==true
+  bidirectional:
+    server:
+      # port to open
+      url: 0.0.0.0:52000
+            # secure mode
+      # Can be one of:
+      # => disabled
+      # => tls
+      # => mtls
+      secure_mode: "disabled"
+      # Path to the certificate file
+      certificate_path: ""
+      # Path to the key file
+      key_path: ""
+      # Path to the CA file
+      ca_path: ""
+
+  unidirectional:
+    # Server that receives the audio
+    # Used only if use_bidirectional_endpoint==false
+    server:
+      # port to open
+      url: 0.0.0.0:50000
+
+    # Client that sends the animation data
+    # Used only if use_bidirectional_endpoint==false
+    client:
+      # url of the server to contact
+      url: 0.0.0.0:51000
+
+# Configs specific to telemetry
+telemetry:
+  # Name of the service
+  service_name: audio2face
+  # Whether to enable metrics
+  metrics_enabled: false
+  # Whether to enable traces
+  traces_enabled: false
+  # Can be prometheus or otlp
+  metrics_exporter: prometheus
+  # Export interval in milliseconds
+  otel_metric_export_interval: 60000
+  # Export timeout in milliseconds
+  otel_metric_export_timeout: 30000
+
+  otlp_http_metrics_endpoint: http://localhost:4318/v1/metrics
+  
+  otlp_http_traces_endpoint: http://localhost:4318/v1/traces
+  
+  prometheus_endpoint: 0.0.0.0:9464

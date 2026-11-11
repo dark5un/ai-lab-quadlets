@@ -1,0 +1,46 @@
+# Audio2Face-3D NIM (local inference) — v2 avatar plan Phase 1.
+# Converts streamed speech -> 51 ARKit blendshapes over bidirectional gRPC at
+# :52000 on ai.network ONLY (never host-published; max-bridge is the only
+# client). VRAM: stock defaults = stream_number 10 + TRT batch<=128 engines
+# (~9-15 GB). We ship configs/advanced_config.yaml (shapes 1/1/1) +
+# configs/deployment_config.yaml (stream_number: 1) -> NVIDIA-measured ~0.9 GB,
+# fits beside personaplex on the 4070 Ti (~2.4 GB headroom).
+# First start: weights download + TRT engine build (10-40 min) -> cached in
+# max-face-cache volume. NGC_API_KEY lives in config/max-face/service.env
+# (owner-pasted; generate-secrets keeps it, never mints).
+# Config + run script pattern follows NVIDIA Audio2Face-3D-Samples
+# quick-start docker-compose (Apache-2.0), single-unit variant.
+
+[Unit]
+Description=Audio2Face-3D NIM single-stream inference (4070 Ti)
+Wants=ai-network.service
+After=ai-network.service
+# Same-card cooperative with personaplex (must coexist); no Conflicts= here.
+Conflicts=soulx-duplug.service minicpmo-omni.service llama-cpp-4070ti.service llama-cpp-both.service strata-4070ti.service docling-4070ti.service
+
+[Container]
+ContainerName=systemd-max-face
+Image=nvcr.io/nim/nvidia/audio2face-3d:1.3.16
+Network=ai.network
+AddDevice=nvidia.com/gpu=all
+Environment=CUDA_VISIBLE_DEVICES=__GPU_4070TI_UUID__
+EnvironmentFile=%h/.config/containers/config/max-face/service.env
+Environment=NIM_CACHE_PATH=/tmp/nim-cache
+Environment=USE_NEW_NVSTREAMMUX=yes
+Volume=max-face-cache:/tmp/a2x:Z
+Volume=max-face-cache:/tmp/nim-cache:Z
+Volume=%h/.config/containers/config/max-face:/mnt/configs:ro,Z
+PodmanArgs=--security-opt label=disable --shm-size=8g
+Entrypoint=/bin/sh
+Cmd=/mnt/configs/run.sh
+
+[Service]
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=15
+# First start downloads weights + builds TRT engines.
+TimeoutStartSec=3600
+TimeoutStopSec=60
+MemoryMax=6G
+
+# No [Install] section by design: opt-in via ai-lab (avatar group, boot=false).

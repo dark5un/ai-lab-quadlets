@@ -106,6 +106,9 @@ for name in "${NAMES[@]}"; do
                 pull kb-postgres; pull lightrag;
                 build kb-watcher "$ROOT/containers/kb-watcher" \
                       -f "$ROOT/containers/kb-watcher/Containerfile" ;;
+        avatar) pull max-face;
+                build max-bridge "$ROOT/containers/max-bridge" \
+                      -f "$ROOT/containers/max-bridge/Containerfile" ;;
         automation) pull windmill-postgres; pull windmill-server; pull windmill-worker;
                 build notebook "$ROOT/containers/notebook" \
                       -f "$ROOT/containers/notebook/Containerfile" ;;

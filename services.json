@@ -1180,6 +1180,37 @@
       "auth": "bearer-token",
       "note": "Thin MCP server (streamable HTTP /mcp) over the Concourse ATC REST API (agentic-pipeline plan sec.2.4; no usable upstream MCP exists): list/set pipelines, trigger/status/abort builds, resources pin/unpin, jobs, workers. Two static bearer tokens map to teams: Hermes-grade -> pipeline(main), low-priv -> agent; in-pipeline tasks use it at http://systemd-concourse-mcp:8080/mcp (same worker-DNS path as forge/S3). Hermes host config: url http://127.0.0.1:3123/mcp. Built image (no digest pin), source containers/concourse-mcp/.",
       "group": "pipeline"
+    },
+    {
+      "name": "max-face",
+      "unit": "max-face.service",
+      "container": "systemd-max-face",
+      "host_port": null,
+      "container_port": 52000,
+      "bind": "none",
+      "health": "-",
+      "tier": "opt-in",
+      "image": "nvcr.io/nim/nvidia/audio2face-3d:1.3.16",
+      "boot": false,
+      "auth": "none",
+      "gpu": "4070ti",
+      "note": "Audio2Face-3D NIM single-stream (batch-1 TRT engines, ~0.9 GB VRAM per NVIDIA edge config); gRPC on systemd-max-face:52000 ai.network only; needs NGC_API_KEY in config/max-face/service.env; first start builds engines (volume max-face-cache)",
+      "group": "avatar"
+    },
+    {
+      "name": "max-bridge",
+      "unit": "max-bridge.service",
+      "container": "systemd-max-bridge",
+      "host_port": 8990,
+      "container_port": 8990,
+      "bind": "127.0.0.1",
+      "health": "-",
+      "tier": "opt-in",
+      "image": "localhost/max-bridge:latest",
+      "boot": false,
+      "auth": "none",
+      "note": "blendshape fan-out WS hub (ws :8990 /feed /shapes, protocol {hello,names}+{t,bs}); bridges clients to max-face NIM (sync grpc, nvidia_ace 1.2.0); v2 avatar plan",
+      "group": "avatar"
     }
   ]
 }
