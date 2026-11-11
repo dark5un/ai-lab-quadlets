@@ -316,9 +316,8 @@ class Handler(BaseHTTPRequestHandler):
             inner = (f"<p>Environment <code>{slug}</code> — reviewer identity baked in: "
                      f"<code>{vscode_pr_api.html.escape(st.get('git_name',''))} "
                      f"&lt;{vscode_pr_api.html.escape(st.get('git_email',''))}&gt;</code></p>"
-                     f"<p><a href='{door}/?tkn={token}'>Open the box (sets the 7-day session cookie)</a><br>"
-                     f"later: <a href='{door}/'>{door}/</a></p>"
-                     f"<p>Connection token: <code>{token}</code></p>"
+                     f"<p><a href='{door}/'>Open the box</a> — code-server asks for a password; paste this:</p>"
+                     f"<p>Connection password: <code>{token}</code></p>"
                      "<p>Teardown: unpause + trigger the <b>-down</b> pipeline in the Concourse UI.</p>")
             return self._send_html(200, self._vscode_page("VS Code review box", inner))
         return self._send_html(404, self._vscode_page("VS Code PR box", "<p>not found</p>"))

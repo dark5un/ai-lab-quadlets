@@ -251,8 +251,10 @@ p = pathlib.Path(aenv)
 lines = p.read_text().splitlines() if p.is_file() else []
 vals = {
     "VSCODE_PR_FORGE_API": "http://127.0.0.1:3120",
+    # review token, NOT the plain forge token: pipeline tasks post PR
+    # comments (write:issue) and manage deploy keys (write:repository)
     "VSCODE_PR_FORGE_TOKEN": open(
-        os.path.join(os.path.dirname(aenv), "..", "forge", "token")).read().strip(),
+        os.path.join(os.path.dirname(aenv), "..", "forge", "review-token")).read().strip(),
     "VSCODE_PR_CONCOURSE_URL": "http://127.0.0.1:3122",
     "VSCODE_PR_CONCOURSE_PUBLIC": f"https://concourse.{tailnet}",
     "VSCODE_PR_CONCOURSE_USER": "pipeline",

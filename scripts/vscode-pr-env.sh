@@ -53,7 +53,12 @@ cmd_create() {
     case "$pr" in (*[!0-9]*|'') die "bad pr number" ;; esac
     printf '%s' "$port" | grep -Eq '^313[0-5]$' || die "port must be from the pool: $POOL"
     local d; d="$(envdir "$slug")"
-    [ -e "$d" ] && die "env dir already exists: $d (destroy first)"
+    # self-healing retry: a failed earlier attempt's container/state is
+    # cleared first (re-running -up/create after a partial failure is safe)
+    if [ -e "$d" ]; then
+        printf 're-creating over existing env %s\n' "$slug"
+        cmd_destroy "$slug"
+    fi
     mkdir -p "$d/ssh" "$d/ws"
     chmod 700 "$d"
     # private key arrives on STDIN (never argv, never a log)
@@ -91,7 +96,7 @@ cd "/home/coder/pr-env/ws/$PR_REPO"
 git fetch origin "+refs/pull/$PR_NUM/head:refs/heads/pr-$PR_NUM"
 git checkout "pr-$PR_NUM"
 touch /home/coder/pr-env/ready
-exec code-server --auth token --password-file /home/coder/pr-env/token \
+exec code-server --auth password --password-file /home/coder/pr-env/token \
      --bind-addr 0.0.0.0:8080 "/home/coder/pr-env/ws/$PR_REPO"
 ' >/dev/null
     printf 'created vscode-pr-%s port=%s\n' "$slug" "$port"
