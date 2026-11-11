@@ -47,6 +47,46 @@ Ask the owner (or watch his screen via his DevTools export):
 The `109` vs "super admin..." vs a 429-ish message each point to a different
 branch below.
 
+## Findings — session 2 (2026-11-11, clean handoff)
+
+Step 1 answers (owner, live): failure happens for BOTH admin and kb-bot at
+/login; exact UI string = `code:109 email and password do not match`; NO
+captcha; password typed manually (1Password autofill hypothesis weakened,
+not eliminated). DevTools payload capture promised — pending.
+
+Step 2/3 shortcut (no live browser on this box — chromium libs missing, sudo
+blocked): read the SPA's own shipped bundle from :3114 instead of wire-capture.
+- `chunk/js/llm-util-*.js`: `login: POST /api/v1/auth/login`, body = raw form
+  values. `chunk/js/login-*.js` form fields: **email, password, remember** —
+  no captcha, no hashing, no extra fields. `/login-next` is a route alias to
+  the same chunk. -> Browser path is packet-identical to the working curl.
+
+kb-bot — verified consistent (claim -> probe -> observed):
+- claim: file value is the live password. probe: recompute werkzeug scrypt
+  (`scrypt:32768:8:1$base64salt$hex64`, n=32768,r=8,p=1,dklen=64, salt used as
+  its base64 STRING bytes) over `.kbuser_pw_once` value vs DB row.
+  observed: **MATCH**. (Also proves the script's hashing scheme == server's.)
+- row `update_time` 2026-11-11 10:20:07Z = last_login bump from our successful
+  curl tests; password column untouched (hash still matches creation-era file).
+=> 109 from the owner's browser means he is TYPING A DIFFERENT VALUE. Prime
+suspect: the card (`ailab-access`) shows TWO kb-bot rows — row 1 = 32-hex
+LOGIN password, row 2 = long `ragflow-…`-prefixed **API token (NOT a login
+password)**. Typing row 2 yields exactly code:109.
+
+admin — TRIO DRIFT CONFIRMED, and it predates/excludes the known rotation:
+- `.admin_pw_once` (mtime 2026-11-11 10:16:27Z) + `ADMIN_DEFAULT_PASSWORD`
+  (same mtime, byte-identical) do **NOT** hash to the current DB row.
+- DB row `update_time` = **10:13:58Z** — 2.5 min BEFORE the file trio was
+  written, so the rotation's own DB write is not the row we now see (or the
+  trio was later edited); server re-seed at restart also ruled out (service.env
+  value == file value, so a re-seed WOULD match).
+- => live admin password is currently UNKNOWN to us; /login refusal for admin
+  is by design anyway ("super admin..." — UI may surface it as 109 too).
+  Admin login belongs at :8444/admin ONLY.
+- HARD RULE 2 APPLIES: do NOT run `ragflow-fix-admin-password.sh` (repair or
+  rotate) before asking the owner if the mismatch is his deliberate custom
+  password (2026-11-11 incident history + the script's own CAUTION note).
+
 ## Step 2 — browser-path reproduction (no admin creds)
 
 Use the browser tool (or `podman run --network systemd-ai` headless browser)
