@@ -260,15 +260,15 @@ class Handler(BaseHTTPRequestHandler):
     def _vscode_pr_get(self, u):
         """Signed browser routes (NOT bearer): the review-button interstitial
         and the token-access page. Both verified via HMAC+exp."""
-        seg = [p for p in u.path.rstrip("/").split("/")[1:]]
+        seg = [p for p in u.path.rstrip("/").split("/")[2:]]  # drop /vscode-pr
         q = parse_qs(u.query)
         exp = (q.get("exp") or [""])[0]
         sig = (q.get("sig") or [""])[0]
         e = vscode_pr_api.configured()
         if e:
             return self._send_html(503, self._vscode_page("VS Code PR box", f"<p>{e}</p>"))
-        if len(seg) == 4 and all(seg[:3]):
-            owner, repo, pr = seg[:3]
+        if len(seg) == 3 and all(seg):
+            owner, repo, pr = seg
             err = vscode_pr_api.check_sig("launch", f"{owner}/{repo}", pr, exp, sig)
             if err:
                 return self._send_html(403, self._vscode_page("VS Code PR box", f"<p>{err}</p>"))
@@ -299,8 +299,8 @@ class Handler(BaseHTTPRequestHandler):
                 "<p style='opacity:.7'>Link valid until "
                 f"{time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(int(exp or 0)))}.</p>")
             return self._send_html(200, self._vscode_page("Launch VS Code review box", inner))
-        if len(seg) == 5 and seg[4] == "access":
-            owner, repo, pr = seg[1:4]
+        if len(seg) == 4 and seg[3] == "access":
+            owner, repo, pr = seg[:3]
             err = vscode_pr_api.check_sig("access", f"{owner}/{repo}", pr, exp, sig)
             if err:
                 return self._send_html(403, self._vscode_page("VS Code PR box", f"<p>{err}</p>"))
@@ -324,10 +324,10 @@ class Handler(BaseHTTPRequestHandler):
         return self._send_html(404, self._vscode_page("VS Code PR box", "<p>not found</p>"))
 
     def _vscode_pr_post(self, u):
-        seg = [p for p in u.path.rstrip("/").split("/")[1:]]
-        if not (len(seg) == 4 and all(seg[:3])):
+        seg = [p for p in u.path.rstrip("/").split("/")[2:]]  # drop /vscode-pr
+        if not (len(seg) == 3 and all(seg)):
             return self._send_html(404, self._vscode_page("VS Code PR box", "<p>not found</p>"))
-        owner, repo, pr = seg[:3]
+        owner, repo, pr = seg
         try:
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
