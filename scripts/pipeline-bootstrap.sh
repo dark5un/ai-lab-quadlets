@@ -191,4 +191,86 @@ PY
 "$FLY" -t local set-pipeline -p agentic -n -c "$ROOT/pipelines/agentic.yml" -l "$VARS" --non-interactive 2>&1 | tail -3
 "$FLY" -t local unpause-pipeline -p agentic >/dev/null 2>&1 || true
 say "pipeline 'agentic' set (team main; git + s3 edges use the ((vars)) above)"
+
+# ─── 6. vscode-pr review-button wiring (docs/vscode-pr-review-plan.md) ─────
+# ailab-api grows the signed button backend that creates the per-change
+# create/destroy Concourse pipelines; the pipelines' tasks SSH to THIS host
+# (rootless podman lifecycle) with a dedicated keypair. All values move
+# host->host between 0600 files; nothing secret is printed.
+say "wiring vscode-pr backend"
+TAILNET=$(tailscale status --json | python3 -c 'import sys,json;print(json.load(sys.stdin)["Self"]["DNSName"].rstrip(".").split(".",1)[1])')
+TS_IP=$(tailscale ip -4)
+BOXKEY="$CONF/concourse/vscode-box_ed25519"
+if [ ! -f "$BOXKEY" ]; then
+    say "generating vscode-box ssh keypair"
+    ssh-keygen -q -t ed25519 -N '' -C "concourse-vscode-box" -f "$BOXKEY"
+    chmod 600 "$BOXKEY"; chmod 644 "$BOXKEY.pub"
+fi
+if ! grep -qFf "$BOXKEY.pub" "$HOME/.ssh/authorized_keys" 2>/dev/null; then
+    mkdir -p "$HOME/.ssh" && chmod 700 "$HOME/.ssh"
+    cat "$BOXKEY.pub" >> "$HOME/.ssh/authorized_keys" && chmod 600 "$HOME/.ssh/authorized_keys"
+    say "authorized the vscode-box key for $(id -un)@this host"
+fi
+mkdir -p "$HOME/.workspaces/vscode-pr" && chmod 700 "$HOME/.workspaces/vscode-pr"
+
+AENV="$CONF/ailab-api/service.env"
+PIPEPW=$(sed -n 's/^CONCOURSE_ADD_LOCAL_USER=pipeline:\([^,]*\),.*/\1/p' "$CONF/concourse/web.env")
+python3 - "$AENV" "$TS_IP" "$TAILNET" "$PIPEPW" "$BOXKEY" "$ROOT" "$(id -un)" <<'PY'
+import base64, os, pathlib, sys
+aenv, ts_ip, tailnet, piptok, boxkey, root, user = sys.argv[1:8]
+p = pathlib.Path(aenv)
+lines = p.read_text().splitlines() if p.is_file() else []
+vals = {
+    "VSCODE_PR_FORGE_API": "http://127.0.0.1:3120",
+    "VSCODE_PR_FORGE_TOKEN": open(
+        os.path.join(os.path.dirname(aenv), "..", "forge", "token")).read().strip(),
+    "VSCODE_PR_CONCOURSE_URL": "http://127.0.0.1:3122",
+    "VSCODE_PR_CONCOURSE_PUBLIC": f"https://concourse.{tailnet}",
+    "VSCODE_PR_CONCOURSE_USER": "pipeline",
+    "VSCODE_PR_CONCOURSE_PASSWORD": piptok,
+    "VSCODE_PR_BOX_SSH_B64": base64.b64encode(open(boxkey, "rb").read()).decode(),
+    "VSCODE_PR_BOX_SSH_HOST": ts_ip,
+    "VSCODE_PR_BOX_SSH_USER": user,
+    "VSCODE_PR_ENV_SCRIPT": os.path.join(root, "scripts", "vscode-pr-env.sh"),
+    "VSCODE_PR_REPO": root,
+    "VSCODE_PR_STATE_ROOT": os.path.expanduser("~/.workspaces/vscode-pr"),
+    "VSCODE_PR_PUBLIC_BASE": f"https://ai.{tailnet}:8448",
+    "VSCODE_PR_DOOR_BASE": f"https://ai.{tailnet}",
+    "VSCODE_PR_POOL": "3130 3131 3132 3133 3134 3135",
+}
+known = {l.split("=", 1)[0] for l in lines if "=" in l}
+for k, v in vals.items():
+    if k in known:
+        lines = [f"{k}={v}" if l.startswith(k + "=") else l for l in lines]
+    else:
+        lines.append(f"{k}={v}")
+p.write_text("\n".join(lines) + "\n")
+os.chmod(p, 0o600)
+print("  ailab-api/service.env: %d vscode-pr keys upserted" % len(vals))
+PY
+
+# pipeline-vars additions for the repo-review agent (button signing)
+python3 - "$VARS" "$CONF/ailab-api/service.env" "$TAILNET" <<'PY'
+import os, pathlib, sys
+path, aenv, tailnet = sys.argv[1:4]
+sign = None
+for line in pathlib.Path(aenv).read_text().splitlines():
+    if line.startswith("VSCODE_PR_SIGNING_SECRET="):
+        sign = line.split("=", 1)[1]
+if not sign:
+    sys.exit("VSCODE_PR_SIGNING_SECRET missing from ailab-api env (run generate-secrets.sh)")
+txt = pathlib.Path(path).read_text()
+adds = []
+if "vscode-pr-signing-secret:" not in txt:
+    adds.append(f'vscode-pr-signing-secret: "{sign}"')
+if "ailab-public-url:" not in txt:
+    adds.append(f'ailab-public-url: "https://ai.{tailnet}:8448"')
+if adds:
+    with open(path, "a") as f:
+        f.write("\n".join(adds) + "\n")
+    os.chmod(path, 0o600)
+print("  pipeline-vars.yml: appended %s" % ", ".join(a.split(":")[0] for a in adds))
+PY
+
+systemctl --user restart ailab-api.service 2>/dev/null && say "ailab-api restarted (vscode-pr env loaded)" || say "note: ailab-api not running; start it to activate"
 say "bootstrap done."

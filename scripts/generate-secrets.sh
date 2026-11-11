@@ -350,11 +350,16 @@ chmod 600 "$dst"
 dst="$CONF/ailab-api/service.env"
 mkdir -p "$(dirname "$dst")"; chmod 700 "$(dirname "$dst")"
 if want "$dst"; then
-    sed "s/change-me-to-a-random-hex-string/$(rand_hex 32)/" \
+    sed -e "s/change-me-to-a-random-hex-string$/$(rand_hex 32)/" \
+        -e "s/change-me-to-a-second-random-hex-string/$(rand_hex 32)/" \
         "$ROOT/config/ailab-api/service.env.example" > "$dst"
     echo "  created $dst"
 else
-    echo "  kept    $dst"
+    # add newly-introduced keys to pre-existing files without rotating the rest
+    if ! grep -q '^VSCODE_PR_SIGNING_SECRET=' "$dst"; then
+        printf 'VSCODE_PR_SIGNING_SECRET=%s\n' "$(rand_hex 32)" >> "$dst"
+        echo "  added VSCODE_PR_SIGNING_SECRET to $dst"
+    fi
 fi
 chmod 600 "$dst"
 

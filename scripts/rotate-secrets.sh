@@ -72,6 +72,7 @@ rotate_env_key "$CONF/kb-postgres/service.env" POSTGRES_PASSWORD
 rotate_env_key "$CONF/windmill-postgres/service.env" POSTGRES_PASSWORD
 rotate_env_key "$CONF/windmill/service.env" SUPERADMIN_SECRET
 rotate_env_key "$CONF/ailab-api/service.env" AILAB_API_TOKEN
+rotate_env_key "$CONF/ailab-api/service.env" VSCODE_PR_SIGNING_SECRET
 
 # Pipeline group (agentic-pipeline plan). Sources first, mirrors after.
 rotate_env_key "$CONF/forge/postgres.env" POSTGRES_PASSWORD
@@ -130,6 +131,13 @@ if [ "$APPLY" = 1 ]; then
             "$CONF/concourse/mcp.env" > "$CONF/concourse/mcp.env.tmp" && \
         chmod 600 "$CONF/concourse/mcp.env.tmp" && mv "$CONF/concourse/mcp.env.tmp" "$CONF/concourse/mcp.env" && \
         echo "  ✓ re-mirrored mcp.env concourse credentials"
+    # ailab-api's vscode-pr backend authenticates to Concourse with the
+    # pipeline local user too: re-mirror the new password.
+    [ -n "$ppw" ] && [ -f "$CONF/ailab-api/service.env" ] && \
+        awk -v p="$ppw" '/^VSCODE_PR_CONCOURSE_PASSWORD=/{print "VSCODE_PR_CONCOURSE_PASSWORD=" p; next} 1' \
+            "$CONF/ailab-api/service.env" > "$CONF/ailab-api/service.env.tmp" && \
+        chmod 600 "$CONF/ailab-api/service.env.tmp" && mv "$CONF/ailab-api/service.env.tmp" "$CONF/ailab-api/service.env" && \
+        echo "  ✓ re-mirrored ailab-api vscode-pr concourse password"
 fi
 if [ "$APPLY" = 1 ]; then
     rand_hex 32 > "$CONF/notebook/jupyter-token" 2>/dev/null && \
@@ -207,6 +215,8 @@ if [ "$APPLY" = 1 ]; then
         systemctl --user restart "${svc}.service" && echo "  ✓ restarted $svc"
     done
     echo "Done. Update any client configs that referenced the old keys."
+    echo "Tip: re-run scripts/pipeline-bootstrap.sh to re-mirror pipeline-vars.yml"
+    echo "     (forge tokens, strata/s3 keys, vscode-pr signing secret)."
 else
     echo "  ~ would update the client copies of the keys (install.sh --no-images:"
     echo "    open-webui, sketchlab, deepseek-harness if its env exists) and restart"

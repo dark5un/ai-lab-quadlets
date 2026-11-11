@@ -29,6 +29,8 @@ import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
+import vscode_pr_api
+
 VERSION = "1.0"
 REPO = os.environ.get("AI_LAB_REPO", "/home/px/workspace/github.com/dark5un/ai-lab-quadlets")
 AILAB = os.path.join(REPO, "scripts", "ai-lab")
@@ -105,6 +107,26 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_html(self, code, html_body):
+        body = html_body.encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _vscode_page(self, title, inner):
+        return ("<!doctype html><meta charset=utf-8>"
+                f"<title>{vscode_pr_api.html.escape(title)} — AI Lab VS Code PR box</title>"
+                "<style>body{font-family:sans-serif;max-width:42rem;margin:3rem auto;"
+                "background:#14161a;color:#e6e6e6}a{color:#7cc7ff}"
+                "input,select{padding:.4rem;margin:.2rem 0}"
+                "button{padding:.6rem 1.2rem;font-size:1rem;background:#2f6feb;color:#fff;"
+                "border:0;border-radius:.4rem;cursor:pointer}"
+                "code{background:#22262c;padding:.1rem .3rem;border-radius:.25rem}</style>"
+                f"<h2>{vscode_pr_api.html.escape(title)}</h2>{inner}")
+
     def _authed(self):
         if not TOKEN:
             self._send(503, {"ok": False, "error": "no token configured"})
@@ -139,6 +161,8 @@ class Handler(BaseHTTPRequestHandler):
         path = u.path.rstrip("/")
         if path == "/healthz":  # registry health probe; carries no state
             return self._send(200, {"ok": True, "service": "ailab-api"})
+        if path.startswith("/vscode-pr/"):
+            return self._vscode_pr_get(u)
         if not self._authed():
             return self._send(401, {"ok": False, "error": "unauthorized"})
         seg = [p for p in path.split("/") if p]
@@ -212,6 +236,9 @@ class Handler(BaseHTTPRequestHandler):
 
     # ── POST: mutations (arbiter always in the loop) ──────────────────────
     def do_POST(self):
+        u = urlparse(self.path)
+        if u.path.rstrip("/").startswith("/vscode-pr/"):
+            return self._vscode_pr_post(u)
         if not self._authed():
             return self._send(401, {"ok": False, "error": "unauthorized"})
         seg = [p for p in urlparse(self.path).path.rstrip("/").split("/") if p]
@@ -229,6 +256,108 @@ class Handler(BaseHTTPRequestHandler):
             value = str(data.get("value", ""))
             return self._switch(seg[3], value)
         return self._send(404, {"ok": False, "error": "not found"})
+
+    def _vscode_pr_get(self, u):
+        """Signed browser routes (NOT bearer): the review-button interstitial
+        and the token-access page. Both verified via HMAC+exp."""
+        seg = [p for p in u.path.rstrip("/").split("/")[1:]]
+        q = parse_qs(u.query)
+        exp = (q.get("exp") or [""])[0]
+        sig = (q.get("sig") or [""])[0]
+        e = vscode_pr_api.configured()
+        if e:
+            return self._send_html(503, self._vscode_page("VS Code PR box", f"<p>{e}</p>"))
+        if len(seg) == 4 and all(seg[:3]):
+            owner, repo, pr = seg[:3]
+            err = vscode_pr_api.check_sig("launch", f"{owner}/{repo}", pr, exp, sig)
+            if err:
+                return self._send_html(403, self._vscode_page("VS Code PR box", f"<p>{err}</p>"))
+            title, author = vscode_pr_api.pr_title(owner, repo, pr)
+            slug = vscode_pr_api.slug_for(owner, repo, pr)
+            st = vscode_pr_api.env_state(slug)
+            if st:
+                inner = (f"<p>An environment for <code>{owner}/{repo}#{pr}</code> already "
+                         f"exists (port <code>{st.get('port')}</code>). Open its "
+                         f"<a href='/vscode-pr/{owner}/{repo}/{pr}/access?exp={exp}&sig={sig}'>access page</a> or "
+                         "run the <b>-down</b> pipeline first.</p>")
+                return self._send_html(200, self._vscode_page("VS Code PR box", inner))
+            who = vscode_pr_api.html.escape(author or "")
+            inner = (
+                f"<p>PR: <b>{vscode_pr_api.html.escape(title or f'{owner}/{repo}#{pr}')}</b><br>"
+                "A dedicated code-server box for this change will be spun up by a pair of "
+                "Concourse pipelines: a <b>-up</b> pipeline (generates + registers a "
+                "read-only SSH deploy key scoped to this change, starts the container, "
+                "comments the PR) and a paused <b>-down</b> pipeline (removes the "
+                "container and revokes the temporary credential).</p>"
+                "<p>The box's <code>git</code> identity comes from the Forgejo account "
+                "you launch as — <b>name the forge user that is triggering this</b>:</p>"
+                f"<form method='post'>"
+                f"<input type='hidden' name='exp' value='{exp}'>"
+                f"<input type='hidden' name='sig' value='{sig}'>"
+                f"<input name='user' placeholder='forge username' value='{who}' required>"
+                " <button type='submit'>Spin up VS Code environment</button></form>"
+                "<p style='opacity:.7'>Link valid until "
+                f"{time.strftime('%Y-%m-%d %H:%M UTC', time.gmtime(int(exp or 0)))}.</p>")
+            return self._send_html(200, self._vscode_page("Launch VS Code review box", inner))
+        if len(seg) == 5 and seg[4] == "access":
+            owner, repo, pr = seg[1:4]
+            err = vscode_pr_api.check_sig("access", f"{owner}/{repo}", pr, exp, sig)
+            if err:
+                return self._send_html(403, self._vscode_page("VS Code PR box", f"<p>{err}</p>"))
+            slug = vscode_pr_api.slug_for(owner, repo, pr)
+            st = vscode_pr_api.env_state(slug)
+            if not st:
+                return self._send_html(404, self._vscode_page("VS Code PR box",
+                                                              "<p>No environment for this PR (destroyed?).</p>"))
+            tokf = os.path.join(vscode_pr_api.STATE_ROOT, slug, "token")
+            token = open(tokf).read().strip() if os.path.isfile(tokf) else ""
+            door = vscode_pr_api.CFG["VSCODE_PR_DOOR_BASE"].rstrip("/") \
+                + f":{8450 + (int(st['port']) - 3130)}"
+            inner = (f"<p>Environment <code>{slug}</code> — reviewer identity baked in: "
+                     f"<code>{vscode_pr_api.html.escape(st.get('git_name',''))} "
+                     f"&lt;{vscode_pr_api.html.escape(st.get('git_email',''))}&gt;</code></p>"
+                     f"<p><a href='{door}/?tkn={token}'>Open the box (sets the 7-day session cookie)</a><br>"
+                     f"later: <a href='{door}/'>{door}/</a></p>"
+                     f"<p>Connection token: <code>{token}</code></p>"
+                     "<p>Teardown: unpause + trigger the <b>-down</b> pipeline in the Concourse UI.</p>")
+            return self._send_html(200, self._vscode_page("VS Code review box", inner))
+        return self._send_html(404, self._vscode_page("VS Code PR box", "<p>not found</p>"))
+
+    def _vscode_pr_post(self, u):
+        seg = [p for p in u.path.rstrip("/").split("/")[1:]]
+        if not (len(seg) == 4 and all(seg[:3])):
+            return self._send_html(404, self._vscode_page("VS Code PR box", "<p>not found</p>"))
+        owner, repo, pr = seg[:3]
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        if length > 4096:
+            return self._send_html(413, self._vscode_page("VS Code PR box", "<p>body too large</p>"))
+        form = parse_qs(self.rfile.read(length).decode(errors="replace")) if length else {}
+        exp = (form.get("exp") or [""])[0]
+        sig = (form.get("sig") or [""])[0]
+        user = (form.get("user") or [""])[0].strip()
+        err = vscode_pr_api.check_sig("launch", f"{owner}/{repo}", pr, exp, sig)
+        if err:
+            return self._send_html(403, self._vscode_page("VS Code PR box", f"<p>{err}</p>"))
+        if not user or not re.match(r"^[A-Za-z0-9._-]{1,64}$", user):
+            return self._send_html(400, self._vscode_page("VS Code PR box",
+                                                          "<p>provide a valid forge username</p>"))
+        ok, msg, info = vscode_pr_api.launch(owner, repo, pr, user)
+        if not ok:
+            return self._send_html(400, self._vscode_page("VS Code PR box",
+                                                          f"<p>{vscode_pr_api.html.escape(msg)}</p>"))
+        cu = vscode_pr_api.CFG.get("VSCODE_PR_CONCOURSE_PUBLIC") or vscode_pr_api.CFG["VSCODE_PR_CONCOURSE_URL"]
+        inner = (f"<p>Created and triggered:</p><ul>"
+                 f"<li><a href='{cu}/teams/main/pipelines/{info['up']}/jobs/create'>{info['up']}</a> — "
+                 "registers the change-scoped SSH key, boots the box, comments the PR</li>"
+                 f"<li><a href='{cu}/teams/main/pipelines/{info['down']}/jobs/destroy'>{info['down']}</a> — "
+                 "<b>paused</b>; unpause + trigger to destroy</li></ul>"
+                 f"<p>Reviewer identity: <code>{info['git_name']} &lt;{info['git_email']}&gt;</code> "
+                 f"(forge user <code>{user}</code>) — port <code>{info['port']}</code>.</p>"
+                 f"<p><a href='/vscode-pr/{owner}/{repo}/{pr}/access?exp={exp}&sig={sig}'>access page</a></p>")
+        return self._send_html(200, self._vscode_page("VS Code review environment launched", inner))
 
     def _mutate(self, args, label):
         global _last_mutate

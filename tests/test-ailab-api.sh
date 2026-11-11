@@ -38,5 +38,28 @@ env_ex="$ROOT/config/ailab-api/service.env.example"
 [ -f "$env_ex" ] || fail "missing config/ailab-api/service.env.example"
 grep -qx '^AILAB_API_TOKEN=change-me-to-a-random-hex-string$' "$env_ex" \
     || fail "env example must carry the generator placeholder"
+grep -qx '^VSCODE_PR_SIGNING_SECRET=change-me-to-a-second-random-hex-string$' "$env_ex" \
+    || fail "env example must carry the vscode-pr signing placeholder"
+
+# vscode-pr review-button backend (docs/vscode-pr-review-plan.md)
+python3 -m py_compile "$ROOT/containers/ailab-api/vscode_pr_api.py"
+grep -q 'COPY vscode_pr_api.py /app/' "$ROOT/containers/ailab-api/Containerfile" \
+    || fail "vscode_pr_api.py must ship in the image"
+grep -q 'fly-8.3.3-linux-amd64.tgz' "$ROOT/containers/ailab-api/Containerfile" \
+    || fail "fly must be pinned to the server version in the image"
+for tmpl in vscode-pr-up.yml.tmpl vscode-pr-down.yml.tmpl; do
+    [ -f "$ROOT/pipelines/$tmpl" ] || fail "missing pipelines/$tmpl"
+done
+grep -q 'register-ssh-key' "$ROOT/pipelines/vscode-pr-up.yml.tmpl" \
+    || fail "creation pipeline must carry the SSH key generation+registration step"
+grep -q 'teardown' "$ROOT/pipelines/vscode-pr-down.yml.tmpl" \
+    || fail "destruction pipeline must carry the teardown step"
+grep -q '^Volume=%h/.workspaces/vscode-pr:/home/px/.workspaces/vscode-pr$' \
+    "$ROOT/quadlets/ailab-api.container" \
+    || fail "ailab-api must mount the vscode-pr state dir (same path)"
+[ -f "$ROOT/scripts/vscode-pr-env.sh" ] || fail "missing host env lifecycle script"
+[ -f "$ROOT/scripts/vscode-pr-doors.sh" ] || fail "missing tailscale door pool script"
+[ -f "$ROOT/scripts/ragflow-fix-admin-password.sh" ] \
+    || fail "missing ragflow admin password repair script"
 
 echo "ailab-api checks passed."

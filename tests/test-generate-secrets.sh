@@ -171,6 +171,10 @@ ae="$AI_LAB_CONFIG_DIR/ailab-api/service.env"
 [ "$(stat -c %a "$ae")" = 600 ] || fail "ailab-api env not 600"
 grep -q 'change-me' "$ae" && fail "placeholder left in ailab-api env"
 grep -Eq '^AILAB_API_TOKEN=[0-9a-f]{64}$' "$ae" || fail "ailab-api token is not one 64-hex value"
+grep -Eq '^VSCODE_PR_SIGNING_SECRET=[0-9a-f]{64}$' "$ae" \
+  || fail "ailab-api VSCODE_PR_SIGNING_SECRET is not one 64-hex value (vscode-pr button wiring)"
+[ "$(sed -n 's/^AILAB_API_TOKEN=//p' "$ae")" != "$(sed -n 's/^VSCODE_PR_SIGNING_SECRET=//p' "$ae")" ] \
+  || fail "ailab-api bearer and vscode-pr signing secrets identical"
 ae_h="$(sha256sum < "$ae")"
 
 # Re-run keeps the live KB secrets too.

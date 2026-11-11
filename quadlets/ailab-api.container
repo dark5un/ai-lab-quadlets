@@ -34,8 +34,15 @@ Image=localhost/ailab-api:latest
 Network=host
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
 Environment=AI_LAB_REPO=/home/px/workspace/github.com/dark5un/ai-lab-quadlets
+# vscode-pr state lives at the same path inside as on the host (see Volume
+# below); the mount path is uid-agnostic, keep them aligned.
+Environment=VSCODE_PR_STATE_ROOT=%h/.workspaces/vscode-pr
 EnvironmentFile=%h/.config/containers/config/ailab-api/service.env
 Volume=%h/workspace/github.com/dark5un/ai-lab-quadlets:/home/px/workspace/github.com/dark5un/ai-lab-quadlets:ro,Z
+# vscode-pr review-button backend: per-PR box state (port allocation, token
+# for the access page). rw: podman 6 rootless keep-id default makes the
+# container root == host px, so px-owned state files are read/managed here.
+Volume=%h/.workspaces/vscode-pr:/home/px/.workspaces/vscode-pr
 Volume=%t/bus:/run/user/1000/bus
 # px's uid is 1000 on this host; the bus socket path is uid-specific.
 

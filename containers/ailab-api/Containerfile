@@ -1,8 +1,11 @@
 # ailab-api: authenticated tailnet-only facade over scripts/ai-lab for the
-# macOS menu-bar widget (mac-quadlet-widget plan). Pure stdlib — no pip deps.
+# macOS menu-bar widget (mac-quadlet-widget plan) + the PR review-button
+# backend (vscode-pr: signed interstitial that creates the per-change
+# create/destroy Concourse pipelines). Pure stdlib — no pip deps.
 # The image needs: python3 (the API), bash (ai-lab), systemctl (Debian
 # `systemd` package — drives the host user manager via the mounted private
-# socket), curl (ai-lab status loopback health probes).
+# socket), curl (ai-lab status loopback health probes), fly (Concourse CLI
+# for the vscode-pr pipeline lifecycle, pinned to the server version).
 # Build with: scripts/build-images.sh ailab-api
 FROM docker.io/library/python:3.13-slim
 
@@ -10,7 +13,19 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends systemd curl \
  && rm -rf /var/lib/apt/lists/*
 
+# fly must match the concourse-web server (services.json: 8.3.3). Same recipe
+# as the vscode image; the .sha1 release asset embeds a filename, so extract
+# the hash with awk before sha1sum -c (fixed in the vscode image the same way).
+RUN curl -fL "https://github.com/concourse/concourse/releases/download/v8.3.3/fly-8.3.3-linux-amd64.tgz" \
+      -o /tmp/fly.tgz && \
+    curl -fsSL "https://github.com/concourse/concourse/releases/download/v8.3.3/fly-8.3.3-linux-amd64.tgz.sha1" \
+      -o /tmp/fly.sha1 && \
+    echo "$(awk '{print $1}' /tmp/fly.sha1)  /tmp/fly.tgz" | sha1sum -c - && \
+    tar -xzf /tmp/fly.tgz -C /usr/local/bin fly && \
+    chmod 0755 /usr/local/bin/fly && rm /tmp/fly.tgz /tmp/fly.sha1
+
 COPY api.py /app/api.py
+COPY vscode_pr_api.py /app/vscode_pr_api.py
 RUN chmod +x /app/api.py
 
 ENTRYPOINT ["/app/api.py"]

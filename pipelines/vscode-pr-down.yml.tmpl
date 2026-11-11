@@ -1,0 +1,77 @@
+# vscode-pr-down.yml.tmpl — DESTRUCTION pipeline for one PR's VS Code review
+# box. Created PAUSED by ailab-api (vscode-pr-<slug>-down); unpause + trigger
+# the `destroy` job to tear the environment down. Steps:
+#   teardown           removes the container + host state (vscode-pr-env.sh
+#                      destroy: podman rm -f, private key + workspace +
+#                      connection token deleted) AND revokes the temporary
+#                      credential: the repo deploy key titled
+#                      vscode-pr-<slug> (DELETE /repos/.../keys/{id}).
+#   delete-pipelines   deletes the -up pipeline, then its OWN pipeline last:
+#                      the running build aborts mid-self-delete BY DESIGN —
+#                      everything already happened and the PR comment states
+#                      the outcome.
+
+resources:
+- name: tooling
+  type: git
+  check_every: 2m
+  source:
+    uri: {{TOOLING_URI}}
+    branch: main
+    username: {{FORGE_USER}}
+    password: {{FORGE_TOKEN}}
+
+jobs:
+- name: destroy
+  build_log_retention:
+    builds: 10
+  plan:
+  - get: tooling
+  - task: teardown
+    timeout: 10m
+    config:
+      platform: linux
+      image_resource:
+        type: registry-image
+        source: {repository: alpine, tag: "3.20"}
+      inputs:
+      - {name: tooling}
+      params:
+        ENV_SLUG: {{SLUG}}
+        PR_OWNER: {{OWNER}}
+        PR_REPO: {{REPO}}
+        PR_NUM: {{PR}}
+        FORGE_URL: {{FORGE_URL}}
+        FORGE_TOKEN: {{FORGE_TOKEN}}
+        BOX_SSH_HOST: {{BOX_SSH_HOST}}
+        BOX_SSH_USER: {{BOX_SSH_USER}}
+        BOX_SSH_KEY_B64: {{BOX_SSH_KEY_B64}}
+        ENV_SCRIPT: {{ENV_SCRIPT}}
+      run:
+        path: sh
+        args:
+        - -c
+        - |
+          apk add --no-cache openssh-client python3 >/dev/null
+          python3 tooling/agents/vscode_pr.py teardown
+  - task: delete-pipelines
+    timeout: 5m
+    config:
+      platform: linux
+      image_resource:
+        type: registry-image
+        source: {repository: alpine, tag: "3.20"}
+      inputs:
+      - {name: tooling}
+      params:
+        ENV_SLUG: {{SLUG}}
+        CONCOURSE_URL: http://systemd-concourse-web:8080
+        CONCOURSE_USER: {{CONCOURSE_USER}}
+        CONCOURSE_PASSWORD: {{CONCOURSE_PASSWORD}}
+      run:
+        path: sh
+        args:
+        - -c
+        - |
+          apk add --no-cache curl python3 >/dev/null
+          python3 tooling/agents/vscode_pr.py delete-pipelines

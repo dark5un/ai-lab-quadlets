@@ -1,0 +1,120 @@
+# vscode-pr-up.yml.tmpl — CREATION pipeline for one PR's VS Code review box.
+# Rendered + set live by ailab-api when the review button is used (one
+# instance per change: vscode-pr-<{{SLUG}}>-up). Steps:
+#   register-ssh-key : generates an ed25519 keypair in-task and registers the
+#                      public half on THIS repo as a read-only deploy key
+#                      titled vscode-pr-<slug> (temporary credential scoped
+#                      to this change; the destroy pipeline revokes it).
+#   start-box        : SSHes to the ai-lab host and runs
+#                      scripts/vscode-pr-env.sh create (private key on STDIN
+#                      only) — starts the code-server container, clones the
+#                      PR checkout, bakes the git reviewer identity from the
+#                      forge user that triggered the launch.
+#   comment          : posts the access instructions on the PR (token only
+#                      ever via the signed ailab-api access page).
+# Placeholders {{...}} are substituted by ailab-api/containers/ailab-api/
+# vscode_pr_api.py::launch() before fly set-pipeline. Never edit live: re-run
+# the button (or scripts/vscode-pr-apply.sh).
+
+resources:
+- name: tooling
+  type: git
+  check_every: 2m
+  source:
+    uri: {{TOOLING_URI}}
+    branch: main
+    username: {{FORGE_USER}}
+    password: {{FORGE_TOKEN}}
+
+jobs:
+- name: create
+  build_log_retention:
+    builds: 10
+  plan:
+  - get: tooling
+  - task: register-ssh-key
+    timeout: 5m
+    config:
+      platform: linux
+      image_resource:
+        type: registry-image
+        source: {repository: alpine, tag: "3.20"}
+      inputs:
+      - {name: tooling}
+      outputs:
+      - {name: vscode-pr}
+      params:
+        ENV_SLUG: {{SLUG}}
+        PR_OWNER: {{OWNER}}
+        PR_REPO: {{REPO}}
+        PR_NUM: {{PR}}
+        FORGE_URL: {{FORGE_URL}}
+        FORGE_TOKEN: {{FORGE_TOKEN}}
+      run:
+        path: sh
+        args:
+        - -c
+        - |
+          apk add --no-cache openssh-keygen python3 >/dev/null
+          python3 tooling/agents/vscode_pr.py register-key
+  - task: start-box
+    timeout: 15m
+    config:
+      platform: linux
+      image_resource:
+        type: registry-image
+        source: {repository: alpine, tag: "3.20"}
+      inputs:
+      - {name: tooling}
+      - {name: vscode-pr}
+      params:
+        ENV_SLUG: {{SLUG}}
+        PR_OWNER: {{OWNER}}
+        PR_REPO: {{REPO}}
+        PR_NUM: {{PR}}
+        PORT: {{PORT}}
+        DOOR_URL: {{DOOR_URL}}
+        ACCESS_URL: {{ACCESS_URL}}
+        GIT_REVIEWER_NAME: {{GIT_NAME}}
+        GIT_REVIEWER_EMAIL: {{GIT_EMAIL}}
+        FORGE_URL: {{FORGE_URL}}
+        FORGE_TOKEN: {{FORGE_TOKEN}}
+        BOX_SSH_HOST: {{BOX_SSH_HOST}}
+        BOX_SSH_USER: {{BOX_SSH_USER}}
+        BOX_SSH_KEY_B64: {{BOX_SSH_KEY_B64}}
+        ENV_SCRIPT: {{ENV_SCRIPT}}
+      run:
+        path: sh
+        args:
+        - -c
+        - |
+          apk add --no-cache openssh-client python3 >/dev/null
+          python3 tooling/agents/vscode_pr.py start-box
+  - task: comment
+    timeout: 5m
+    config:
+      platform: linux
+      image_resource:
+        type: registry-image
+        source: {repository: alpine, tag: "3.20"}
+      inputs:
+      - {name: tooling}
+      params:
+        ENV_SLUG: {{SLUG}}
+        PR_OWNER: {{OWNER}}
+        PR_REPO: {{REPO}}
+        PR_NUM: {{PR}}
+        DOOR_URL: {{DOOR_URL}}
+        ACCESS_URL: {{ACCESS_URL}}
+        GIT_REVIEWER_NAME: {{GIT_NAME}}
+        GIT_REVIEWER_EMAIL: {{GIT_EMAIL}}
+        FORGE_URL: {{FORGE_URL}}
+        FORGE_TOKEN: {{FORGE_TOKEN}}
+        CONCOURSE_URL: {{CONCOURSE_PUBLIC_URL}}
+      run:
+        path: sh
+        args:
+        - -c
+        - |
+          apk add --no-cache python3 >/dev/null
+          python3 tooling/agents/vscode_pr.py comment

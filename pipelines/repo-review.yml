@@ -95,6 +95,11 @@ jobs:
         RAGFLOW_API_KEY: ((kb-ragflow-key))        # artifacts become searchable
         LIGHTRAG_URL: http://systemd-lightrag:9621 # in the Knowledge Base
         LIGHTRAG_API_KEY: ((kb-lightrag-key))
+        # the review-button backend (docs/vscode-pr-review-plan.md): the
+        # comment body gains a signed "Open in VS Code" badge. Unset values
+        # simply omit the button (graceful degradation in review_change.py).
+        AILAB_PUBLIC_URL: ((ailab-public-url))
+        AILAB_SIGNING_SECRET: ((vscode-pr-signing-secret))
       run:
         path: bash
         args:
