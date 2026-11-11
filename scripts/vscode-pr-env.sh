@@ -96,7 +96,11 @@ cd "/home/coder/pr-env/ws/$PR_REPO"
 git fetch origin "+refs/pull/$PR_NUM/head:refs/heads/pr-$PR_NUM"
 git checkout "pr-$PR_NUM"
 touch /home/coder/pr-env/ready
-exec code-server --auth password --password-file /home/coder/pr-env/token \
+# 4.145.2 flags (verified live from the pinned image): --auth takes
+# [password|none]; there is NO --password-file. The password rides argv here
+# (read from the mounted token file); the box is single-user and ephemeral,
+# and its process table is only visible from inside it.
+exec code-server --auth password --password "$(< /home/coder/pr-env/token)" \
      --bind-addr 0.0.0.0:8080 "/home/coder/pr-env/ws/$PR_REPO"
 ' >/dev/null
     printf 'created vscode-pr-%s port=%s\n' "$slug" "$port"
