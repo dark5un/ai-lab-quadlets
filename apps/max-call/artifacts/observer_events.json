@@ -1,0 +1,12 @@
+[
+  {
+    "t": 1794437488.403,
+    "kind": "signal_request",
+    "url": "https://alkaline.google.com/v1/sessions:allocateWebRtcCalloutPairToken"
+  },
+  {
+    "t": 1794437488.403,
+    "kind": "signal_request",
+    "url": "https://meet.google.com/o/webrtc-inbound-call"
+  }
+]

@@ -1,0 +1,207 @@
+{
+  "ts": "2026-11-11T22:50:50Z",
+  "probe": {
+    "results": [
+      {
+        "check": "meet landing",
+        "url": "https://meet.google.com/",
+        "method": "GET",
+        "status": 200,
+        "ok": true,
+        "ms": 343
+      },
+      {
+        "check": "alkaline root (legacy Duo gw)",
+        "url": "https://alkaline.google.com/",
+        "method": "GET",
+        "error": "URLError: <urlopen error [Errno -2] Name or service not known>",
+        "ok": false,
+        "ms": 31
+      },
+      {
+        "check": "callout pair token (signaling auth)",
+        "url": "https://alkaline.google.com/v1/sessions:allocateWebRtcCalloutPairToken",
+        "method": "POST",
+        "error": "URLError: <urlopen error [Errno -2] Name or service not known>",
+        "ok": false,
+        "ms": 1
+      },
+      {
+        "check": "ice server config",
+        "url": "https://alkaline.google.com/v1/config/iceServerConfig/meet",
+        "method": "GET",
+        "error": "URLError: <urlopen error [Errno -2] Name or service not known>",
+        "ok": false,
+        "ms": 1
+      },
+      {
+        "check": "webrtc-inbound-call on meet host",
+        "url": "https://meet.google.com/o/webrtc-inbound-call",
+        "method": "GET",
+        "status": 404,
+        "ok": true,
+        "ms": 78
+      },
+      {
+        "check": "webrtc-inbound-call (ws upgrade via https)",
+        "url": "https://alkaline.google.com/o/webrtc-inbound-call",
+        "method": "GET",
+        "error": "URLError: <urlopen error [Errno -2] Name or service not known>",
+        "ok": false,
+        "ms": 1
+      },
+      {
+        "check": "webrtc-inbound-call WS upgrade",
+        "url": "wss://meet.google.com/o/webrtc-inbound-call",
+        "response_head": "HTTP/1.1 400 Bad Request\r\nContent-Type: text/html; charset=UTF-8\r\nReferrer-Policy: no-referrer\r\nContent-Length: 1555\r\nDate: Wed, 11 Nov 2026 22:50:50 GMT\r\nAlt-Svc: h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000\r\nx-l2-request-path: l2-managed-9\r\nConnection: close",
+        "status_line": "HTTP/1.1 400 Bad Request",
+        "ok": true
+      },
+      {
+        "check": "stun:stun.l.google.com:19302",
+        "ok": true,
+        "binding_response_type": "0x101"
+      },
+      {
+        "check": "stun:alt1.stun.l.google.com:19302",
+        "ok": true,
+        "binding_response_type": "0x101"
+      },
+      {
+        "check": "stun:alt2.stun.l.google.com:19302",
+        "ok": true,
+        "binding_response_type": "0x101"
+      },
+      {
+        "check": "stun:alt3.stun.l.google.com:19302",
+        "ok": true,
+        "binding_response_type": "0x101"
+      },
+      {
+        "check": "stun:alt4.stun.l.google.com:19302",
+        "ok": true,
+        "binding_response_type": "0x101"
+      },
+      {
+        "check": "stun:alt5.stun.l.google.com:19302",
+        "ok": true,
+        "binding_response_type": "0x101"
+      }
+    ],
+    "ok": 9,
+    "total": 13
+  },
+  "local_p2p": {
+    "ice_a": "completed",
+    "ice_b": "completed",
+    "dtls_a": "connected",
+    "dtls_b": "connected",
+    "video_recv_frames": 299,
+    "video_fps": 29.9,
+    "audio_recv_frames": 494,
+    "audio_fps": 49.4,
+    "video_encrypted_bytes_s": 220446720,
+    "audio_bytes_s": 9105408,
+    "frame_shapes": [
+      [
+        640,
+        480,
+        "yuv420p"
+      ],
+      [
+        640,
+        480,
+        "yuv420p"
+      ],
+      [
+        640,
+        480,
+        "yuv420p"
+      ]
+    ],
+    "hold_s": 10.0
+  },
+  "interop": {
+    "server": "http://127.0.0.1:39885",
+    "browser": {
+      "stage": "negotiated",
+      "vfcCount": 0,
+      "gum": [
+        "audio:Fake Default Audio Input",
+        "video:fake_device_0"
+      ],
+      "ice": "connected",
+      "conn": "connected",
+      "tracks": [
+        "audio",
+        "video"
+      ]
+    },
+    "browser_inbound_stats": [
+      {
+        "kind": "audio",
+        "bytes": 72081,
+        "packets": 247,
+        "framesDecoded": null
+      },
+      {
+        "kind": "video",
+        "bytes": 300055,
+        "packets": 306,
+        "framesDecoded": 148
+      }
+    ],
+    "browser_pc_debug": {
+      "gathering": "complete",
+      "signaling": "stable",
+      "localCands": [
+        "a=candidate:210222770 1 udp 2113937151 7693b13c-39fb-46fd-9da1-009450689956.local 59108 typ host generation 0 network-cost 999",
+        "a=candidate:210222770 1 udp 2113937151 7693b13c-39fb-46fd-9da1-009450689956.local 50379 typ host generation 0 network-cost 999",
+        "a=candidate:210222770 1 udp 2113937151 7693b13c-39fb-46fd-9da1-009450689956.local 36861 typ host generation 0 network-cost 999",
+        "a=candidate:210222770 1 udp 2113937151 7693b13c-39fb-46fd-9da1-009450689956.local 36676 typ host generation 0 network-cost 999"
+      ],
+      "remoteCands": [
+        "a=candidate:505a97260f8e59157c63c25948281b61 1 udp 2130706431 <lan-ip> 55871 typ host generation 0",
+        "a=candidate:78d79600d9ad13594e1f49eeca62903d 1 udp 2130706431 fd35:f15f:dc47:1:4638:e8ff:feb2:1add 45593 typ host generation 0",
+        "a=candidate:ecfbca92c16f0cd4a3c7578186eabafa 1 udp 2130706431 2a0c:b381:815:2200:4638:e8ff:feb2:1add 36961 typ host generation 0",
+        "a=candidate:df2521afae4ab73287d0e2b4a8fb9935 1 udp 2130706431 <tailnet-ip-redacted> 36520 typ host generation 0",
+        "a=candidate:2986a1403f020ef7599a7d6e3e1fa945 1 udp 2130706431 fd7a:115c:a1e0::ef34:9b67 52950 typ host generation 0",
+        "a=candidate:4230826e91d4416ee2b35807b63413ff 1 udp 1694498815 38.126.81.151 51317 typ srflx raddr <lan-ip> rport 55871 generation 0"
+      ]
+    },
+    "ice_pc": {
+      "aiortc_connection": "connected",
+      "aiortc_ice": "completed"
+    },
+    "aiortc_received": {
+      "video": 99,
+      "audio": 248
+    },
+    "screenshot": "/home/px/workspace/github.com/dark5un/ai-lab-quadlets/apps/max-call/artifacts/interop_browser_page.png",
+    "video_frames_browser_decoded": 148,
+    "video_fps_browser_recv": 14.8,
+    "video_fps_aiortc_recv": 9.9,
+    "bitrate_browser_recv_vbps": 240044,
+    "returncode": 0
+  },
+  "meet_landing_observer": {
+    "title": "Google Meet: Online web and video conferencing calls | Google Workspace",
+    "fake_media_devices": [
+      "audio:Fake Default Audio Input",
+      "video:fake_device_0"
+    ],
+    "signal_probe_events": [
+      "https://alkaline.google.com/v1/sessions:allocateWebRtcCalloutPairToken",
+      "https://meet.google.com/o/webrtc-inbound-call"
+    ],
+    "screenshot": "/home/px/workspace/github.com/dark5un/ai-lab-quadlets/apps/max-call/artifacts/meet_landing.png",
+    "guest_screen_title": "Meet",
+    "guest_screen_text": "You can't join this video call Return to home screen Submit feedback Your meeting is safe No one can join a meeting unless invited or admitted by the host Learn more 57 Returning to home screen Do you want people to see and hear you in the meeting? You can still turn off your microphone and camera a",
+    "code_input_found": false,
+    "guest_screenshot": "/home/px/workspace/github.com/dark5un/ai-lab-quadlets/apps/max-call/artifacts/meet_guest_screen.png",
+    "events_seen": 2
+  },
+  "live_join": {
+    "stage": "no --url given; live join unverified"
+  }
+}

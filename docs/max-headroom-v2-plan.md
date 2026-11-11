@@ -185,3 +185,37 @@ morph targets) + procedural head/eye motion     CDP screencast 30fps -> VP8 trac
   owner input required -> max-face NOT started yet; everything else ready.
 - Registry: services.json rows (group=avatar), build-images.sh avatar case,
   install.sh UNITS, port-plan rows. render-units + test-quadlet-policy PASS.
+
+### Phase 2 (2026-11-11) — renderer v2 (subagent-built, parent-verified)
+- apps/max-headroom v2: vendored facecap.glb (MIT, byte-checked) + LICENSE note
+  + KTX2/Basis transcoders; src/face2.js (chrome-mannequin MeshPhysicalMaterial,
+  fresnel rim, dark inner shell, catchlights, neck+collar pedestal, procedural
+  jitter/turns/saccades, CRT post inside canvas only); src/feed2.js
+  (synthetic|bridge|file feeds, staleness watchdog); src/morph-map.js GENERATED
+  52/52 ARKit<->facecap pairs (tools/gen-morph-map.mjs reads gltf extras).
+- HUD v2: ON AIR pill, STANDBY/LISTENING/THINKING/SPEAKING, telemetry
+  (fps/bs/s-out/mic), caption bar (0x02 stream), CFG gear hides door/persona,
+  no raw URLs, cyan-only + amber warning (red/magenta dead).
+- v1 kept intact: ?v2=1 toggle (bootstrap.js), v1 e2e re-run PASS by parent.
+- FULL-CHAIN INTEGRATION PROOF (parent): real 28.8 s speech PCM -> production
+  max-bridge quadlet (:8990) -> proto-faithful fake NIM container (ai.network
+  alias systemd-max-face) -> v2 app headless feed=bridge: inFrames 50,
+  JawOpen ramp 0.26, screenshot shot-v2-chain.png. CHAIN OK.
+  (bridge patch: root path '/' also accepted as /shapes consumer.)
+- Vision review score: v1 ~2-3/10 -> v2 7/10 (real facial geometry, visible
+  open mouth, clean HUD). Known polish backlog: eye iris detail, one-side
+  shadow crush, floating bust, dev 'v1' link label.
+
+### Phase 3 spike (2026-11-11, subagent) — apps/max-call scaffold
+- aiortc 1.16 + Playwright chromium validated BOTH ways: aiortc<->aiortc
+  loopback (29.9 fps VP8 + 49.5 fps Opus) AND headless-Chromium<->aiortc
+  interop (browser decoded 148 synthetic VP8 frames ~240 kbit/s). No
+  /dev/video needed.
+- Meet reality check (live probe from this host): alkaline.google.com is
+  NXDOMAIN (legacy bot-token gateway dead); meet.google.com/o/webrtc-inbound-
+  call live but auth-gated. => join path = Playwright guest-join + CDP
+  signaling interception (observer ran against live Meet UI, screenshots).
+  UNVERIFIED until an owner-created meeting link: guest admission flow,
+  live token extraction, media servers handshake. join.py --url --hold 60
+  is wired to close exactly that.
+- Hygiene: tailnet ICE IP redacted from artifacts (validation_results.json).

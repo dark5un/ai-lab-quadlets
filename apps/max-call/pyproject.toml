@@ -1,0 +1,16 @@
+[project]
+name = "max-call"
+version = "0.1.0"
+description = "Google Meet joiner spike: Playwright observer + aiortc synthetic media session for a real-time avatar (headless, no media devices)"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "aiortc>=1.16",
+    "playwright>=1.65",
+    "numpy>=2.0",
+]
+
+[tool.uv]
+# The venv deliberately lives OUTSIDE this repo directory:
+#   uv venv --python 3.12 /home/px/.hermes/cache/scratch/max-call-venv
+#   VIRTUAL_ENV=/home/px/.hermes/cache/scratch/max-call-venv uv pip install -e . (or the deps above)
+#   PLAYWRIGHT_BROWSERS_PATH=/home/px/.hermes/cache/scratch/pw-browsers playwright install chromium

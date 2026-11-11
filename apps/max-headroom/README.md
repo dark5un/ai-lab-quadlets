@@ -17,6 +17,41 @@ http://127.0.0.1 is a secure context so the mic works).
 Acceptance: `~/workspace/research/duplex-bus/.venv/bin/python test_app_e2e.py`
 (headless Chromium gates: LIVE, downlink, visemes, screenshot diff).
 
+## v2 renderer (facecap) — `?v2=1`
+
+The redesign loads the MIT-licensed **facecap.glb** scan (52 ARKit morph
+targets; vendored in `assets/` with license note) and renders it as a stylized
+glossy chrome mannequin in a cyan-phosphor CRT look (fresnel rim + scanline /
+barrel / vignette post **inside the WebGL canvas only**, never over DOM text).
+New HUD: ON AIR pill, LISTENING/THINKING/SPEAKING state, bottom caption bar
+(the 0x02 stream), CFG settings gear (door/persona/feed hidden by default).
+The wireframe head (v1) still works at `/` without `?v2=1`, and v1 files are
+untouched; `src/plex-client.js` + `src/ogg-muxer.js` are reused as-is.
+
+Blendshape feeds (`?feed=...`, ARKit names -> facecap morph names via the
+generated `src/morph-map.js`, 52 verified pairs — regenerate with
+`node tools/gen-morph-map.mjs`):
+
+- `feed=synthetic` (default): local mic-level + spectral analysis -> ARKit
+  frames. Works with no backend at all.
+- `feed=bridge`: live WS at `?door=` (default `ws://127.0.0.1:8990`) speaking
+  JSON `{t: unix_seconds, bs: {ARKitName: 0..1}}` @30Hz — the A2F contract.
+  Fake it with `python tools/fake-bridge.py` (streams the CSV fixture).
+- `feed=file`: replays `tests/fixtures/bs-frames.csv` (served at
+  `/fixture/bs-frames.csv` by vite in dev and preview). Regenerate with
+  `node tools/gen-fixture.mjs`.
+
+Audio door (PersonaPlex) is `?plex=` (default loopback `ws://127.0.0.1:8998`
+or the tailscale wss on non-loopback hosts); GO LIVE arms the mic exactly like
+v1. Extra params/controls: wireframe overlay = CFG checkbox; `?teeth`
+re-enables the (hidden-by-default) teeth mesh.
+
+Acceptance: `~/workspace/research/duplex-bus/.venv/bin/python test_app_v2.py`
+— gates synthetic/bridge/file morph engagement, the live ON AIR pill +
+LISTENING/SPEAKING state + caption stream, and writes comparison screenshots.
+View it locally: `npm run build && npm run preview` then open
+`http://127.0.0.1:4173/?v2=1` (or `npm run dev`).
+
 Protocol notes (all live-verified 2026-11-11, see also duplex-bus STATUS.md):
 - Frames: 1-byte kind + payload. 0x00 handshake, 0x01 Ogg-Opus bytes both
   directions (server fragments pages arbitrarily), 0x02 utf8 text stream.

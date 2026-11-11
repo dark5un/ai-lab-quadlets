@@ -188,7 +188,8 @@ async def main():
         path = ws.request.path
         if path == "/feed":
             await bridge.run_feed(ws)
-        elif path == "/shapes":
+        elif path in ("/shapes", "/", ""):
+            # root = consumer too (client apps connect bare door URLs)
             bridge.consumers.add(ws)
             try:
                 if bridge.names:
