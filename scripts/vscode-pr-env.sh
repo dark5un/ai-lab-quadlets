@@ -96,12 +96,15 @@ cd "/home/coder/pr-env/ws/$PR_REPO"
 git fetch origin "+refs/pull/$PR_NUM/head:refs/heads/pr-$PR_NUM"
 git checkout "pr-$PR_NUM"
 touch /home/coder/pr-env/ready
-# 4.145.2 (verified live from the pinned image): --auth takes
-# [password|none]; --password is REJECTED on argv ("can only be set in the
-# config file or passed in via $PASSWORD") and there is no --password-file.
-# The entry reads the mounted token file into the PASSWORD env at exec time.
-exec env PASSWORD="*** /home/coder/pr-env/token)" code-server \
-     --auth password --bind-addr 0.0.0.0:8080 "/home/coder/pr-env/ws/$PR_REPO"
+# 4.145.2 auth surface (verified live against the pinned image):
+# --password rejected on argv; $PASSWORD read by the launcher is dropped
+# before the server re-exec (child environ probe: absent). The config file
+# is the supported route: bind-addr/auth/password/cert in YAML.
+mkdir -p ~/.config/code-server
+printf 'bind-addr: 0.0.0.0:8080\nauth: password\npassword: %s\ncert: false\n' \
+    "$(< /home/coder/pr-env/token)" > ~/.config/code-server/config.yaml
+chmod 600 ~/.config/code-server/config.yaml
+exec code-server "/home/coder/pr-env/ws/$PR_REPO"
 ' >/dev/null
     printf 'created vscode-pr-%s port=%s\n' "$slug" "$port"
 }
