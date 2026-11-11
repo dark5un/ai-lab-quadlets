@@ -202,18 +202,17 @@ def main() -> int:
     # live per-PR VS Code envs (created by the vscode-pr pipelines)
     if PR_ENVS.is_dir():
         for d in sorted(PR_ENVS.iterdir()):
-            st = d / "state.json"
-            if not st.is_file():
+            st = d / "state"          # KEY=VALUE format written by vscode-pr-env.sh
+            if not st.is_file() or d.name.startswith("port-"):
                 continue
-            try:
-                j = json.loads(st.read_text())
-            except ValueError:
-                continue
-            ts_url, ts_port = doors.get(j.get("host_port", 0), ("", ""))
+            j = dict(l.split("=", 1) for l in st.read_text().splitlines() if "=" in l)
+            hp = int(j.get("port", 0))
+            ts_url, ts_port = doors.get(hp, ("", ""))
+            tokf = d / "token"
             rows.append((f"vscode-pr:{j.get('slug', d.name)}",
-                         j.get("access_url", ""), ts_url, ts_port,
-                         str(j.get("host_port", "")),
-                         j.get("git_author", ""), j.get("connection_token", "")))
+                         f"http://127.0.0.1:{hp}", ts_url, ts_port, str(hp),
+                         f"{j.get('git_name', '')} <{j.get('git_email', '')}>",
+                         tokf.read_text().strip() if tokf.is_file() else ""))
 
     w = [max(len(str(r[i])) for r in rows) for i in range(5)]
     print(f"{'SERVICE':<{w[0]}}  {'ACCESS URL':<{w[1]}}  {'TAILSCALE URL':<{w[2]}}  "
