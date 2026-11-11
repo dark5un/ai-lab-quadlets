@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>MAX HEADROOM // live</title>
+<link rel="stylesheet" href="./src/style.css"/>
+</head>
+<body>
+<div id="stage">
+  <div id="crt">
+    <div id="scanlines"></div>
+    <canvas id="scene"></canvas>
+    <div id="hud">
+      <div id="status">standby</div>
+      <div id="caption"></div>
+    </div>
+  </div>
+  <div id="controls">
+    <button id="go">GO LIVE</button>
+    <label>door <input id="door" size="30"/></label>
+    <label>persona <input id="persona" size="60"/></label>
+    <span id="stats"></span>
+  </div>
+</div>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

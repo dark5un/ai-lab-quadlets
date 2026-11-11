@@ -44,6 +44,7 @@ Web apps (31xx family, sequential):
 | vscode             | -    | 3113 | loopback (tailnet door: tailscale serve https :8443; fallback ssh -L) |
 | s3-webdav          | 8080 | 3124 | loopback (tailnet door: tailscale serve https :8449; rclone serve webdav over Garage buckets — added 2026-11-10) |
 | vscode-pr box pool | 8080 | 3130-3135 | loopback; transient per-PR code-server containers (docs/vscode-pr-review-plan.md); fixed tailnet doors https :8450-8455 via scripts/vscode-pr-doors.sh; pool allocations = marker files ~/.workspaces/vscode-pr/port-<p> |
+| personaplex        | 8998 | 8998 | loopback (127.0.0.1); tailnet door `tailscale serve --https=8456` -> https://ai.<tailnet>.ts.net:8456 (WS upgrade through serve verified live 2026-11-11); max-headroom app (apps/max-headroom) is served by dufs at :443 under /workspace/.../apps/max-headroom/dist/ |
 
 Knowledge base (KB group, plan ~/tmp/knowledge_base_plan1.md, added 2026-11-04):
 

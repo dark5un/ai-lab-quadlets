@@ -31,3 +31,7 @@ kb/workflows/
 kb/fixtures/
 # local build artifacts (built via `go build` in tools/kbsearch)
 tools/kbsearch/kbsearch
+
+# Node app artifacts
+node_modules/
+dist/

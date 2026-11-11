@@ -1,0 +1,21 @@
+:root { --neon:#3af; --bg:#05070d; }
+* { box-sizing: border-box; }
+html, body { margin:0; height:100%; background:var(--bg); color:var(--neon);
+  font-family:"Courier New", monospace; }
+#stage { display:flex; flex-direction:column; height:100%; }
+#crt { position:relative; flex:1; overflow:hidden; margin:12px;
+  border-radius:18px/28px; /* slight barrel */
+  box-shadow: inset 0 0 60px rgba(60,170,255,.25), 0 0 24px rgba(60,170,255,.15); }
+#scanlines { position:absolute; inset:0; pointer-events:none; z-index:2;
+  background:repeating-linear-gradient(0deg, rgba(0,0,0,.35) 0 1px, transparent 1px 3px);
+  mix-blend-mode:multiply; }
+#scene { width:100%; height:100%; display:block; }
+#hud { position:absolute; left:0; right:0; bottom:0; padding:10px 16px; z-index:3;
+  text-shadow:0 0 6px var(--neon); }
+#caption { min-height:1.4em; }
+#controls { display:flex; gap:12px; align-items:center; padding:8px 16px 14px; }
+#controls input { background:#0a1020; color:#9df; border:1px solid #246; padding:6px; }
+#go { background:#123; color:var(--neon); border:1px solid var(--neon);
+  padding:8px 18px; font-family:inherit; cursor:pointer; }
+#go.on { background:#a22; color:#fff; border-color:#f55; }
+#stats { opacity:.7; }
