@@ -1,7 +1,8 @@
 # Max Headroom real-time avatar plan (option A: KB platform down)
 
-Status: EXECUTED 2026-11-11 (Phases 0-4 complete, Phase 5 in progress; see
-"Execution record" at the bottom). Outcome deltas from the plan:
+Status: EXECUTED + FINALIZED 2026-11-11 (all phases complete; owner end-state
+call made: KB stays asleep). See "Execution record" at the bottom.
+Outcome deltas from the plan:
 - KB units had NO [Install] drop-ins (Phase 1 step 4 premise wrong): the only
   resurrect path was kb-watcher.timer (nightly Wants= chain) — disabled, not
   just stopped. Dormancy now survives reboot natively.
@@ -238,6 +239,17 @@ VRAM budget: personaplex ~8 + A2F ~1 + CUDA contexts ~0.6 = ~9.6 / 12.3 GB -> fi
   doc-inbox backlog; dataset counts observed rising live). llama-cpp-4070ti
   NOT restarted during the drill (personaplex holds the card; Conflicts=
   makes them mutually exclusive by design).
-- Pending owner items: one real-browser mic session by owner; end-state call
-  (KB back to sleep after backlog drains, or leave up — avatar unaffected
-  either way as long as llama-cpp-4070ti stays off the 4070 Ti).
+- End state (owner decision 2026-11-11, this session): KB back to SLEEP,
+  permanently dormant until re-instructed. All 11 KB units (lightrag,
+  kb-postgres, embeddings, kb-watcher, kb-analysis, ragflow x6) additionally
+  `systemctl --user mask`ed — verified survives daemon-reload; stronger than
+  the no-[Install] dormancy above (nothing can autostart or manually start
+  them). kb-papers re-paused after the drill (night-kitchen still paused);
+  kb-watcher.timer disabled+inactive. During the interim the lightrag doc
+  queue had spun a visible retry loop (llama-cpp-4070ti down while
+  personaplex holds the 4070 Ti; docs stay PENDING/FAILED, no loss) and
+  kb-ingest-papers #14395 failed — the drill's backlog drain is unfinished;
+  resume it by unmasking + starting the KB stack when wanted.
+  Avatar stack unaffected: personaplex live (127.0.0.1:8998, 9.8 GB on the
+  4070 Ti), wss door :8456 serving it, app door under dufs :443 root.
+  Remaining owner item: one real-browser mic session.
