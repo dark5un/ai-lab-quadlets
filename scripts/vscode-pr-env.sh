@@ -101,8 +101,12 @@ touch /home/coder/pr-env/ready
 # before the server re-exec (child environ probe: absent). The config file
 # is the supported route: bind-addr/auth/password/cert in YAML.
 mkdir -p ~/.config/code-server
-printf 'bind-addr: 0.0.0.0:8080\nauth: password\npassword: %s\ncert: false\n' \
-    "$(< /home/coder/pr-env/token)" > ~/.config/code-server/config.yaml
+cat > ~/.config/code-server/config.yaml <<CFG
+bind-addr: 0.0.0.0:8080
+auth: password
+password: $(< /home/coder/pr-env/token)
+cert: false
+CFG
 chmod 600 ~/.config/code-server/config.yaml
 exec code-server "/home/coder/pr-env/ws/$PR_REPO"
 ' >/dev/null
