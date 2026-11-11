@@ -67,7 +67,16 @@ rotate_env_key "$CONF/ragflow/service.env" ELASTIC_PASSWORD
 rotate_env_key "$CONF/ragflow/service.env" MYSQL_PASSWORD
 rotate_env_key "$CONF/ragflow/service.env" MINIO_PASSWORD
 rotate_env_key "$CONF/ragflow/service.env" REDIS_PASSWORD
-rotate_env_key "$CONF/ragflow/service.env" ADMIN_DEFAULT_PASSWORD
+# ADMIN_DEFAULT_PASSWORD must rotate as a TRIO (file + env + DB hash) or the
+# access card starts lying again; the script does all three and NEVER attempts
+# a login (owner directive 2026-11-11).
+if [ "$APPLY" = 1 ]; then
+    "$ROOT/scripts/ragflow-fix-admin-password.sh" --rotate \
+        && echo "  ✓ rotated ragflow admin password (file+env+DB in lockstep)" \
+        || echo "  ! ragflow admin rotation FAILED (systemd-ragflow-mysql up?)"
+else
+    echo "  ~ would rotate ragflow admin password via ragflow-fix-admin-password.sh --rotate (file+env+DB)"
+fi
 rotate_env_key "$CONF/kb-postgres/service.env" POSTGRES_PASSWORD
 rotate_env_key "$CONF/windmill-postgres/service.env" POSTGRES_PASSWORD
 rotate_env_key "$CONF/windmill/service.env" SUPERADMIN_SECRET
