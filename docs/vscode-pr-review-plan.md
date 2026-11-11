@@ -96,13 +96,35 @@ Forgejo user API before anything is created.
 | ragflow admin creds fixed | scripts/ragflow-fix-admin-password.sh (werkzeug scrypt format from infiniflow/ragflow internal/common/password.go) | POST /api/v1/admin/login 200 `"code":0` with config/ragflow/.admin_pw_once |
 | windmill creds (utility issue, not live) | auth/login JWT + agent-token whoami + notebook token parity | all valid; ailab-access previously displayed `admin`+SUPERADMIN_SECRET (not a login) — fixed in tools/ailab-access |
 
-## E2E test record (live, PR pipeline/pilot-cli#1)
+## E2E test record (live, PR pipeline/pilot-cli#1, 2026-11-11)
 
-SEE BELOW after execution (filled by the run): launch -> pipelines exist
-(one paused) -> deploy key `vscode-pr-…` present -> container running on
-3130 -> box git identity = forge profile -> door https 8450 answers 403
-without token / 200 with -> destroy -> container gone, key gone, dir gone,
-both pipelines gone, fly pipelines listing clean.
+1. POST signed launch (user `pipeline`) -> `fly pipelines`:
+   `vscode-pr-pipeline-pilot-cli-1-up` (unpaused) +
+   `vscode-pr-pipeline-pilot-cli-1-down` (PAUSED) — both created + the -up
+   `create` job triggered.
+2. create job #7 (after fixing the failures below): **succeeded 28s** —
+   `registered deploy key title=vscode-pr-pipeline-pilot-cli-1 read_only=True`,
+   box `Up`, loopback + tailnet door 200, PR #1 comment posted with the
+   editor link + access-page link + destroy-job link.
+3. Box contract: `refs/pull/1/head -> pr-1` cloned over SSH with the fresh
+   deploy key (log: `Switched to branch 'pr-1'`); git identity inside the
+   box = forge profile: `pipeline` / `pipeline@noreply.forge.<tailnet>.ts.net`;
+   key 0600 owned by the box user; code-server login: correct password ->
+   302 /(session), wrong -> 200 rejected.
+4. Destroy cycle: unpause -down + trigger -> container GONE, forge keys
+   list `[]`, state dir empty (port marker released), `fly pipelines`
+   grep vscode-pr -> 0 (both pipelines self-deleted; the final build aborts
+   as it deletes its own pipeline - documented behavior).
+5. ailab-access lists the live box with reviewer identity + door URL.
+
+Live fixes the e2e forced (each one caught by the real run, not theory):
+- ssh-keygen needs the artifact parent dir created (build #1 failure).
+- pipeline tasks need the write:issue review token, not the plain forge
+  token (comment 403 -> token re-mirrored + re-launched to re-bake).
+- code-server 4.145.2 auth: no --password-file; --password rejected on
+  argv; $PASSWORD dropped across the launcher re-exec (child-environ
+  probe); config.yaml heredoc is the working shape (printf's single
+  quotes broke the enclosing bash -c string).
 
 ## Follow-ups (not done, deliberate)
 

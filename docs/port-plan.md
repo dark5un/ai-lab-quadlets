@@ -43,6 +43,7 @@ Web apps (31xx family, sequential):
 | docling-serve      | 5001 | 3108 | loopback (the docling MCP's remote backend) |
 | vscode             | -    | 3113 | loopback (tailnet door: tailscale serve https :8443; fallback ssh -L) |
 | s3-webdav          | 8080 | 3124 | loopback (tailnet door: tailscale serve https :8449; rclone serve webdav over Garage buckets — added 2026-11-10) |
+| vscode-pr box pool | 8080 | 3130-3135 | loopback; transient per-PR code-server containers (docs/vscode-pr-review-plan.md); fixed tailnet doors https :8450-8455 via scripts/vscode-pr-doors.sh; pool allocations = marker files ~/.workspaces/vscode-pr/port-<p> |
 
 Knowledge base (KB group, plan ~/tmp/knowledge_base_plan1.md, added 2026-11-04):
 
