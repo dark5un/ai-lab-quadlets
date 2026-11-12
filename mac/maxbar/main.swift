@@ -22,6 +22,11 @@ import AVFoundation
 
 let kSys = AudioObjectID(kAudioObjectSystemObject)
 let kMaxMic = "MAX Mic", kMaxOut = "MAX Out", kMaxCam = "MAX Camera"
+let kMaxCamExtID = "io.onlyascii.maxcam.extension"
+let kMaxCamHost = "/Applications/MaxCamHost.app/Contents/MacOS/MaxCamHost"
+// headless --activate contract (MaxCamHost): exit 0 completed · 1 failed ·
+// 2 needs user approval · 3 watchdog. Approval itself is a human click in
+// System Settings — MAXBar can open the pane but must not fake the toggle.
 let kStatusDir = (NSString(string: "~/Library/Application Support/MaxPresence")).expandingTildeInPath
 let kHeartbeatFresh: TimeInterval = 6   // daemon writes every 2 s
 
@@ -94,6 +99,29 @@ func findMaxCamera() -> (present: Bool, inUse: Bool) {
         }
     }
     return (false, false)
+}
+
+// ------------------------------------------- system-extension registry state
+// Only consulted when CMIO says the camera is ABSENT — steady state pays zero
+// subprocess cost. 'systemextensionsctl list' needs no rights (verified).
+func camExtDiag() -> (state: String, enabled: Bool) {
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/usr/bin/systemextensionsctl")
+    p.arguments = ["list"]
+    let out = Pipe()
+    p.standardOutput = out; p.standardError = Pipe()
+    do { try p.run() } catch { return ("systemextensionsctl exec failed: \(error)", false) }
+    let data = out.fileHandleForReading.readDataToEndOfFile()
+    p.waitUntilExit()
+    let text = String(decoding: data, as: UTF8.self)
+    for line in text.split(separator: "\n") where line.contains(kMaxCamExtID) {
+        let cols = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+        let enabled = (cols.first == "*")
+        var state = "?"
+        if let b = line.firstIndex(of: "[") { state = String(line[b...]) }
+        return (state, enabled)
+    }
+    return ("not installed", false)
 }
 
 // ---------------------------------------------------------------- heartbeat daemons
@@ -208,15 +236,27 @@ func caps() -> [Capability] {
 
 // ---------------------------------------------------------------- snapshot + UI
 struct Snapshot {
-    let mic: AudioDev?, out: AudioDev?, cam: (present: Bool, inUse: Bool), daemons: [Daemon], caps: [Capability]
+    let mic: AudioDev?, out: AudioDev?, cam: (present: Bool, inUse: Bool), camDiag: String,
+    daemons: [Daemon], caps: [Capability]
     var audioActive: Bool { (mic?.inUse ?? false) || (out?.inUse ?? false) }
     var linkUp: Bool { daemons.contains { $0.fresh && $0.connected } }
     var healthy: Bool { daemons.contains { $0.healthy } }
     var daemonUp: Bool { daemons.contains { $0.fresh } }
 }
+// diag subprocess throttled to ~10 s even though CMIO polls every 2 s
+var lastDiagAt = Date.distantPast
+var lastDiag = "not checked"
+func camDiagCached(_ present: Bool) -> String {
+    if present { return "" }
+    let now = Date()
+    if now.timeIntervalSince(lastDiagAt) > 10 { lastDiag = camExtDiag().state; lastDiagAt = now }
+    return lastDiag
+}
 func poll() -> Snapshot {
     let (mic, out) = findMaxAudio()
-    return Snapshot(mic: mic, out: out, cam: findMaxCamera(), daemons: readDaemons(), caps: caps())
+    let cam = findMaxCamera()
+    return Snapshot(mic: mic, out: out, cam: cam, camDiag: camDiagCached(cam.present),
+                    daemons: readDaemons(), caps: caps())
 }
 
 final class Bar: NSObject, NSMenuDelegate {
@@ -285,7 +325,7 @@ final class Bar: NSObject, NSMenuDelegate {
         var t = "link: \(s.healthy ? "UP + server healthy" : s.linkUp ? "UP (server not healthy)" : s.daemonUp ? "daemon up, link down" : "down")"
         t += " | MAX Mic " + (s.mic.map { yn($0.inUse) } ?? "missing")
         t += " | MAX Out " + (s.out.map { yn($0.inUse) } ?? "missing")
-        t += " | MAX Camera " + (s.cam.present ? (s.cam.inUse ? "streaming" : "idle") : "absent")
+        t += " | MAX Camera " + (s.cam.present ? (s.cam.inUse ? "streaming" : "idle") : "MISSING (ext \(s.camDiag))")
         if s.caps.contains(where: { !$0.ok }) { t += " | ⚠ self-check failing" }
         return t
     }
@@ -295,6 +335,54 @@ final class Bar: NSObject, NSMenuDelegate {
         Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.snap = poll(); self.render()
+            self.cameraWatch()
+        }
+    }
+    // ------------------------------------------------- camera check + FORCE
+    // Contract: the widget cannot hold system-extension.install, so forcing =
+    // exec MaxCamHost --activate (its headless mode prints the delegate
+    // result and exits 0/1/2/3). Throttled auto-repair while the CMIO device
+    // is missing; exit 2 (awaiting user approval) additionally opens the
+    // Login Items & Extensions pane once per minute — the click stays human.
+    var lastForce = Date.distantPast
+    var forceInFlight = false
+    var lastForceResult = ""
+    var lastPaneOpen = Date.distantPast
+    func cameraWatch() {
+        guard !snap.cam.present, !forceInFlight else { return }
+        guard Date().timeIntervalSince(lastForce) > 120 else { return }
+        forceCamera()
+    }
+    func forceCamera() {
+        lastForce = Date()
+        guard FileManager.default.isExecutableFile(atPath: kMaxCamHost) else {
+            lastForceResult = "host missing: \(kMaxCamHost)"; return
+        }
+        if forceInFlight { return }
+        forceInFlight = true
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: kMaxCamHost)
+        p.arguments = ["--activate"]
+        let io = Pipe(); p.standardOutput = io; p.standardError = io
+        p.terminationHandler = { [weak self] proc in
+            let text = String(decoding: io.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.forceInFlight = false
+                let first = text.split(separator: "\n").first.map(String.init) ?? "(no output)"
+                self.lastForceResult = "exit \(proc.terminationStatus) — \(first)"
+                if proc.terminationStatus == 2,
+                   Date().timeIntervalSince(self.lastPaneOpen) > 60 {
+                    self.openApprovalPane(); self.lastPaneOpen = Date()
+                }
+                self.snap = poll(); self.render()
+            }
+        }
+        do { try p.run() } catch { forceInFlight = false; lastForceResult = "exec failed: \(error)" }
+    }
+    func openApprovalPane() {
+        if let u = URL(string: "x-apple.systempreferences:com.apple.login-items-extensions-settings") {
+            NSWorkspace.shared.open(u)
         }
     }
     func render() {
@@ -334,6 +422,8 @@ final class Bar: NSObject, NSMenuDelegate {
     @objc func tCam() {
         var c: [String: Any] = readCmd("maxcamhost"); c["mute"] = !((c["mute"] as? Bool) ?? false); writeCmd("maxcamhost", c)
     }
+    @objc func mForceCamera() { forceCamera() }
+    @objc func mOpenPane() { openApprovalPane(); lastPaneOpen = Date() }
     func action(_ title: String, _ on: Bool, _ sel: Selector) -> NSMenuItem {
         let i = NSMenuItem(title: title, action: sel, keyEquivalent: "")
         i.target = self; i.state = on ? .on : .off; return i
@@ -356,8 +446,16 @@ final class Bar: NSObject, NSMenuDelegate {
         row(audioLine("MAX Out", s.out))
         menu.addItem(.separator())
         row("Video — virtual camera (P2)")
-        row(s.cam.present ? "   MAX Camera: \(s.cam.inUse ? "INSTALLED · streaming" : "installed · idle")"
-                          : "   MAX Camera: not installed (pending P2)")
+        if s.cam.present {
+            row("   MAX Camera: \(s.cam.inUse ? "INSTALLED · streaming" : "installed · idle")")
+        } else {
+            row("   MAX Camera: MISSING — extension \(s.camDiag)")
+            if !lastForceResult.isEmpty { row("   force: \(lastForceResult)") }
+            menu.addItem(action("Force camera activation now", false, #selector(mForceCamera)))
+            if s.camDiag.contains("waiting for user") {
+                menu.addItem(action("Open approval pane", false, #selector(mOpenPane)))
+            }
+        }
         menu.addItem(.separator())
         let linkDown = (audCmd["link"] as? String) == "down"
         row("Controls")
@@ -410,8 +508,24 @@ if CommandLine.arguments.contains("--selftest") {
     }
     print("MAX Mic: \(s.mic.map { "installed, in-use \($0.inUse)" } ?? "NOT INSTALLED")")
     print("MAX Out: \(s.out.map { "installed, in-use \($0.inUse)" } ?? "NOT INSTALLED")")
-    print("MAX Camera: \(s.cam.present ? (s.cam.inUse ? "installed, streaming" : "installed, idle") : "not installed")")
+    print("MAX Camera: \(s.cam.present ? (s.cam.inUse ? "installed, streaming" : "installed, idle") : "MISSING — ext \(s.camDiag) · force host: \(FileManager.default.isExecutableFile(atPath: kMaxCamHost) ? kMaxCamHost : "NOT PRESENT")")")
     for c in s.caps { print("cap \(c.ok ? "✓" : "✗"): \(c.name) — \(c.hint)") }
+    exit(0)
+}
+if CommandLine.arguments.contains("--force-camera") {
+    // manual one-shot of the force path (test hook): exec host, print result
+    let sem = DispatchSemaphore(value: 0)
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: kMaxCamHost)
+    p.arguments = ["--activate"]
+    let io = Pipe(); p.standardOutput = io; p.standardError = io
+    p.terminationHandler = { proc in
+        let text = String(decoding: io.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        print("host exit \(proc.terminationStatus):\n\(text)")
+        sem.signal()
+    }
+    do { try p.run() } catch { print("exec failed: \(error)"); exit(1) }
+    sem.wait()
     exit(0)
 }
 let app = NSApplication.shared

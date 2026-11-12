@@ -57,6 +57,26 @@ against a chmod-000 status dir (renders ✗ + NSCocoaError 257).
 `plex_up`/`bridge_up`/`server_*` pass through from the door's stat frames
 (plexpipe contract) — added 2026-11-12, keys optional/back-compatible.
 
+## Camera check + FORCE (since 2026-11-12, P2 live)
+MAX Camera extension (io.onlyascii.maxcam.extension) is ACTIVE. The widget:
+- Check: CMIO presence (every 2 s). When the device is MISSING it also runs
+  `systemextensionsctl list` (throttled 10 s, no rights needed) and shows the
+  registry state, e.g. `[activated waiting for user]`, `[terminated waiting
+  to uninstall on reboot]`, `not installed`.
+- Force: while missing, every ≥120 s (and via menu "Force camera activation
+  now") it execs `/Applications/MaxCamHost.app/Contents/MacOS/MaxCamHost
+  --activate` — the host owns system-extension.install; MAXBar never can.
+  Headless contract (exit codes): 0 completed · 1 failed · 2 needs-user-
+  approval · 3 watchdog. On exit 2 the widget opens System Settings ▸ Login
+  Items & Extensions (once/min) — the approval CLICK stays human by design.
+  Last result is shown in the menu line "force: exit N — ...".
+- Pitfalls measured: `--deactivate` leaves `[terminated waiting to uninstall
+  on reboot]` and CMIO removal is immediate, but re-activation lands in
+  "waiting for user" — a deactivate cycle ALWAYS costs a fresh approval.
+  Ad-hoc-signed MAXBar rebuilds never affect the extension (it is registered
+  under the signed host's team, not the widget). build.sh: the embed rename
+  must `rm -rf` the target dir first or mv nests inside a stale leftover.
+
 ## Controls (kill-switches, since 2026-11-12)
 The menu can, without any sudo or new permissions, write per-daemon command
 files the daemons poll every heartbeat:

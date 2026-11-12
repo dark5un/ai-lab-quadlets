@@ -38,7 +38,11 @@ BUNDLE_SE="$APP/Contents/Library/SystemExtensions/io.onlyascii.maxcam.extension.
 mkdir -p "$APP/Contents/Library/SystemExtensions"
 for cand in "$APP/Contents/PlugIns/MaxCamExtension.systemextension" \
             "$APP/Contents/Library/SystemExtensions/MaxCamExtension.systemextension"; do
-  if [ -d "$cand" ]; then mv "$cand" "$BUNDLE_SE"; break; fi
+  if [ -d "$cand" ]; then
+    # rm first: a leftover target dir (previous build) makes mv nest inside it
+    rm -rf "$BUNDLE_SE"
+    mv "$cand" "$BUNDLE_SE"; break
+  fi
 done
 SE="$BUNDLE_SE"
 [ -d "$SE" ] || { echo "systemextension not found after build"; exit 1; }
