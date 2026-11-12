@@ -40,3 +40,4 @@ dist/
 apps/max-call/artifacts/*.png
 apps/max-call/*.log
 apps/artifacts/
+apps/max-call/artifacts/validation_results.json
