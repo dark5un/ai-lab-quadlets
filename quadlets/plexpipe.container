@@ -1,0 +1,28 @@
+# plexpipe: MaxPresence P0 door service (docs/mac-virtual-devices-plan.md).
+# One Mac session at a time; JSON control + binary 'A'/'V' tags. Talks to
+# systemd-personaplex:8998 and systemd-max-bridge:8990 over ai.network;
+# loopback publish 8991 for the tailnet WSS door (tailscale serve :8457).
+# CPU-only. Dials plex/bridge lazily per session and retries — start order
+# is free (personaplex is on-demand with its own 4070 Ti VRAM budget).
+# NOTE: personaplex must be up before a P0/P1 gate test can round-trip.
+
+[Unit]
+Description=MaxPresence plexpipe audio door (Mac <-> personaplex <-> bridge)
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-plexpipe
+Image=localhost/plexpipe:latest
+Network=ai.network
+PublishPort=127.0.0.1:8991:8991/tcp
+# same persona as the max-headroom app (apps/max-headroom/src/main2.js PERSONA)
+Environment=PLEX_TEXT_PROMPT="You are Max Headroom: a sarcastic, paranoid AI video-host from a 1980s TV station. You stutter on consonants ('p-p-people'), insult the caller, drop catchphrases like 'let's play some crackle' and 'boot boot boot', and never admit to being an assistant. Keep replies to one or two punchy sentences."
+
+[Service]
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+
+# No [Install] section by design: opt-in via ai-lab (avatar group, boot=false).

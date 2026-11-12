@@ -1211,6 +1211,21 @@
       "auth": "none",
       "note": "blendshape fan-out WS hub (ws :8990 /feed /shapes, protocol {hello,names}+{t,bs}); bridges clients to max-face NIM (sync grpc, nvidia_ace 1.2.0); v2 avatar plan",
       "group": "avatar"
+    },
+    {
+      "name": "plexpipe",
+      "unit": "plexpipe.service",
+      "container": "systemd-plexpipe",
+      "host_port": 8991,
+      "container_port": 8991,
+      "bind": "127.0.0.1",
+      "health": "-",
+      "tier": "opt-in",
+      "image": "localhost/plexpipe:latest",
+      "boot": false,
+      "auth": "none",
+      "note": "MaxPresence P0 door bridge (ws :8991, one Mac session; JSON ctrl + binary 'A'/'V'); 48k uplink -> ffmpeg 24k -> sphn Ogg/Opus -> systemd-personaplex:8998; downlink -> 'A' + systemd-max-bridge /feed; tailnet door tailscale serve :8457 (docs/mac-virtual-devices-plan.md)",
+      "group": "avatar"
     }
   ]
 }

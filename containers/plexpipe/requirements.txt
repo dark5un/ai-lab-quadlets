@@ -1,0 +1,7 @@
+websockets>=12
+# PINNED: sphn 0.2.x REDESIGNED the Opus stream API (OpusStreamWriter lost
+# read_bytes, OpusStreamReader lost append_bytes-side reader -- verified live
+# 2026-11-12). 0.1.12 is the version the duplex-bus fdb_personaplex.py and the
+# personaplex FORK's own server.py (sphn OpusStreamReader/Writer) run against.
+sphn==0.1.12
+numpy>=1.26

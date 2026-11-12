@@ -72,10 +72,18 @@ SERVER (this repo — I build this, protocol frozen for the Mac brief):
     S->C binary tag 'V' = JPEG frame 640x480 (15-30 fps, option (a))
     S->C {"t":"stat",...} heartbeats; S->C {"t":"shapes"} later for option (b)
   Internally: 'A' uplink -> ffmpeg 48k->24k -> personaplex mic uplink
-  (framing = apps/max-headroom/src/plex-client.js; the proven python
-  mirror = PlexFeed in apps/max-call/src/maxcall/callpage.py); plex reply
+  (framing = apps/max-headroom/src/plex-client.js; the proven
+  python mirror = duplex-bus bus/fdb_personaplex.py); plex reply
   audio -> fan out: (1) downlink 'A' to Mac, (2) max-bridge /feed (lips).
   Bridge /shapes frames -> downlink (option b) or server-render -> 'V'.
+  STAT heartbeat payload (consumed by Mac status-bar widget, owner ask
+  2026-11-12 — every ~2 s while the session is open):
+    {"t":"stat","session_s":float,"up_bytes":int,"down_bytes":int,
+     "up_frames":int,"down_frames":int,"video_frames":int,
+     "plex_up":bool,"bridge_up":bool}
+  Link-active = ws open + stat arriving; "healthy" = plex_up && bridge_up.
+  Also S->C {"t":"caption","text":...} (plex 0x02 monologue stream) and
+  S->C {"t":"bye","reason":"busy"} when a second session tries to connect.
 MAC (Hermes-on-Mac builds from this brief):
 1. **MaxHole** — BlackHole fork, renamed per V-2, two-device build,
    installed via a small pkg/script (post-install: killall coreaudiod).
@@ -126,6 +134,17 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
 - P0 SERVER: implement plexpipe + door + protocol doc; loop-test with a
   python client (no Mac): feed recorded speech -> hear plex reply downlink
   + bridge lip animation. GATE: round-trip audio < 1 s.
+  STATUS 2026-11-12 (ai): **DONE** — containers/plexpipe/ (python,
+  websockets+sphn+ffmpeg), quadlet plexpipe.container (avatar group,
+  boot=false), door `tailscale serve --bg --https=8457 -> 127.0.0.1:8991`
+  (wss handshake + stat round-trip verified through TLS). Loop test
+  (benchdata/v1.0 candor sample, 6-27 s): uplink 'A' 48k -> plex_up +
+  bridge_up both true; downlink 'A' 24k flows at exact real-time cadence
+  (99 frames ~= 7.9 s audio over 12 s session); first backchannel packet
+  ~0.7 s after uplink audio reaches plex; bridge /shapes animated with
+  JawOpen 0.61 / MouthRollUpper 0.70 peaks. Model turn DECISION time varies
+  (personaplex full-duplex sampling); pipeline overhead itself stays well
+  under 1 s (80 ms sphn ticks + streaming ffmpeg resample).
 - P1 MAC audio: MaxHole + maxaudiod (python prototype ok). Manual test in
   Meet incognito: Panos' browser mic=MAX Mic, speaker=Multi-Output
   (phones+MAX Out); plexpipe uplink = meeting audio; GATE: Max answers the
@@ -144,6 +163,19 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   states, maybe VP8 instead of JPEG.
 
 ## Pitfalls (paid for already — hand to Mac Hermes verbatim)
+- **personaplex is SINGLE-SESSION**: one global `async with self.lock` — any
+  live client (the max-headroom browser app's GO LIVE tab included) makes
+  every other dial hang before the handshake. FREE the plex before P1/P3
+  gates on the Mac. Also: a client socket leaked on cancel wedges the lock
+  forever — plexpipe now closes its plex leg with asyncio.shield in finally
+  (hit live 2026-11-12 during P0 testing).
+- **personaplex container stdout is block-buffered** — 'Incoming connection'
+  lines appear minutes late; don't diagnose liveness from its logs in real
+  time (ask plexpipe's own journal: 'plex streaming').
+- **sphn 0.2.x REDESIGNED the Opus stream API** (OpusStreamWriter lost
+  read_bytes / OpusStreamReader lost read_pcm): pin **sphn==0.1.12** — the
+  version personaplex's own fork server.py and the duplex-bus fdb harness
+  run against (verified live 2026-11-12).
 - System extension only installs from /Applications — add a ditto build
   post-action (garethpaul.com write-up).
 - Extension Info.plist MachServiceName is mandatory; app-group entitlement
@@ -189,8 +221,11 @@ UPDATE (same day, later, code-m2): Mac side is NOT "nothing" anymore — P-1 don
 and P1 device-loop gate PASSED (MaxHole fork + maxaudiod prototype under
 `mac/`, merged to main; the P1 *Meet* gate still awaits P0's door URL). Owner
 now allows pushing to main for these merges.
-- ai server (this Hermes) owns: **P0 plexpipe** (not started) — next session
-  starts with: run P0 per this doc; the door URL will be appended here.
+- ai server (this Hermes) owns: **P0 plexpipe** — DONE 2026-11-12.
+  Door URL (appended per plan): **wss://ai.<tailnet>.ts.net:8457**
+  (tailscale serve --https=8457 -> 127.0.0.1:8991; tailnet IP deliberately
+  not committed — the Mac is already a peer, resolve via `tailscale status`).
+  maxaudiod: `run --door wss://ai.<tailnet>.ts.net:8457`.
 - code-m2 Hermes owns: P-1, P1, P2, P3. Kickoff prompt the owner pastes:
   "Clone https://github.com/dark5un/ai-lab-quadlets into
   ~/workspace/github.com/dark5un/ai-lab-quadlets (private repo — if this
@@ -209,5 +244,6 @@ now allows pushing to main for these merges.
 ## Server endpoints inventory (for the brief)
 - personaplex :8998 loopback (wss door :8456 exists today)
 - max-bridge :8990 loopback (needs door in P4 option b)
-- plexpipe :8991 loopback (new; door assigned at P0)
+- plexpipe :8991 loopback (LIVE; tailnet door `tailscale serve --https=8457`,
+  assigned at P0 2026-11-12)
 - apps/max-call = CDP fallback route, keep, don't extend.

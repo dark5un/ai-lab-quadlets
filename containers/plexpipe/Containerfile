@@ -1,0 +1,14 @@
+# plexpipe: MaxPresence P0 audio door (docs/mac-virtual-devices-plan.md).
+# WS :8991 <-> personaplex (Ogg/Opus wire via sphn, mirrors duplex-bus
+# fdb_personaplex.py) + max-bridge /feed fan-out. ffmpeg resamples
+# 48k (MAX Out) <-> 24k (plex native). CPU-only, no GPU.
+FROM docker.io/library/python:3.12-slim
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY server.py .
+EXPOSE 8991
+CMD ["python", "-u", "server.py"]
