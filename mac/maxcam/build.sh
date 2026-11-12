@@ -29,15 +29,18 @@ fi
 
 REL=build/Build/Products/Release
 APP="$REL/MaxCamHost.app"
-# system-extension product type builds MaxCamExtension.systemextension (NOT
-# .appex); xcodegen's embed lands it in PlugIns but the activation service
-# scans Contents/Library/SystemExtensions — relocate it (this was the whole
-# 'Code=4 Extension not found' story).
-SE="$APP/Contents/Library/SystemExtensions/MaxCamExtension.systemextension"
-if [ ! -d "$SE" ] && [ -d "$APP/Contents/PlugIns/MaxCamExtension.systemextension" ]; then
-  mkdir -p "$APP/Contents/Library/SystemExtensions"
-  mv "$APP/Contents/PlugIns/MaxCamExtension.systemextension" "$SE"
-fi
+# TWO hard requirements discovered 2026-11-12 (Code=4 "Extension not found"):
+#  1. the embed must live in Contents/Library/SystemExtensions (not PlugIns)
+#  2. the directory NAME must be exactly <CFBundleIdentifier>.systemextension —
+#     the client scanner matches the requested identifier against the dir name,
+#     NOT the Info.plist inside. Our product name (MaxCamExtension) broke this.
+BUNDLE_SE="$APP/Contents/Library/SystemExtensions/io.onlyascii.maxcam.extension.systemextension"
+mkdir -p "$APP/Contents/Library/SystemExtensions"
+for cand in "$APP/Contents/PlugIns/MaxCamExtension.systemextension" \
+            "$APP/Contents/Library/SystemExtensions/MaxCamExtension.systemextension"; do
+  if [ -d "$cand" ]; then mv "$cand" "$BUNDLE_SE"; break; fi
+done
+SE="$BUNDLE_SE"
 [ -d "$SE" ] || { echo "systemextension not found after build"; exit 1; }
 
 if [ "${NO_PROFILE:-0}" = "1" ]; then
