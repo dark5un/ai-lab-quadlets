@@ -37,6 +37,7 @@ async def run(target: str, hold: float, self_test: bool) -> int:
         '-ar', '24000', '-ac', '1', '-f', 's16le', 'pipe:1',
         stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE)
     pcm_out = asyncio.Queue()
+    pcm_bridge = asyncio.Queue()
 
     async def read_ff():
         while True:
@@ -44,13 +45,33 @@ async def run(target: str, hold: float, self_test: bool) -> int:
             if not chunk:
                 break
             await pcm_out.put(chunk)
+            await pcm_bridge.put(chunk)
     rff = asyncio.create_task(read_ff())
+    # bridge feed client: Max's own voice -> A2F -> blendshapes for app tab
+    BRIDGE = os.environ.get('BRIDGE', 'ws://127.0.0.1:8990')
+    bridge_box = {'ws': None}
 
+    async def bridge_feed_pump():
+        while True:
+            try:
+                async with websockets.connect(BRIDGE + '/feed') as ws:
+                    await ws.send(json.dumps({'rate': 24000}))
+                    bridge_box['ws'] = ws
+                    while True:
+                        chunk = await pcm_bridge.get()
+                        await ws.send(chunk)
+            except Exception:
+                bridge_box['ws'] = None
+                await asyncio.sleep(1.0)
     latest_frame = None
+    rbp_task = asyncio.create_task(bridge_feed_pump())
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True, args=[
-            '--autoplay-policy=no-user-gesture-required'])
+        browser = await p.chromium.launch(
+            headless=True, channel='chromium', args=[
+                '--use-gl=angle', '--use-angle=gl-egl',
+                '--autoplay-policy=no-user-gesture-required',
+                '--disable-blink-features=AutomationControlled'])
 
         appctx = await browser.new_context(user_agent=UA, locale='en-GB')
         await appctx.add_init_script('window.__maxRole="app";')
@@ -59,9 +80,11 @@ async def run(target: str, hold: float, self_test: bool) -> int:
         await app.goto(APP_URL)
         # go live on the app (its own GO LIVE button)
         try:
-            await app.get_by_role('button', name=re.compile('go live', re.I)).first.click(timeout=4000)
-        except Exception:
-            pass
+            await app.wait_for_selector('button', timeout=15000)
+            await app.get_by_role('button', name=re.compile('go live', re.I)).first.click(timeout=5000)
+            print('[driver] app GO LIVE clicked', flush=True)
+        except Exception as e:
+            print('[driver] GO LIVE click failed:', type(e).__name__, str(e)[:140], flush=True)
         cdp = await appctx.new_cdp_session(app)
         frame_box = []
 
@@ -127,8 +150,25 @@ async def run(target: str, hold: float, self_test: bool) -> int:
                                                name=re.compile(r"join now", re.I))
                     await btn.first.click(timeout=2500)
                     joined = True
+                    print('[driver] clicked JOIN NOW', flush=True)
+                except Exception:
+                    if ticks % 40 == 1:
+                        t = await call.evaluate("() => document.body.innerText.slice(0,150)")
+                        print('[driver] prejoin text:', ' '.join(t.split())[:140], flush=True)
+            if ticks % 200 == 1:
+                try:
+                    stt = await app.evaluate("() => String(window.__max2 && window.__max2.state)")
+                    if stt == 'STANDBY':
+                        await app.get_by_role('button', name=re.compile('go live', re.I)).first.click(timeout=2000)
+                        print('[driver] re-click GO LIVE (was STANDBY)', flush=True)
                 except Exception:
                     pass
+                try:
+                    st = await app.evaluate("() => window.__max2 ? {state: String(window.__max2.state), ready: window.__max2.ready, frames: window.__max2.feed.inFrames, ws: !!(window.__max2.client && window.__max2.client.ws)} : null")
+                    print(f'[driver] app state t={time.time()-t0:.0f}s:', st, flush=True)
+                    await call.screenshot(path=str(HERE / 'artifacts/call_tab.png'))
+                except Exception as e:
+                    print('[driver] probe fail:', repr(e), flush=True)
             await asyncio.sleep(0.05)
 
         if self_test:
