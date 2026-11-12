@@ -9,7 +9,7 @@ Modes:
 
 Native rates dodge resampling: capture 48k, play downlink at 24k (MaxHole kSampleRates).
 """
-import argparse, json, logging, math, queue, sys, threading, time
+import argparse, json, logging, math, os, queue, sys, threading, time
 import numpy as np
 import sounddevice as sd
 import websocket  # websocket-client
@@ -21,6 +21,49 @@ PLAY_NATIVE = 24000  # downlink rate == MaxHole native; no resample needed
 FRAME_MS = 20
 
 log = logging.getLogger("maxaudiod")
+
+# ---------------------------------------------------------------- status heartbeat
+# Written every 2 s so the MAXBar menu-bar widget (and humans) can observe the
+# door link without opening any audio stream. Consume freshness: ts older than
+# ~3 intervals => daemon is gone. Schema is flat JSON; see mac/maxbar/.
+STATUS_DIR = os.path.join(os.path.expanduser("~"), "Library", "Application Support", "MaxPresence")
+STATUS_PATH = os.path.join(STATUS_DIR, "maxaudiod.json")
+
+
+class Status:
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.data = {"pid": os.getpid(), "mode": None, "door": None,
+                     "connected": False, "started": time.time(),
+                     "last_connect": None, "last_stat": None,
+                     "tx_frames": 0, "rx_frames": 0, "errors": 0}
+
+    def bump(self, **kw):
+        with self.lock:
+            self.data.update(kw)
+
+    def inc(self, key):
+        with self.lock:
+            self.data[key] += 1
+
+    def flush(self):
+        with self.lock:
+            snap = dict(self.data, ts=time.time())
+        try:
+            os.makedirs(STATUS_DIR, exist_ok=True)
+            tmp = STATUS_PATH + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump(snap, f)
+            os.replace(tmp, STATUS_PATH)
+        except OSError as e:
+            log.warning("status write failed: %s", e)
+
+    def heartbeat(self, stop):
+        while not stop.wait(2):
+            self.flush()
+
+
+status = Status()
 
 
 def find_device(name, kind):
@@ -98,6 +141,7 @@ class Bridge:
         self.ws = websocket.WebSocket()
         self.ws.connect(self.door, timeout=10)
         self.ws.send(json.dumps({"t": "hello", "v": 1, "caps": ["audio"]}))
+        status.bump(connected=True, last_connect=time.time())
         log.info("door connected: %s", self.door)
 
     def reader(self):
@@ -105,11 +149,14 @@ class Bridge:
             try:
                 msg = self.ws.recv()
             except Exception as e:
+                status.bump(connected=False)
+                status.inc("errors")
                 log.warning("door recv error: %s", e)
                 return
             if isinstance(msg, bytes):
                 tag, payload = msg[:1], msg[1:]
                 if tag == b"A":
+                    status.inc("rx_frames")
                     pcm24 = np.frombuffer(payload, dtype="<i2").astype(np.float32) / 32768.0
                     self.play_q.put(pcm24)
                 elif tag == b"V":
@@ -120,7 +167,7 @@ class Bridge:
                 except json.JSONDecodeError:
                     continue
                 if ctrl.get("t") == "stat":
-                    self.last_stat = time.time()
+                    status.bump(last_stat=time.time())
 
     # -- audio side
     def run(self):
@@ -129,7 +176,8 @@ class Bridge:
         out_idx = find_device(OUT, "input")
         cap_frames = int(CAP_RATE * FRAME_MS / 1000)
 
-        def on_capture(indata, frames, ts, status):
+        def on_capture(indata, frames, tsi, status_info):
+            status.inc("tx_frames")
             mono = (indata[:, 0] + indata[:, 1]) * 0.5  # L+R downmix
             pcm = (np.clip(mono, -1, 1) * 32767).astype("<i2")  # s16le 48k mono
             self.tx.put(b"A" + pcm.tobytes())
@@ -144,6 +192,8 @@ class Bridge:
                         try:
                             self.ws.send(self.tx.get_nowait(), opcode=websocket.ABNF.OPCODE_BINARY)
                         except Exception as e:
+                            status.bump(connected=False)
+                            status.inc("errors")
                             log.warning("door send failed: %s", e)
                             raise
                     try:
@@ -160,6 +210,8 @@ class Bridge:
                 self.run()
                 backoff = 1
             except Exception as e:
+                status.bump(connected=False)
+                status.inc("errors")
                 log.warning("bridge down: %s (retry in %ss)", e, backoff)
                 self.stop.wait(backoff)
                 backoff = min(backoff * 2, 30)
@@ -173,11 +225,20 @@ def main():
     args = ap.parse_args()
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(name)s %(levelname)s %(message)s")
-    if args.mode == "loopback-test":
-        sys.exit(loopback_test())
-    if not args.door:
-        raise SystemExit("run mode needs --door (see docs/mac-virtual-devices-plan.md; P0 door URL lands in the doc)")
-    Bridge(args.door).loop()
+    status.bump(mode=args.mode, door=args.door)
+    stop = threading.Event()
+    threading.Thread(target=status.heartbeat, args=(stop,), daemon=True).start()
+    status.flush()
+    try:
+        if args.mode == "loopback-test":
+            sys.exit(loopback_test())
+        if not args.door:
+            raise SystemExit("run mode needs --door (see docs/mac-virtual-devices-plan.md; P0 door URL lands in the doc)")
+        Bridge(args.door).loop()
+    finally:
+        stop.set()
+        status.bump(connected=False)
+        status.flush()
 
 
 if __name__ == "__main__":

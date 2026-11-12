@@ -104,7 +104,15 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   streams — owner policy 2026-11-12); `run --door WSS_URL` = bridge mode,
   uplink s16le 48k mono 'A' frames, downlink 'A' 24k played natively (no
   resampler on Mac), JSON hello/stat, capped reconnect backoff, 'V' ignored
-  until P2.
+  until P2. Since 2026-11-12 maxaudiod also writes a 2 s heartbeat JSON to
+  ~/Library/Application Support/MaxPresence/maxaudiod.json (schema in
+  mac/maxbar/README.md) — consumed by MAXBar; future hosts (MaxCamHost)
+  drop same-schema files in that dir.
+- MAXBar (`mac/maxbar/`): Swift/AppKit menu-bar widget (CLT swiftc build,
+  ad-hoc signed, LSUIElement) showing link state (heartbeat), MAX Mic/Out
+  installed+STREAMING (CoreAudio 'gone'; 'sact' is static 1 on MaxHole —
+  useless), MAX Camera present+streaming (CMIO, lights up at P2). Read-only:
+  opens no streams → no TCC prompt. Installed ~/Applications/MAXBar.app.
 
 ## Phases
 - P-1 CODE-M2 ENV (Mac Hermes): sw_vers / chip / brew / Xcode CLT presence;
