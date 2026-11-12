@@ -217,6 +217,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ext.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ext/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "MAX Camera Extension";
@@ -224,6 +225,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.onlyascii.maxcam.extension;
 				SDKROOT = macosx;
 			};
@@ -361,6 +363,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ext.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ext/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "MAX Camera Extension";
@@ -368,6 +371,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.onlyascii.maxcam.extension;
 				SDKROOT = macosx;
 			};

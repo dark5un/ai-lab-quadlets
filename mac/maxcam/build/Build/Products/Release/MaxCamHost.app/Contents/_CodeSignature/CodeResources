@@ -6,21 +6,21 @@
 	<dict/>
 	<key>files2</key>
 	<dict>
-		<key>Library/SystemExtensions/MaxCamExtension.systemextension/Contents/Info.plist</key>
+		<key>Library/SystemExtensions/io.onlyascii.maxcam.extension.systemextension/Contents/Info.plist</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			MoNnP+zP2rB8VC9XdmHN2yIpsTK0GdSzdLKDuhsyvJ4=
+			ZC4nyLZO/8ikVT1OMtQiGyInvrx1wMYcrmzaExorfeE=
 			</data>
 		</dict>
-		<key>Library/SystemExtensions/MaxCamExtension.systemextension/Contents/MacOS/MaxCamExtension</key>
+		<key>Library/SystemExtensions/io.onlyascii.maxcam.extension.systemextension/Contents/MacOS/MaxCamExtension</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			fRnskdfHy7IQ6IVLMNArfPAYQnY1w3D1l1JvyHqjl2Q=
+			2C9i/GgRBmyPixm8OsQJ4w/qCtvBeOn0Wg6rKI6GbYQ=
 			</data>
 		</dict>
-		<key>Library/SystemExtensions/MaxCamExtension.systemextension/Contents/_CodeSignature/CodeResources</key>
+		<key>Library/SystemExtensions/io.onlyascii.maxcam.extension.systemextension/Contents/_CodeSignature/CodeResources</key>
 		<dict>
 			<key>hash2</key>
 			<data>

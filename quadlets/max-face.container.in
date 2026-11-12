@@ -15,8 +15,9 @@
 Description=Audio2Face-3D NIM single-stream inference (4070 Ti)
 Wants=ai-network.service
 After=ai-network.service
-# Same-card cooperative with personaplex (must coexist); no Conflicts= here.
-Conflicts=soulx-duplug.service minicpmo-omni.service llama-cpp-4070ti.service llama-cpp-both.service strata-4070ti.service docling-4070ti.service
+# Same-card cooperative with personaplex (must coexist); maxface (QuickTalk
+# renderer, ticket 07) over-budgets the card alongside A2F -> mutual exclude.
+Conflicts=soulx-duplug.service minicpmo-omni.service llama-cpp-4070ti.service llama-cpp-both.service strata-4070ti.service docling-4070ti.service maxface.service
 
 [Container]
 ContainerName=systemd-max-face
