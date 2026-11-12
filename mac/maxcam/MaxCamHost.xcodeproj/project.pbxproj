@@ -1,0 +1,427 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0F5DC5A3870DD397BAC29ECC /* MaxCamProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D27DFCE0EED58CC2D778D2 /* MaxCamProvider.swift */; };
+		32C8BA7A226E73F969A56181 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6324FD91BA37BB47416E8021 /* main.swift */; };
+		47F6F950AA9FDF6711B907A1 /* FrameClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6044FCD6C57E0EF45E2727F /* FrameClient.swift */; };
+		66B2524B30F1FF1FFA5E1A38 /* MaxCamExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7C405B1B34AC4E59ED86FCCD /* MaxCamExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		7BE94FE1379F365582C28A01 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF6C816571C973F7BC312BDC /* main.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		99CB9549AE03134AFD8223A8 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 3D95DB3F3C3E07F91B48BB49 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F28B9227E7E2139D22AD3AC2;
+			remoteInfo = MaxCamExtension;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A88B6A97B65D1074D171A679 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				66B2524B30F1FF1FFA5E1A38 /* MaxCamExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		4286E791135397F74B5B9949 /* MaxCamHost.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MaxCamHost.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6324FD91BA37BB47416E8021 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		7C405B1B34AC4E59ED86FCCD /* MaxCamExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MaxCamExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		95FC6225F271A8A12E4FCE7B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		9DF1733C886B2709A1B38E80 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		C6044FCD6C57E0EF45E2727F /* FrameClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameClient.swift; sourceTree = "<group>"; };
+		EF6C816571C973F7BC312BDC /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		F4D27DFCE0EED58CC2D778D2 /* MaxCamProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MaxCamProvider.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		133349FD01EA2E78AED50372 = {
+			isa = PBXGroup;
+			children = (
+				41F71BFB07242A571E727804 /* ext */,
+				B555A0B49AE83909F1BE17A2 /* host */,
+				8B04993C80B00CCE45A5B00F /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		41F71BFB07242A571E727804 /* ext */ = {
+			isa = PBXGroup;
+			children = (
+				C6044FCD6C57E0EF45E2727F /* FrameClient.swift */,
+				9DF1733C886B2709A1B38E80 /* Info.plist */,
+				6324FD91BA37BB47416E8021 /* main.swift */,
+				F4D27DFCE0EED58CC2D778D2 /* MaxCamProvider.swift */,
+			);
+			path = ext;
+			sourceTree = "<group>";
+		};
+		8B04993C80B00CCE45A5B00F /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				7C405B1B34AC4E59ED86FCCD /* MaxCamExtension.appex */,
+				4286E791135397F74B5B9949 /* MaxCamHost.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		B555A0B49AE83909F1BE17A2 /* host */ = {
+			isa = PBXGroup;
+			children = (
+				95FC6225F271A8A12E4FCE7B /* Info.plist */,
+				EF6C816571C973F7BC312BDC /* main.swift */,
+			);
+			path = host;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		6FD400EC5C4A14B46873B359 /* MaxCamHost */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0623B7566D632812062C99E0 /* Build configuration list for PBXNativeTarget "MaxCamHost" */;
+			buildPhases = (
+				EFBA05628A67E0A19C751D6C /* Sources */,
+				A88B6A97B65D1074D171A679 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AD1359E7819C3FFBBDB3A9EE /* PBXTargetDependency */,
+			);
+			name = MaxCamHost;
+			packageProductDependencies = (
+			);
+			productName = MaxCamHost;
+			productReference = 4286E791135397F74B5B9949 /* MaxCamHost.app */;
+			productType = "com.apple.product-type.application";
+		};
+		F28B9227E7E2139D22AD3AC2 /* MaxCamExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 715FD83A53BD7F9914147AB9 /* Build configuration list for PBXNativeTarget "MaxCamExtension" */;
+			buildPhases = (
+				A99D128FAA5DDD6435AEECCF /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MaxCamExtension;
+			packageProductDependencies = (
+			);
+			productName = MaxCamExtension;
+			productReference = 7C405B1B34AC4E59ED86FCCD /* MaxCamExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		3D95DB3F3C3E07F91B48BB49 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					6FD400EC5C4A14B46873B359 = {
+						DevelopmentTeam = E6W58DTJJ8;
+						ProvisioningStyle = Manual;
+					};
+					F28B9227E7E2139D22AD3AC2 = {
+						DevelopmentTeam = E6W58DTJJ8;
+						ProvisioningStyle = Manual;
+					};
+				};
+			};
+			buildConfigurationList = 50EDC45D78AC0F7E3CFB53B3 /* Build configuration list for PBXProject "MaxCamHost" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 133349FD01EA2E78AED50372;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 8B04993C80B00CCE45A5B00F /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				F28B9227E7E2139D22AD3AC2 /* MaxCamExtension */,
+				6FD400EC5C4A14B46873B359 /* MaxCamHost */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A99D128FAA5DDD6435AEECCF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				47F6F950AA9FDF6711B907A1 /* FrameClient.swift in Sources */,
+				0F5DC5A3870DD397BAC29ECC /* MaxCamProvider.swift in Sources */,
+				32C8BA7A226E73F969A56181 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EFBA05628A67E0A19C751D6C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7BE94FE1379F365582C28A01 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		AD1359E7819C3FFBBDB3A9EE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F28B9227E7E2139D22AD3AC2 /* MaxCamExtension */;
+			targetProxy = 99CB9549AE03134AFD8223A8 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		09F8CD2FBCF0523722589A8B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = host.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = host/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.onlyascii.maxcamhost;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		2CEF8B4491727D4159F013A5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ext.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = ext/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.onlyascii.maxcam;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		356D91812936E94362F049F6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = E6W58DTJJ8;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		78C70D4EAF82C2053BCB9F40 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Manual;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = E6W58DTJJ8;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		A14D079D0FE6D7BC73B9724F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = ext.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = ext/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.onlyascii.maxcam;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		A5F0EC6FC7AFE265B8D06245 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = host.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = host/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.onlyascii.maxcamhost;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0623B7566D632812062C99E0 /* Build configuration list for PBXNativeTarget "MaxCamHost" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				09F8CD2FBCF0523722589A8B /* Debug */,
+				A5F0EC6FC7AFE265B8D06245 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		50EDC45D78AC0F7E3CFB53B3 /* Build configuration list for PBXProject "MaxCamHost" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				356D91812936E94362F049F6 /* Debug */,
+				78C70D4EAF82C2053BCB9F40 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		715FD83A53BD7F9914147AB9 /* Build configuration list for PBXNativeTarget "MaxCamExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2CEF8B4491727D4159F013A5 /* Debug */,
+				A14D079D0FE6D7BC73B9724F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 3D95DB3F3C3E07F91B48BB49 /* Project object */;
+}

@@ -35,6 +35,16 @@ button.action = #selector(ActivationActions.activate(_:))
 window.contentView?.addSubview(button)
 window.makeKeyAndOrderFront(nil)
 app.setActivationPolicy(.regular)
+
+// headless mode: MaxCamHost --activate  (submit request immediately; results
+// printed to stdout — owner runs this from a terminal, then approves in
+// System Settings > General > Login Items & Extensions)
+if CommandLine.arguments.contains("--activate") {
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+        ActivationActions.shared.activate(nil)
+    }
+}
+
 app.run()
 
 final class ActivationActions: NSObject {
