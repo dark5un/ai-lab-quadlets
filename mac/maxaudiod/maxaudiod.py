@@ -133,8 +133,9 @@ def loopback_test():
 
 # ---------------------------------------------------------------- door bridge
 class Bridge:
-    def __init__(self, door):
+    def __init__(self, door, gate=False):
         self.door = door
+        self.gate = gate
         self.last_downlink = 0.0
         self.tx = queue.Queue()
         self.ws = None
@@ -164,7 +165,7 @@ class Bridge:
                     pcm24 = np.frombuffer(payload, dtype="<i2").astype(np.float32) / 32768.0
                     # energy-aware gate: plexpipe pads the downlink with
                     # silent real-time frames — gate only on actual speech
-                    if float(np.sqrt(np.mean(pcm24 ** 2))) > 0.01:
+                    if len(pcm24) and float(np.sqrt(np.mean(pcm24 ** 2))) > 0.01:
                         self.last_downlink = time.time()
                         status.inc("speaking_frames")
                     self.play_q.put(pcm24)
@@ -199,7 +200,7 @@ class Bridge:
             # other participants are also muted while Max talks; permanent
             # fix is server-side AEC/gating at P4 (doc pitfall).
             status.inc("tx_frames")
-            if time.time() - self.last_downlink < GATE_HOLD:
+            if self.gate and time.time() - self.last_downlink < GATE_HOLD:
                 status.inc("gated_frames")
                 self.tx.put(b"A" + (b"\x00" * 2 * frames))
                 return
@@ -246,6 +247,12 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("mode", choices=["loopback-test", "run"])
     ap.add_argument("--door", help="wss:// URL from the doc (P0 assigns it)")
+    ap.add_argument("--gate", action="store_true",
+                    help="half-duplex uplink gate; ONLY for the single-session "
+                         "design where Max owns the human's mic slot. In the "
+                         "two-session model (Max joins as his own participant) "
+                         "Meet never feeds Max his own voice, so the gate is "
+                         "unneeded and would kill barge-in.")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
@@ -271,7 +278,7 @@ def main():
             sys.exit(loopback_test())
         if not args.door:
             raise SystemExit("run mode needs --door (see docs/mac-virtual-devices-plan.md; P0 door URL lands in the doc)")
-        Bridge(args.door).loop()
+        Bridge(args.door, gate=args.gate).loop()
     finally:
         stop.set()
         status.bump(connected=False)

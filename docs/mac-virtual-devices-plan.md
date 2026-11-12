@@ -219,6 +219,20 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   pick one channel — if so, fallback = in-driver mixing: anything played into
   MAX Mic is summed in the ring buffer, so a tiny mic->MAX-Mic pump gives a
   true mono mix (needs standing mic consent; decide at P3-echo time).
+- **Usage model FIXED by owner 2026-11-12 — TWO-PARTICIPANT topology (was:
+  single-session "Max owns the human's mic slot", which is what created the
+  self-hearing loop)**: Max joins each meeting as HIS OWN participant — an
+  incognito browser session with mic = MAX Mic, camera = MAX Camera (P2),
+  speaker = MAX Out. The human keeps built-in mic/camera/speakers on their
+  own session. Consequences: (a) Meet never returns a participant's own
+  audio to its own output, so plex CANNOT hear Max — loop is structurally
+  gone, no mixing aggregates needed (MAX Mix In / MAX Multi Out destroyed;
+  maxagg remains only for the single-session variant). (b) Chrome AEC runs
+  per session against that session's own output — acoustic echo of Max's
+  voice through the human's speakers is cancelled by the human's session,
+  never bleeds into MAX Mic. (c) maxaudiod --gate (half-duplex) is OFF by
+  default: in this topology it would only kill barge-in (personaplex is
+  full-duplex by design). Keep the flag for the single-session fallback.
 - **Max hears himself — self-answer runaway loop (2026-11-12, observed live
   in Meet + fixed in maxaudiod)**: Meet re-plays everything it receives,
   including Max's voice from MAX Mic/MAX Mix In; that playback reaches MAX
