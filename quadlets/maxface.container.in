@@ -31,9 +31,10 @@ Environment=CUDA_VISIBLE_DEVICES=__GPU_4070TI_UUID__
 Environment=OPENTALKING_QUICKTALK_ASSET_ROOT=/models/quicktalk
 Environment=MAXFACE_TEMPLATE=/models/avatars/maximilian/source/maximilian_livetune10.mp4
 Environment=MAXFACE_DEVICE=cuda:0
-# 12 frames = 0.48 s of audio per generation slice: conversational lip
-# latency while HuBERT stays efficient. Full pacing semantics = ticket 08.
-Environment=MAXFACE_SLICE_LEN=12
+# 6 frames = 0.24 s of audio per generation slice: keeps lip latency under
+# ~0.4 s at the seam (render headroom: 52 fps gen vs 25 fps consumption).
+# Full shared-clock pacing + A/V offset compensation = ticket 08.
+Environment=MAXFACE_SLICE_LEN=6
 Volume=%h/.local/share/ai-lab/models/quicktalk:/models/quicktalk:ro,Z
 Volume=%h/.local/share/ai-lab/maxface/avatars:/models/avatars:ro,Z
 # writable face-cache volume: template face detection (~10-20 s for the

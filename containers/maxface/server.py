@@ -32,6 +32,7 @@ import logging
 import os
 import time
 from collections import deque
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -46,10 +47,12 @@ ASSET_ROOT = os.environ.get("OPENTALKING_QUICKTALK_ASSET_ROOT",
 TEMPLATE = os.environ.get("MAXFACE_TEMPLATE",
                           os.path.expanduser("~/.local/share/maxface/avatars/maximilian/source/maximilian_livetune10.mp4"))
 DEVICE = os.environ.get("MAXFACE_DEVICE", "cuda:0")
-FACE_CACHE_DIR = os.environ.get("MAXFACE_FACE_CACHE_DIR", "").strip() or None
+FACE_CACHE_DIR = (Path(p) if (p := os.environ.get("MAXFACE_FACE_CACHE_DIR", "").strip()) else None)
 FPS = int(os.environ.get("OPENTALKING_QUICKTALK_FPS", "25"))
-SLICE_LEN = int(os.environ.get("MAXFACE_SLICE_LEN", "28"))          # frames of audio per generation call
+SLICE_LEN = int(os.environ.get("MAXFACE_SLICE_LEN", "6"))          # frames of audio per generation call (0.24 s): lip-latency vs HuBERT efficiency; pacing/compensation lands in ticket 08
 IN_RATE = int(os.environ.get("MAXFACE_IN_RATE", "24000"))           # door downlink rate
+FEAT_RATE = 16000   # HuBERT frontend is 16k-hard (Wav2Vec2FeatureExtractor
+                    # raises on other sampling_rate) -> slices resampled per call
 OUT_W, OUT_H = 640, 480                                             # door 'V' contract
 JPEG_QUALITY = int(os.environ.get("MAXFACE_JPEG_QUALITY", "82"))
 SILENCE_RMS = float(os.environ.get("MAXFACE_SILENCE_RMS", "300"))   # int16 RMS gate (~ -40 dBFS)
@@ -72,9 +75,7 @@ class Engine:
                       "slice_seconds": 0.0}
 
     def build(self):
-        # Heavy imports here keep startup logs readable.
-        from pathlib import Path
-
+        # Heavy import kept local so startup logs stay readable.
         from opentalking.models.quicktalk.runtime import RealtimeV3Worker
 
         log.info("loading QuickTalk worker device=%s template=%s", DEVICE, TEMPLATE)
@@ -103,8 +104,15 @@ class Engine:
 
     def render_slice(self, pcm: np.ndarray):
         """One speech slice -> generated frames (blocking; runs in a thread)."""
+        from scipy.signal import resample_poly
+
         t0 = time.perf_counter()
-        reps, _feat_s = self.worker.prepare_pcm_features(pcm, IN_RATE)
+        if IN_RATE != FEAT_RATE:
+            from math import gcd
+            d = gcd(IN_RATE, FEAT_RATE)
+            pcm = resample_poly(pcm.astype(np.float64),
+                                FEAT_RATE // d, IN_RATE // d).astype(np.int16)
+        reps, _feat_s = self.worker.prepare_pcm_features(pcm, FEAT_RATE)
         out = []
         for frame in self.worker.generate_frames_from_reps(reps, state=self.state):
             out.append(frame)
