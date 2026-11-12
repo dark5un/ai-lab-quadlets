@@ -25,6 +25,9 @@ Environment=MAXVID_URL=ws://systemd-maxvid:8992/frames
 # ticket 07: learned-face renderer feed + its PCM tap (skin switch at the door)
 Environment=MAXFACE_URL=ws://systemd-maxface:8993/frames
 Environment=MAXFACE_AUDIO_URL=ws://systemd-maxface:8993/audio-in
+# Ticket 07: the learned face is the primary skin; mannequin stays one
+# {"t":"skin"} control away as instant fallback.
+Environment=PLEX_SKIN_DEFAULT=quicktalk
 
 [Service]
 SuccessExitStatus=143

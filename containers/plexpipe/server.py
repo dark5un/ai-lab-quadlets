@@ -12,8 +12,9 @@ tailscale serve :8457). Protocol (JSON control + binary tag 'A'/'V'):
        server-rendered feed for an ffmpeg testsrc 'V' feed (plumbing-test
        fallback), and back with on:false)
   C->S {"t":"skin","skin":"mannequin"|"quicktalk"}  (video leg: which
-       server-rendered feed to relay — mannequin = maxvid three.js
-       (default), quicktalk = maxface learned-face renderer (ticket 07);
+       server-rendered feed to relay — mannequin = maxvid three.js,
+       quicktalk = maxface learned-face renderer (ticket 07); default skin
+       set by PLEX_SKIN_DEFAULT env ("mannequin" legacy | "quicktalk"),
        switching is immediate, each feed relays with reconnect/backoff)
 
 The video leg streams REAL Max frames by default: it relays JPEG frames from
@@ -45,6 +46,10 @@ import sphn
 import websockets
 
 PORT = int(os.environ.get("PLEXPIPE_PORT", "8991"))
+# Default video skin for new video sessions: "mannequin" (maxvid, legacy
+# default) or "quicktalk" (maxface learned face, ticket 07). The {"t":"skin"}
+# control swaps live per session regardless of this default.
+SKIN_DEFAULT = os.environ.get("PLEX_SKIN_DEFAULT", "mannequin")
 PLEX_URL = os.environ.get("PLEX_URL", "ws://systemd-personaplex:8998")
 BRIDGE_URL = os.environ.get("BRIDGE_URL", "ws://systemd-max-bridge:8990")
 MAXVID_URL = os.environ.get("MAXVID_URL", "ws://systemd-maxvid:8992/frames")
@@ -386,9 +391,9 @@ async def video_session(ws, peer):
     renders, and the legacy {"t":"testvideo"} control swaps in an ffmpeg
     testsrc feed (plumbing-test fallback) and back."""
     stop = asyncio.Event()
-    stats = {"t0": time.time(), "video_frames": 0, "video_source": "mannequin"}
+    stats = {"t0": time.time(), "video_frames": 0, "video_source": SKIN_DEFAULT}
     feed_task: asyncio.Task | None = None
-    feed_mode = ["mannequin"]
+    feed_mode = [SKIN_DEFAULT]
 
     def switch_feed(mode: str):
         nonlocal feed_task
@@ -471,7 +476,7 @@ async def video_session(ws, peer):
                 if feed_mode[0] != want:
                     switch_feed(want)
 
-    switch_feed("real")  # default: server-rendered Max
+    switch_feed("quicktalk" if SKIN_DEFAULT == "quicktalk" else "real")
     tasks = [asyncio.create_task(c) for c in (heartbeat(), control_reader())]
     await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
     stop.set()
