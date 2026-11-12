@@ -15,6 +15,20 @@ prompt (owner consent policy 2026-11-12 stays intact).
 
 Dot colour: green = link up · orange = daemon up, link down · gray = no daemon.
 
+## Rights self-check (since 2026-11-12)
+MAXBar **needs no TCC rights today** — every query is a property read; verified
+CoreAudio/CMIO reads succeed while camera authorization is notDetermined and
+no prompt ever appears. Because that is an assumption about the OS build (and
+ad-hoc cdhashes lose grants across rebuilds), the widget re-probes its own
+capabilities every poll and shows them in the menu under "Self-check"; any
+failure prefixes the menu-bar title with ⚠ and names the likely gate
+(Camera in Privacy & Security, or a blocked heartbeat dir). Negative-tested
+against a chmod-000 status dir (renders ✗ + NSCocoaError 257).
+- Pitfall found: Foundation's `expandingTildeInPath`/NSHomeDirectory ignore
+  `$HOME` (getpwuid) — negative tests must target the real home, not `~`.
+- The heartbeat dir is now mode 700 (door URLs in the JSON are tailnet
+  identifiers → owner vigilance rule).
+
 ### Detection pitfalls measured here (do not re-learn the hard way)
 - `kAudioStreamPropertyIsActive` ('sact') on MaxHole streams is **statically 1**
   — useless as a live flag. Use device-scope 'gone' (flips exactly with streams).
