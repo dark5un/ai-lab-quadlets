@@ -35,3 +35,8 @@ tools/kbsearch/kbsearch
 # Node app artifacts
 node_modules/
 dist/
+
+# max-call probe artifacts & logs (contain meeting links)
+apps/max-call/artifacts/*.png
+apps/max-call/*.log
+apps/artifacts/

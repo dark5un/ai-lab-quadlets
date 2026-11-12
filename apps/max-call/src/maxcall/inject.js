@@ -77,6 +77,19 @@
   const realGUM = md.getUserMedia.bind(md);
   let videoTrack = null;
 
+  // device spoofing (call role): Meet's prejoin gates on enumerateDevices
+  if (window.__maxRole === 'call' && md.enumerateDevices) {
+    const realEnum = md.enumerateDevices.bind(md);
+    md.enumerateDevices = async () => {
+      const devs = await realEnum();
+      return devs.concat([
+        { kind: 'videoinput', deviceId: 'max-cam', label: 'Max Headroom Camera', groupId: 'maxcam' },
+        { kind: 'audioinput', deviceId: 'max-mic', label: 'Max Headroom Microphone', groupId: 'maxmic' },
+        { kind: 'audiooutput', deviceId: 'max-out', label: 'Max Headroom Speakers', groupId: 'maxmic' },
+      ]);
+    };
+  }
+
   md.getUserMedia = async (constraints) => {
     const c = constraints || {};
     const role = window.__maxRole;
@@ -99,78 +112,62 @@
     return stream;
   };
 
-  // remote audio tap (call role): wrap RTCPeerConnection
-  if (role_is_call_page()) {
+  function role_is_call_page() { return window.__maxRole === 'call'; }
+  // remote audio tap (call role): Proxy-wrap RTCPeerConnection
+  // (Proxy keeps Function.prototype.toString() === 'function () { [native code] }')
+  if (role_is_call_page() && !window.__maxNoPc) {
     const RealPC = window.RTCPeerConnection;
-    function Patched(...a) {
-      const pc = new RealPC(...a);
-      pc.addEventListener('track', (ev) => {
-        if (ev.track.kind !== 'audio') return;
+    window.RTCPeerConnection = new Proxy(RealPC, {
+      construct(target, args, newT) {
+        const pc = Reflect.construct(target, args, newT);
         try {
-          const ac = ctx48();
-          const s = ac.createMediaStreamSource(new MediaStream([ev.track]));
-          const q = [];
-          const proc = ac.createScriptProcessor(512, 1, 1);
-          proc.onaudioprocess = (e) => {
-            const inp = e.inputBuffer.getChannelData(0);
-            const i16 = new Int16Array(inp.length);
-            for (let i = 0; i < inp.length; i++)
-              i16[i] = Math.max(-32768, Math.min(32767, inp[i] * 32767)) | 0;
-            q.push(i16);
-            if (q.length >= 4) {
-              let n = 0; q.forEach(x => n += x.length);
-              const all = new Int16Array(n); let o = 0;
-              q.forEach(x => { all.set(x, o); o += x.length; });
-              outQ.push(int16ToB64(all)); q.length = 0;
-            }
-          };
-          s.connect(proc);
-          const sink = ac.createGain(); sink.gain.value = 0;
-          proc.connect(sink); sink.connect(ac.destination);
-        } catch (e) { console.warn('max inj tap:', e); }
-      });
-      return pc;
-    }
-    Patched.prototype = RealPC.prototype;
-    window.RTCPeerConnection = Patched;
-    window.RTCPeerConnection.generateCertificate = RealPC.generateCertificate;
+          pc.addEventListener('track', (ev) => {
+            if (ev.track.kind !== 'audio') return;
+            const ac = ctx48();
+            const src = ac.createMediaStreamSource(new MediaStream([ev.track]));
+            const chunks = [];
+            const proc = ac.createScriptProcessor(512, 1, 1);
+            proc.onaudioprocess = (e) => {
+              const inp = e.inputBuffer.getChannelData(0);
+              const i16 = new Int16Array(inp.length);
+              for (let k = 0; k < inp.length; k++)
+                i16[k] = Math.max(-32768, Math.min(32767, inp[k] * 32767)) | 0;
+              chunks.push(i16);
+              if (chunks.length >= 4) {
+                let n = 0; chunks.forEach(x => n += x.length);
+                const all = new Int16Array(n); let o = 0;
+                chunks.forEach(x => { all.set(x, o); o += x.length; });
+                outQ.push(int16ToB64(all)); chunks.length = 0;
+              }
+            };
+            src.connect(proc);
+            const sink = ac.createGain(); sink.gain.value = 0;
+            proc.connect(sink); sink.connect(ac.destination);
+          });
+        } catch (e) { /* ignore */ }
+        return pc;
+      },
+    });
   }
 
-  function role_is_call_page() { return window.__maxRole === 'call'; }
 
-  // WebSocket siphon (app role)
-  if (window.__maxRole === 'app') {
+  // WebSocket siphon (app role) via Proxy (native toString preserved)
+  if (window.__maxRole === 'app' && !window.__maxNoWs) {
     const RealWS = window.WebSocket;
-    function PatchedWS(url, protocols) {
-      const ws = protocols === undefined ? new RealWS(url) : new RealWS(url, protocols);
-      const dl = [];
-      const self = {
-        get readyState() { return ws.readyState; },
-        send: (m) => ws.send(m),
-        close: (c, r) => ws.close(c, r),
-        addEventListener: (t, f) => ws.addEventListener(t, f),
-        get url() { return ws.url; },
-        binaryType: 'arraybuffer',
-      };
-      Object.defineProperty(self, 'binaryType', {
-        get: () => ws.binaryType, set: (v) => { ws.binaryType = v; } });
-      ws.addEventListener('message', (ev) => {
-        if (typeof ev.data !== 'string' && dlQ.length < 600) {
-          const buf = new Uint8Array(ev.data);
-          let s = '';
-          for (let i = 0; i < buf.length; i += 0x8000)
-            s += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
-          dlQ.push(btoa(s));
-        }
-      });
-      ['onopen', 'onclose', 'onerror'].forEach(k =>
-        Object.defineProperty(self, k, {
-          get: () => ws[k], set: (v) => { ws[k] = v; }, configurable: true }));
-      return self;
-    }
-    PatchedWS.prototype = RealWS.prototype;
-    PatchedWS.CONNECTING = 0; PatchedWS.OPEN = 1;
-    PatchedWS.CLOSING = 2; PatchedWS.CLOSED = 3;
-    window.WebSocket = PatchedWS;
+    window.WebSocket = new Proxy(RealWS, {
+      construct(target, args) {
+        const ws = Reflect.construct(target, args);
+        ws.addEventListener('message', (ev) => {
+          if (typeof ev.data !== 'string' && dlQ.length < 600) {
+            const buf = new Uint8Array(ev.data);
+            let s2 = '';
+            for (let i2 = 0; i2 < buf.length; i2 += 0x8000)
+              s2 += String.fromCharCode.apply(null, buf.subarray(i2, i2 + 0x8000));
+            dlQ.push(btoa(s2));
+          }
+        });
+        return ws;
+      },
+    });
   }
 })();
