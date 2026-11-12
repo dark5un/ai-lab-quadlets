@@ -149,8 +149,14 @@ async def run(target: str, hold: float, self_test: bool) -> int:
             rc = 0
 
         await browser.close()
-    ff.stdin.close()
-    ff.kill()
+    try:
+        ff.stdin.close()
+    except Exception:
+        pass
+    try:
+        ff.kill()
+    except Exception:
+        pass
     rff.cancel()
     return rc
 
