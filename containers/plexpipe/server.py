@@ -1,13 +1,15 @@
 """plexpipe — MaxPresence P0 server bridge (docs/mac-virtual-devices-plan.md).
 
-One Mac session at a time over the WSS door (:8991 loopback, tailnet door
+One Mac session PER ROLE over the WSS door (:8991 loopback, tailnet door
 tailscale serve :8457). Protocol (JSON control + binary tag 'A'/'V'):
-  C->S {"t":"hello","v":1,"caps":["audio","video"]}
+  C->S {"t":"hello","v":1,"caps":["audio"]|["video"]}   (role = first cap)
   C->S binary 'A' = meeting audio s16le 48k mono  (MAX Out capture)
   S->C binary 'A' = Max's voice  s16le 24k mono   (plays into MAX Mic)
+  S->C binary 'V' = JPEG 640x480 frame            (-> MAX Camera, video leg)
   S->C {"t":"stat",...} ~2s heartbeats (Mac watchdog + status-bar widget)
   S->C {"t":"caption","text":...} plex monologue stream (0x02, optional UI)
-  'V' JPEG downlink is reserved for P2 (maxaudiod ignores it until then).
+  C->S {"t":"testvideo","on":true|false}  (video leg: ffmpeg testsrc 'V'
+       feed for plumbing tests until the real server renderer lands)
 
 Internals: 'A' uplink -> ffmpeg 48k->24k -> sphn OpusStreamWriter ->
 personaplex 0x01+Ogg (framing mirrors duplex-bus fdb_personaplex.py, the
@@ -42,7 +44,7 @@ FRAME_BYTES = FRAME * 2
 STAT_EVERY = 2.0
 RECONNECT_MAX = 15.0
 
-active_session = None  # one Mac at a time
+sessions = {}  # role ("audio"/"video") -> ws ; one Mac per role at a time
 
 
 def log(*a):
@@ -182,8 +184,7 @@ async def plex_session(ws, stop: asyncio.Event, stats: dict,
 
 
 async def handle(ws):
-    global active_session
-    # --- hello handshake: first frame must be JSON {"t":"hello","v":1,...}
+    # --- hello handshake: first frame must be JSON {"t":"hello","v":1,caps:[...]}
     try:
         first = await asyncio.wait_for(ws.recv(), timeout=10)
     except Exception:
@@ -196,17 +197,28 @@ async def handle(ws):
     if hello.get("t") != "hello" or hello.get("v") != 1:
         await ws.close(code=1002, reason="bad-hello")
         return
-    if active_session is not None:
-        log("rejecting second session (one Mac at a time)")
+    caps = hello.get("caps") or ["audio"]
+    role = next((c for c in ("audio", "video") if c in caps), None)
+    if role is None:
+        await ws.close(code=1002, reason="no-recognized-caps")
+        return
+    if sessions.get(role) is not None:
+        log(f"rejecting second '{role}' session (one Mac per role)")
         try:
             await ws.send(json.dumps({"t": "bye", "reason": "busy"}))
         except Exception:
             pass
         await ws.close(code=1008, reason="busy")
         return
-    active_session = ws
+    sessions[role] = ws
     peer = ws.remote_address
-    log(f"session open from {peer} caps={hello.get('caps')}")
+    log(f"session open from {peer} caps={caps} role={role}")
+    if role == "video":
+        try:
+            await video_session(ws, peer)
+        finally:
+            sessions["video"] = None
+        return
 
     stop = asyncio.Event()
     stats = {"t0": time.time(), "up_bytes": 0, "down_bytes": 0,
@@ -273,9 +285,87 @@ async def handle(ws):
         pass
     ff.kill()
     await ff.wait()
-    active_session = None
+    sessions["audio"] = None
     log(f"session closed from {peer} stats="
         f"{ {k: stats[k] for k in ('up_bytes', 'down_bytes', 'plex_up')} }")
+
+
+async def video_session(ws, peer):
+    """Video leg (MAX Camera extension): stat heartbeat + 'V' JPEG frames.
+    Real render feed lands with the P2 server renderer; until then the
+    client can toggle an ffmpeg testsrc feed for plumbing tests."""
+    stop = asyncio.Event()
+    stats = {"t0": time.time(), "video_frames": 0}
+    feed_task: asyncio.Task | None = None
+
+    async def heartbeat():
+        while not stop.is_set():
+            payload = {"t": "stat", "video_frames": stats["video_frames"],
+                       "session_s": round(time.time() - stats["t0"], 1)}
+            try:
+                await ws.send(json.dumps(payload))
+            except Exception:
+                break
+            await asyncio.sleep(STAT_EVERY)
+
+    async def test_feed():
+        proc = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-loglevel", "error", "-re",
+            "-f", "lavfi", "-i", "testsrc=size=640x480:rate=30",
+            "-f", "image2pipe", "-vcodec", "mjpeg", "-q:v", "6", "pipe:1",
+            stdout=asyncio.subprocess.PIPE)
+        out = proc.stdout
+        assert out is not None
+        buf = bytearray()
+        try:
+            while not stop.is_set():
+                chunk = await out.read(8192)
+                if not chunk:
+                    break
+                buf.extend(chunk)
+                while True:
+                    eoi = buf.find(b"\xff\xd9")
+                    if eoi < 0:
+                        break
+                    jpeg = bytes(buf[: eoi + 2])
+                    del buf[: eoi + 2]
+                    stats["video_frames"] += 1
+                    await ws.send(b"V" + jpeg)
+        except (asyncio.CancelledError, Exception) as e:
+            if not isinstance(e, asyncio.CancelledError):
+                log(f"test feed broke: {e!r}")
+        finally:
+            proc.kill()
+            await proc.wait()
+
+    async def control_reader():
+        nonlocal feed_task
+        async for msg in ws:
+            if not isinstance(msg, str):
+                continue
+            try:
+                ctrl = json.loads(msg)
+            except json.JSONDecodeError:
+                continue
+            if ctrl.get("t") == "bye":
+                break
+            if ctrl.get("t") == "testvideo":
+                if ctrl.get("on") and (feed_task is None or feed_task.done()):
+                    feed_task = asyncio.create_task(test_feed())
+                    log("video test feed ON")
+                elif not ctrl.get("on") and feed_task and not feed_task.done():
+                    feed_task.cancel()
+                    feed_task = None
+                    log("video test feed OFF")
+
+    tasks = [asyncio.create_task(c) for c in (heartbeat(), control_reader())]
+    await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+    stop.set()
+    if feed_task and not feed_task.done():
+        feed_task.cancel()
+    for task in tasks:
+        task.cancel()
+    log(f"video session closed from {peer} frames={stats['video_frames']}")
 
 
 async def main():
