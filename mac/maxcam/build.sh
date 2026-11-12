@@ -35,8 +35,8 @@ if [ "${NO_PROFILE:-0}" = "1" ]; then
   # Path B: sign BOTH by hand, entitlements straight from our files
   # (hardened runtime on; free-team/no-profile activation = the experiment).
   # codesign does NOT expand Xcode macros — pre-substitute the team prefix.
-  sed 's|\$(TeamIdentifierPrefix)|E6W58DTJJ8.|g' ext.entitlements  > /tmp/maxcam-ext-ent.plist
-  sed 's|\$(TeamIdentifierPrefix)|E6W58DTJJ8.|g' host.entitlements > /tmp/maxcam-host-ent.plist
+  sed 's|\$(TeamIdentifierPrefix)|R2XM78R4TE.|g' ext.entitlements  > /tmp/maxcam-ext-ent.plist
+  sed 's|\$(TeamIdentifierPrefix)|R2XM78R4TE.|g' host.entitlements > /tmp/maxcam-host-ent.plist
   codesign --force --options runtime --sign "$IDENTITY" --entitlements /tmp/maxcam-ext-ent.plist \
     "$APP/Contents/Library/SystemExtensions/MaxCamExtension.appex"
   codesign --force --options runtime --sign "$IDENTITY" --entitlements /tmp/maxcam-host-ent.plist "$APP"

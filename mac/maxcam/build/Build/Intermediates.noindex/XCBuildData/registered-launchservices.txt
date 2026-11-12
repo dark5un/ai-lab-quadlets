@@ -1,0 +1,1 @@
+/Users/px/Workspaces/github.com/dark5un/ai-lab-quadlets/mac/maxcam/build/Build/Products/Release/MaxCamHost.app

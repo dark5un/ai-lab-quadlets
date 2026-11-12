@@ -1,0 +1,16 @@
+{
+  "" : {
+    "const-values" : "/Users/px/Workspaces/github.com/dark5un/ai-lab-quadlets/mac/maxcam/build/Build/Intermediates.noindex/MaxCamHost.build/Release/MaxCamHost.build/Objects-normal/arm64/MaxCamHost-primary.swiftconstvalues",
+    "dependencies" : "/Users/px/Workspaces/github.com/dark5un/ai-lab-quadlets/mac/maxcam/build/Build/Intermediates.noindex/MaxCamHost.build/Release/MaxCamHost.build/Objects-normal/arm64/MaxCamHost-primary.d",
+    "diagnostics" : "/Users/px/Workspaces/github.com/dark5un/ai-lab-quadlets/mac/maxcam/build/Build/Intermediates.noindex/MaxCamHost.build/Release/MaxCamHost.build/Objects-normal/arm64/MaxCamHost-primary.dia",
+    "emit-module-dependencies" : "/Users/px/Workspaces/github.com/dark5un/ai-lab-quadlets/mac/maxcam/build/Build/Intermediates.noindex/MaxCamHost.build/Release/MaxCamHost.build/Objects-normal/arm64/MaxCamHost-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/px/Workspaces/github.com/dark5un/ai-lab-quadlets/mac/maxcam/build/Build/Intermediates.noindex/MaxCamHost.build/Release/MaxCamHost.build/Objects-normal/arm64/MaxCamHost-primary-emit-module.dia",
+    "pch" : "/Users/px/Workspaces/github.com/dark5un/ai-lab-quadlets/mac/maxcam/build/Build/Intermediates.noindex/MaxCamHost.build/Release/MaxCamHost.build/Objects-normal/arm64/MaxCamHost-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/px/Workspaces/github.com/dark5un/ai-lab-quadlets/mac/maxcam/build/Build/Intermediates.noindex/MaxCamHost.build/Release/MaxCamHost.build/Objects-normal/arm64/MaxCamHost-primary.swiftdeps"
+  },
+  "/Users/px/Workspaces/github.com/dark5un/ai-lab-quadlets/mac/maxcam/host/main.swift" : {
+    "index-unit-output-path" : "/MaxCamHost.build/Release/MaxCamHost.build/Objects-normal/arm64/main.o",
+    "llvm-bc" : "/Users/px/Workspaces/github.com/dark5un/ai-lab-quadlets/mac/maxcam/build/Build/Intermediates.noindex/MaxCamHost.build/Release/MaxCamHost.build/Objects-normal/arm64/main.bc",
+    "object" : "/Users/px/Workspaces/github.com/dark5un/ai-lab-quadlets/mac/maxcam/build/Build/Intermediates.noindex/MaxCamHost.build/Release/MaxCamHost.build/Objects-normal/arm64/main.o"
+  }
+}

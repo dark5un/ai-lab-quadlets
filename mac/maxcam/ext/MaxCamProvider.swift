@@ -8,6 +8,7 @@ import CoreMediaIO
 import CoreVideo
 import CoreMedia
 import ImageIO
+import IOKit.audio
 import os
 
 let kFrameRate = 30
