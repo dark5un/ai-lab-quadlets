@@ -199,10 +199,16 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   synthetic voice through laptop speakers — consequence (b) below is
   optimistic. P1 gate runs REQUIRE human-side headphones (or maxaudiod
   --gate, which does break this cycle: 300 ms echo << 1.2 s hold).
-  END OF SESSION 2026-11-12: after two MAXBar link down/up resets the
-  MaxHole ring WEDGED (device reads pure zeros — see ring-wedge pitfall);
-  gate still PENDING. Recovery = coreaudiod kickstart + full Chrome
-  restart + fresh run-bridge.sh + re-pick incognito devices, headphones ON.
+  END OF SESSION 2026-11-12, corrected: the "MaxHole ring WEDGED" claim is
+  RETIRED — owner-run `maxaudiod.py loopback-test` ALL PASS immediately
+  after the alleged wedge (fresh coreaudiod, single client). The zero-reading
+  tone/tap probes were AGENT-SIDE and TCC-BLIND (see probe pitfall). What
+  stands: plex deaf to owner speech after the 12:31 link reset (cause not
+  yet established — duplicate-bridge door race began 12:43 and is now
+  killed), and the acoustic-loop drift 12:23-12:27 (owner-bridge counters,
+  trustworthy). Next: clean gate attempt — single bridge (pgrep check),
+  fresh Chrome, re-pick incognito devices, headphones; if deaf recurs run
+  `uv run python tap_maxout.py` FROM THE OWNER TERMINAL while speaking.
 - P2 MAC video: MaxCamHost+MaxCamExtension, JPEG 'V' path. GATE: QuickTime
   shows MAX Camera with Max animating (server-rendered).
   PREP 2026-11-12: BLOCKED on P1 Meet gate PASS first (kickoff contract).
@@ -344,26 +350,24 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   kill/restart maxaudiod mid-call (drops the plex session, forces reconnect
   churn + 'rejecting second session' storm while the server still holds the
   dead leg).
-- **MaxHole fork RING WEDGES after capture-stream close/reopen cycles**
-  (hit 2026-11-12, live Meet session): door link down/up (and any reconnect
-  that re-enters `with sd.InputStream`) tears down and re-opens the HAL
-  stream; after a couple of such cycles MAX Out reads EXACT digital zero for
-  every reader — proven with a single-client duplex tone self-loop (the P0
-  gate pattern) while the bridge was down. Counter fingerprint: tx/rx frame
-  rates perfectly real-time, but RMS tap of the device = all zeros and the
-  model goes deaf after its autogreeting. RECOVERY (owner sudo): `sudo
-  killall coreaudiod` (KeepAlive job respawns in ~1 s and auto-reloads the
-  driver from /Library/Audio/Plug-Ins/HAL/MaxHole.driver). NOTE: `sudo
-  launchctl kickstart -k system/com.apple.audio.coreaudiod` FAILS on this
-  Mac — error 150 "Operation not permitted while System Integrity
-  Protection is engaged" (SIP protects com.apple.* system jobs) ->
-  FULL Chrome quit+restart (device UIDs change) -> re-run run-bridge.sh ->
-  re-pick MAX devices in the incognito session (settings never survive
-  incognito restart). WORKAROUND mid-call: never use link down/up to stop a
-  loop — use "Mute uplink" (runtime control file does NOT reopen CoreAudio
-  streams). ROOT CAUSE TODO: audit fork per-device arrays / device_index()
-  teardown; repro = open+close InputStream on one MAX device repeatedly,
-  then duplex tone self-loop test.
+- **Agent-side capture probes are TCC-BLIND — never conclude driver death
+  from them** (false alarm 2026-11-12, wedge theory retired same hour):
+  python started from the agent shell has NO Microphone TCC grant; streams
+  OPEN FINE (callbacks fire, right SR/channels) but data is EXACT digital
+  zero — even a tone written into the SAME duplex stream reads back zero on
+  a healthy driver. The same moment's OWNER-run `maxaudiod.py
+  loopback-test` = ALL PASS. Rules: driver health = owner-run
+  loopback-test; uplink content = `mac/maxaudiod/tap_maxout.py` run from
+  the OWNER's terminal (uv run, 20 ms frames, 1 s RMS envelope); heartbeat
+  counters are safe to trust — they are computed inside the owner-run
+  bridge process.
+- **Duplicate maxaudiod instances race silently** (hit 2026-11-12):
+  run-bridge.sh does not kill a previous instance, and SIGINT in a terminal
+  may leave the python alive (uv wrapper orphan). ALL bridges poll the SAME
+  cmd-maxaudiod.json, so a link up/down flaps every one of them against the
+  door's single-session policy ('door connected -> Connection to remote
+  host was lost -> retry' storm; server logs 'rejecting second session').
+  Before ANY link debugging: `pgrep -fl maxaudiod.py` — exactly one.
 - Fresh machine: github.com may be missing from ~/.ssh/known_hosts —
   ssh-keyscan + check against GitHub's published ED25519 fingerprint
   (SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU), then append.
