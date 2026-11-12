@@ -231,6 +231,18 @@ def main():
     args = ap.parse_args()
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    # normalize door BEFORE first heartbeat so status shows what is actually used
+    if args.door:
+        # PITFALL 2026-11-12 (root-caused with byte-level ClientHello replay):
+        # tailscale status JSON DNSName ends with a trailing dot
+        # ("ai.<tailnet>.ts.net."). That dot becomes a trailing-dot SNI which
+        # tailscale serve's Go TLS rejects with TLSV1_ALERT_DECODE_ERROR
+        # (curl/SecureTransport normalize it; python/OpenSSL do not).
+        from urllib.parse import urlsplit, urlunsplit
+        parts = urlsplit(args.door)
+        if (parts.hostname or "").endswith("."):
+            netloc = parts.hostname[:-1] + (f":{parts.port}" if parts.port else "")
+            args.door = urlunsplit((parts.scheme, netloc, parts.path, parts.query, parts.fragment))
     status.bump(mode=args.mode, door=args.door)
     stop = threading.Event()
     threading.Thread(target=status.heartbeat, args=(stop,), daemon=True).start()

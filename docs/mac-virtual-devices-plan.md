@@ -206,6 +206,16 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
 - **portaudio/AUHAL cannot open separate input and output streams on the
   SAME device** (-10863 "cannot do in current context"); self-loop tests need
   one duplex sd.Stream(device=(in_idx, out_idx)).
+- **Trailing-dot SNI kills tailscale-serve doors for OpenSSL-family clients
+  (2026-11-12, root-caused by byte-level ClientHello capture+replay on ai)**:
+  `tailscale status --json` gives peer DNSName WITH a trailing dot
+  ("ai.<tailnet>.ts.net."). Feeding that into a wss:// URL makes python/
+  OpenSSL send a trailing-dot SNI, which tailscale serve's Go TLS rejects
+  with `TLSV1_ALERT_DECODE_ERROR` (tailscaled log: "tls: error decoding
+  message"). curl/SecureTransport normalize the dot, so curl probes pass
+  while actual clients flap — misleading. maxaudiod now strips a trailing
+  dot from the door host (verified live: link UP, stat frames flowing);
+  launchd/P4 scripts should pass the plain (dotless) URL anyway.
 - **pkgbuild --root flattens its argument** — with --root <bundle> the
   Contents/ lands directly in --install-location. Stage a dir that CONTAINS
   MaxHole.driver/ and use that as --root, else HAL gets HAL/Contents/.
