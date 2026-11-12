@@ -29,7 +29,7 @@ Network=ai.network
 AddDevice=nvidia.com/gpu=all
 Environment=CUDA_VISIBLE_DEVICES=__GPU_4070TI_UUID__
 Environment=OPENTALKING_QUICKTALK_ASSET_ROOT=/models/quicktalk
-Environment=MAXFACE_TEMPLATE=/models/avatars/maximilian/source/maximilian_livetune10.mp4
+Environment=MAXFACE_TEMPLATE=/models/avatars/maximilian/source/maximilian_d14.mp4
 Environment=MAXFACE_DEVICE=cuda:0
 # 6 frames = 0.24 s of audio per generation slice: keeps lip latency under
 # ~0.4 s at the seam (render headroom: 52 fps gen vs 25 fps consumption).
