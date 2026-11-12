@@ -291,6 +291,15 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   --activate && approve in System Settings (Login Items & Extensions) &&
   systemextensionsctl list && QuickTime. NOTE: free-team + profile
   question now folded into that flow (test at activation).
+  SESSION CLOSE 2026-11-12: bundle now internally coherent (system-extension
+  product type/SYSX/child-id/group-prefix all per Apple+template ground
+  truth) yet activation STILL returns Code=4 'Extension not found in App
+  bundle'. Guessing stopped; hypotheses retired IN THIS DOC (see git log).
+  CONTINUE in a clean session per the experiment matrix:
+  ~/Documents/Hermes/2026-11-12-maxpresence-p1-mac/p2-camera-activation-plan.md
+  (E0 instrumented log capture, E1 control=activate gareth's stock template
+  app on this machine to bisect bundle-vs-machine, then diff only what
+  differs). Everything else P2 is DONE (door video role + real renderer).
   STATUS 2026-11-12 (ai): **SERVER RENDERER LIVE (B2 server-side done)** —
   new containers/maxvid quadlet (systemd-maxvid, avatar group, boot=false):
   headless chromium (Debian pkg, SwiftShader software GL — CPU-only, capped
