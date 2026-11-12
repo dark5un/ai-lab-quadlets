@@ -40,8 +40,12 @@ clang -arch arm64 -mmacosx-version-min=13.0 -O2 -bundle \
 # Ad-hoc sign — loads for personal machines with Team=None (V-2).
 codesign --force --sign - "$OUT"
 
-pkgbuild --root "$OUT" --identifier "$BUNDLE_ID" --version "$VERSION" \
+# NOTE: pkgbuild --root flattens its argument — stage with the .driver dir
+# INSIDE the root so it lands as HAL/MaxHole.driver/, not HAL/Contents/.
+mkdir -p build/staging
+mv "$OUT" build/staging/MaxHole.driver
+pkgbuild --root build/staging --identifier "$BUNDLE_ID" --version "$VERSION" \
 	--install-location /Library/Audio/Plug-Ins/HAL "build/MaxHole-$VERSION.pkg"
 
-echo "built: $OUT"
+echo "built: build/staging/MaxHole.driver"
 echo "pkg:   build/MaxHole-$VERSION.pkg"

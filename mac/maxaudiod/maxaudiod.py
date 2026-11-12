@@ -38,10 +38,6 @@ def loopback_test():
     mic_idx, out_idx = find_device(MIC, "input"), find_device(OUT, "input")
     results = {}
 
-    def tone(freq, secs, rate, amp=0.25):
-        t = np.arange(int(secs * rate)) / rate
-        return (amp * np.sin(2 * math.pi * freq * t)).astype(np.float32)
-
     def rms(x):
         return float(np.sqrt(np.mean(x ** 2)))
 
@@ -62,25 +58,23 @@ def loopback_test():
         rate = CAP_RATE
         play_idx = find_device(play_name, "output")
         read_idx = find_device(read_name, "input")
-        sig = tone(freq, 1.0, rate)
-        sig2 = np.column_stack([sig, sig])
         expected = play_name == read_name
-        # start capture, then play (same device can't share one stream: separate in/out streams ok)
-        cap = np.zeros((0, 2), dtype=np.float32)
-        lock = threading.Lock()
+        # One DUPLEX stream: portaudio/AUHAL cannot open separate in/out
+        # streams on the SAME device (-10863 "cannot do in current context").
+        captured = []
+        phase = [0.0]
 
-        def cb(indata, frames, ts, status):
-            nonlocal cap
-            with lock:
-                cap = np.vstack([cap, indata.copy()])
+        def cb(indata, outdata, frames, tsi, status):
+            inc = 2 * math.pi * freq / rate
+            sig = 0.25 * np.sin(phase[0] + inc * np.arange(frames))
+            phase[0] = (phase[0] + inc * frames) % (2 * math.pi)
+            outdata[:, :] = sig[:, None]
+            captured.append(indata.copy())
 
-        instream = sd.InputStream(samplerate=rate, device=read_idx, channels=2, callback=cb)
-        with instream:
-            sd.play(sig2, rate, device=play_idx)
-            sd.wait()
-            time.sleep(0.3)
-        with lock:
-            seg = cap[-int(0.5 * rate):]
+        with sd.Stream(samplerate=rate, device=(read_idx, play_idx), channels=2,
+                       blocksize=int(rate * 0.05), callback=cb):
+            time.sleep(1.5)
+        seg = np.vstack(captured)[int(0.5 * rate):]  # skip startup transient
         peak = energy_at(seg, freq, rate) if len(seg) > 1000 else 0.0
         ok = (peak > 0.3) if expected else (peak < 0.1 or rms(seg) < 1e-4)
         results[label] = (ok, peak, rms(seg))

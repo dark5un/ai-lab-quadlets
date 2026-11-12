@@ -127,6 +127,15 @@ MAC (Hermes-on-Mac builds from this brief):
   ~30 ms + video pipeline ~50 ms => <=450 ms achievable.
 - VRAM settled: personaplex + max-face (~790 MiB) coexist on the 4070 Ti.
 - GPLv3 MaxHole fork: private repos only. Never name anything "ryoku".
+- **Owner policy (code-m2, 2026-11-12)**: the agent must NOT open CoreAudio
+  input/microphone streams — capture-verifying tests are run BY THE OWNER or
+  verified via meters while the agent plays output-only. Ask each time.
+- **portaudio/AUHAL cannot open separate input and output streams on the
+  SAME device** (-10863 "cannot do in current context"); self-loop tests need
+  one duplex sd.Stream(device=(in_idx, out_idx)).
+- **pkgbuild --root flattens its argument** — with --root <bundle> the
+  Contents/ lands directly in --install-location. Stage a dir that CONTAINS
+  MaxHole.driver/ and use that as --root, else HAL gets HAL/Contents/.
 - **BlackHole 2Sink devices are NOT isolated** (hit 2026-11-12, P1): upstream
   BlackHole.c shares ONE gRingBuffer, ONE zero-time-stamp clock and ONE
   lastOutputSampleTime/isBufferClear state across Device+Device2 —
