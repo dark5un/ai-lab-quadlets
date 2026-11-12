@@ -100,8 +100,13 @@ MAC (Hermes-on-Mac builds from this brief):
    extension (SystemExtensions; app in /Applications; entitlement
    com.apple.developer.system-extension.install; app group prefixed by the
    extension's MachServiceName); WSS client for 'V' frames; XPC -> extension.
+   CORRECTION 2026-11-12 (Apple-docs research): no public host->extension
+   XPC API exists — see P2 PREP status for the three feed options; likely
+   MaxCamHost is DROPPED and the extension becomes the WSS client itself.
 4. **MaxCamExtension** — Camera Extension target (Xcode template): one
-   device "MAX Camera", one stream 640x480@30; receives frames over XPC;
+   device "MAX Camera", one stream 640x480@30; receives frames over XPC
+   [CORRECTED 2026-11-12: feed channel TBD — extension-as-WSS-client /
+   CMIO sink stream / App Group mailbox];
    sends CMSampleBuffers with host-time PTS (V-1 write path). Later:
    receives blendshape JSON and renders locally (option b).
 
@@ -225,15 +230,31 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   <=450 ms spec for real. P1 GATES NOW GREEN -> P2 UNBLOCKED.
 - P2 MAC video: MaxCamHost+MaxCamExtension, JPEG 'V' path. GATE: QuickTime
   shows MAX Camera with Max animating (server-rendered).
-  PREP 2026-11-12: BLOCKED on P1 Meet gate PASS first (kickoff contract).
-  Prereq: full Xcode — Xcode.app 27.2 is already on disk (see P-1 update);
-  needs the owner-run `sudo xcode-select -s` switch, then `xcodebuild
-  -version` sanity + first probe of Camera Extension build/sign/enable
-  path (System Settings > Privacy & Security > Camera Extensions; whether
-  ad-hoc signing suffices locally or a dev policy profile is needed is an
-  OPEN question — verify against Apple docs before building, WWDC22 10022).
-  maxaudiod currently ignores 'V' frames (reader: tag==b'V' -> pass); P2
-  adds the MaxCamHost consumer + XPC leg to the extension.
+  PREP 2026-11-12: P1 gates GREEN -> P2 ACTIVE. Xcode 27.2 (27B52) now
+  ACTIVE (owner ran sudo xcode-select -s). Apple-official research done
+  (full cited report: ~/Documents/Hermes/2026-11-12-camextension-research/
+  camera-extension-apple-research.md). KEY CORRECTIONS to V-1/plan:
+  (a) NO public host-app->extension XPC API exists — all CMIO IPC is
+  framework-internal; the planned "MaxCamHost sends frames over XPC" leg
+  is NOT documented and sandbox-hostile. Frame-feed options (decision
+  needed): [1] extension acts as its OWN network client (sandbox permits
+  client networking per WWDC22 — extension dials the tailnet WSS itself,
+  MaxCamHost disappears; P4-friendly), [2] CMIO *sink* stream (clients
+  feed sample buffers via documented API), [3] App Group shared file/mailbox
+  (documented app<->extension channel; latency at 640x480@30 undocumented).
+  (b) Enabling lives in System Settings General > Login Items & Extensions
+  > Camera Extensions (Sonoma+), NOT Privacy & Security (doc drift vs
+  WWDC22). (c) App must live in /Applications (ditto post-action — already
+  in pitfalls) + valid code signature + com.apple.developer.system-
+  extension.install entitlement matched to the development team; free
+  personal team untested — FIRST empirical question on build day
+  (SIP stays ON; do not preemptively disable; systemextensionsctl
+  developer on only relaxes the LOCATION check). (d) Required extension
+  plist keys: CMIOExtensionMachServiceName + NSSystemExtensionUsageDescription;
+  app-group id must be prefixed by provider/team id. (e) macOS 26/27
+  release notes: zero CMIO changes since WWDC22; min OS 12.3.
+  maxaudiod 'V' frames: if option [1], daemon stays audio-only; if [2]/[3]
+  a Mac-side V consumer is added. QuickTime white-line gate unchanged.
 - P3 FULL JOIN: incognito Meet with MAX Cam + MAX Mic: 10-minute
   conversation; GATE: speech-to-motion latency <= 450 ms measured, no echo,
   no artifacts.
