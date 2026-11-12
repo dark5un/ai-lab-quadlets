@@ -1,0 +1,30 @@
+<!-- echo.html — loopback WebRTC test room for the injector.
+     getUserMedia -> local RTCPeerConnection loops to itself -> ontrack
+     triggers the injected remote tap. Exposes:
+       window.__echo: {streamTracks, pcsConnected, remoteReceived} -->
+<!doctype html><meta charset=utf-8><title>max-call echo test</title>
+<body style="background:#02060a;color:#8fe7ff;font-family:monospace">
+<h3>max-call injector echo</h3>
+<video id=v autoplay playsinline style="width:320px;border:1px solid #143"></video>
+<pre id=log></pre>
+<script>
+(async () => {
+  window.__echo = { done: false, err: null, tracks: [], remoteBytes: 0 };
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({video: {width: 640, height: 480}, audio: true});
+    document.getElementById('v').srcObject = s;
+    window.__echo.tracks = s.getTracks().map(t => t.kind + ':' + (t.label||''));
+    const pc1 = new RTCPeerConnection(), pc2 = new RTCPeerConnection();
+    s.getTracks().forEach(t => pc1.addTrack(t, s));
+    pc2.ontrack = (ev) => { window.__echo.remoteGot = (window.__echo.remoteGot||0)+1; };
+    pc1.onicecandidate = e => e.candidate && pc2.addIceCandidate(e.candidate);
+    pc2.onicecandidate = e => e.candidate && pc1.addIceCandidate(e.candidate);
+    await pc1.setLocalDescription(await pc1.createOffer());
+    await pc2.setRemoteDescription(pc1.localDescription);
+    await pc2.setLocalDescription(await pc2.createAnswer());
+    await pc1.setRemoteDescription(pc2.localDescription);
+    window.__echo.pcConnected = pc1.connectionState;
+    setTimeout(() => { window.__echo.done = true; }, 8000);
+  } catch (e) { window.__echo.err = String(e); window.__echo.done = true; }
+})();
+</script>
