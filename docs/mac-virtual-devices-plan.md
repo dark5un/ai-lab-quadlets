@@ -255,6 +255,16 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   release notes: zero CMIO changes since WWDC22; min OS 12.3.
   maxaudiod 'V' frames: if option [1], daemon stays audio-only; if [2]/[3]
   a Mac-side V consumer is added. QuickTime white-line gate unchanged.
+  DECIDED 2026-11-12 (owner): option [1] — extension dials the door itself.
+  plexpipe per-role sessions (audio|video) BUILT + DEPLOYED to ai +
+  VERIFIED live (video leg ~31 JPEG/s concurrently with the running audio
+  bridge; repo commit b271630; testvideo control toggle streams ffmpeg
+  testsrc until the real renderer lands). mac/maxcam scaffold re-pointed
+  to FrameClient WSS client (App Group mailbox demoted to fallback;
+  maxaudiod --mailbox retained). Xcode Apple-Development cert present
+  (owner registered account). NEXT: B1 plumbing gate (QuickTime shows
+  testsrc through MAX Camera) once the Xcode template project exists
+  (owner GUI), then the server renderer for B2 = the actual P2 gate.
 - P3 FULL JOIN: incognito Meet with MAX Cam + MAX Mic: 10-minute
   conversation; GATE: speech-to-motion latency <= 450 ms measured, no echo,
   no artifacts.

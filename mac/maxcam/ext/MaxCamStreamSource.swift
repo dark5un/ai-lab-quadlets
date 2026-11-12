@@ -1,6 +1,8 @@
-// MaxCamStreamSource.swift — CMIOExtensionStreamSource delegate + mailbox pump (v0)
-// Watches App Group container mailbox/frame.jpg (atomic tmp+rename writes by
-// maxaudiod --mailbox) and pushes decoded 640x480 BGRA sample buffers at 30 fps.
+// MaxCamStreamSource.swift — CMIOExtensionStreamSource delegate + frame pump (v0)
+// Feed (owner decision 2026-11-12, P2 option 2): extension dials the door
+// itself via FrameClient ('V' JPEG frames over WSS). App Group mailbox via
+// maxaudiod --mailbox is the FALLBACK path only. Decodes latest frame into
+// 640x480 BGRA and pushes CMSampleBuffers at feed rate.
 import Foundation
 import CoreMediaIO
 import CoreVideo
@@ -13,15 +15,8 @@ let mlog = Logger(subsystem: "io.onlyascii.maxcam", category: "mailbox")
 final class MaxCamDeviceSource: NSObject, CMIOExtensionStreamSourceDelegate {
     // Fill in TEAMID once the Xcode project sets the app group.
     static let groupID = "<TEAMID>.io.onlyascii.maxpresence"
-    static var mailboxURL: URL {
-        let base = FileManager.default
-            .containerURL(forSecurityApplicationGroupIdentifier: groupID)
-        return base?.appendingPathComponent("mailbox/frame.jpg") ?? URL(fileURLWithPath: "/nonexistent")
-    }
 
     var stream: CMIOExtensionStream?
-    var timer: DispatchSourceFileSystemObject?
-    var fd: Int32 = -1
     var running = false
 
     // MARK: format
@@ -63,51 +58,36 @@ final class MaxCamDeviceSource: NSObject, CMIOExtensionStreamSourceDelegate {
     func stopStream(_ stream: CMIOExtensionStream) { stop() }
 
     // MARK: pump
+    private var client: FrameClient?
+    private var latest: Data?
+    private var pump: DispatchSourceTimer?
+
     private func start() {
         guard !running else { return }
         running = true
-        mlog.info("mailbox pump starting, watching \(Self.mailboxURL.path)")
-        watchMailbox()
+        let c = FrameClient { [weak self] jpeg in self?.latest = jpeg }
+        c.start()
+        client = c
+        let t = DispatchSource.makeTimerSource(queue: .global(qos: .userInteractive))
+        t.schedule(deadline: .now(), repeating: 1.0 / 30.0)
+        t.setEventHandler { [weak self] in self?.emitFrame() }
+        t.resume()
+        pump = t
+        mlog.info("frame pump starting (WSS video leg)")
     }
 
-    private func stop() { running = false; timer?.cancel(); timer = nil }
-
-    private func watchMailbox() {
-        let url = Self.mailboxURL
-        fd = open(url.path, O_EVTONLY)
-        let dir = url.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        if fd < 0 { // mailbox absent yet; poll dir creation + file
-            DispatchQueue.global().asyncAfter(deadline: .now() + 1) { [weak self] in self?.watchMailbox() }
-            return
-        }
-        let src = DispatchSource.makeFileSystemObjectSource(
-            fileDescriptor: fd,
-            eventMask: [.write, .rename, .delete],
-            queue: .global(qos: .userInteractive))
-        src.setEventHandler { [weak self] in
-            guard let self else { return }
-            let fflags = src.data
-            if fflags.contains(.delete) || fflags.contains(.rename) {
-                close(self.fd); self.fd = -1
-                self.timer?.cancel(); self.timer = nil
-                if self.running { self.watchMailbox() }
-                return
-            }
-            self.emitFrame(url: url)
-        }
-        src.setCancelHandler { [weak self] in close(self?.fd ?? -1) }
-        src.resume()
-        timer = src
-        emitFrame(url: url) // first frame
+    private func stop() {
+        running = false
+        pump?.cancel(); pump = nil
+        client?.stop(); client = nil
     }
 
-    private func emitFrame(url: URL) {
-        guard running, let stream else { return }
-        guard let data = try? Data(contentsOf: url),
+    private func emitFrame() {
+        guard running, let stream, let data = latest,
               let img = NSImage(data: data),
               let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil)
         else { return }
+        latest = nil // consume (no stale re-emit)
         let pb = Self.blankPixelBuffer()
         CVPixelBufferLockBaseAddress(pb, [])
         defer { CVPixelBufferUnlockBaseAddress(pb, []) }

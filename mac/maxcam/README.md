@@ -1,56 +1,66 @@
-# MAX Camera (P2) — scaffold (2026-11-12)
+# MAX Camera (P2) — scaffold (2026-11-12, feed decision UPDATED same day)
 
-Decision (owner, 2026-11-12): frame feed = **App Group mailbox**.
-maxaudiod receives JPEG 'V' frames from plexpipe already (was discarding
-them); with --mailbox DIR it writes each frame atomically (tmp+rename) to
-DIR/frame.jpg. The Camera Extension watches the shared App Group container
-and feeds latest frames into its CMIO source stream. maxaudiod stays the
-ONLY door client -> zero server/protocol changes. P4 may revisit
-extension-as-its-own-client (needs plexpipe multi-session first).
+**Feed decision (owner, 2026-11-12): the extension dials the server ITSELF**
+(P2 option 2, extension-as-WSS-client). The App Group mailbox design below
+is demoted to FALLBACK (maxaudiod --mailbox still implements it).
+Supporting server work is DONE: plexpipe per-role door (repo commit
+b271630) DEPLOYED + VERIFIED on the ai server — audio leg and video leg
+open concurrently (one Mac per role); video leg gets stat heartbeats and
+binary 'V' = one complete JPEG per frame; while the real renderer lands,
+the client toggles an ffmpeg testsrc feed via {"t":"testvideo","on":true}.
+Live proof 2026-11-12: 309 valid 640x480 JPEGs in 10 s (~31 fps) alongside
+the running audio bridge.
 
 ## Layout
-- `host/`   — MaxCamHost app sources (activation requests only; it is NOT
-  a frame pump — mailbox replaced the XPC leg, see contract V-1 correction).
-- `ext/`    — MaxCamExtension sources (provider + device + stream +
-  mailbox reader).
-- `*.entitlements` — to be applied to the Xcode targets.
-- `Info.plist.notes.md` — required plist keys the template must carry.
+- `host/`   — MaxCamHost app sources (activation requests only; NOT a
+  frame pump — the extension self-dials; XPC leg corrected away in V-1).
+- `ext/`    — MaxCamExtension sources:
+  - MaxCamProvider.swift      — CMIOExtensionProvider/device/stream wiring
+  - MaxCamStreamSource.swift  — 30 fps pump: latest 'V' JPEG -> BGRA -> CMSampleBuffer
+  - FrameClient.swift         — WSS video-leg client; door URL from App
+    Group config.json {"door":"wss://<tailnet-host>:8457"} (dev default
+    baked in), hello caps=["video"], testvideo auto-on, 1 s retry loop.
+- `*.entitlements` — applied to the Xcode targets; ext has
+  com.apple.security.network.client (REQUIRED for the self-dial).
+- Sources are v0 SKELETONS: first real compile is inside the Xcode
+  template project; expect symbol-level fixes.
 
-## Build procedure (first time)
-0. OWNER (Xcode GUI): Settings ▸ Accounts ▸ add Apple ID (free personal
-   team). THIS answers build-day question #1: whether the system-extension
-   install entitlement is granted/validated without paid membership.
-   Before that, `security find-identity -v -p codesigning` = 0 identities.
-1. OWNER: Xcode ▸ New Project ▸ macOS App "MaxCamHost" (Swift, AppKit)
-   at mac/maxcam/MaxCamHost/; then Target ▸ Add Target ▸ System Extensions
-   ▸ **Camera Extension** "MaxCamExtension", embedded in app.
-2. AGENT: replace template sources with the ones here (they keep template
-   symbol names where the template defines them); set App Group on both
-   targets: $(TeamIdentifierPrefix)io.onlyascii.maxpresence — app-group id
-   must be prefixed by team id (Apple doc: creating-a-camera-extension).
-3. AGENT: maxaudiod writer side (done here: --mailbox flag); after the app
-   group exists, container path =
-   ~/Library/Group Containers/<TEAMID>.io.onlyascii.maxpresence/mailbox/
-   — non-sandboxed processes may read/write it; VERIFY at first run (if
-   TCC blocks the plain path, mailbox dir falls back to a dir passed via
-   --mailbox and the extension reads it via security-scoped bookmark —
-   LAST resort documented, not default).
+## Build procedure
+0. DONE (2026-11-12): owner registered Apple ID + dev certificate in Xcode
+   (was 0 identities pre-switch). Free-team vs system-extension entitlement:
+   answered empirically at activation step 4.
+1. OWNER: Xcode ▸ New Project ▸ macOS App "MaxCamHost" (Swift, AppKit) at
+   mac/maxcam/MaxCamHost/; then Add Target ▸ System Extensions ▸ **Camera
+   Extension** "MaxCamExtension", embedded in app.
+2. AGENT: paste our sources over the template; App Group on BOTH targets:
+   $(TeamIdentifierPrefix)io.onlyascii.maxpresence (must be team-prefixed
+   or validation fails); confirm template plist carries
+   CMIOExtensionMachServiceName + host NSSystemExtensionUsageDescription.
+3. (FALLBACK only) mailbox path: run-bridge.sh + maxaudiod --mailbox
+   ~/Library/Group\ Containers/<TEAMID>.io.onlyascii.maxpresence/mailbox —
+   non-sandboxed writer, extension reads group container. Verify only if
+   the WSS self-dial is ever blocked.
 4. Build + run from /Applications (ditto post-action per contract pitfall):
-   xcodebuild -scheme MaxCamHost -allowProvisioningUpdates build
-   -> launch app -> activationRequest -> approve: System Settings ▸
-   General ▸ Login Items & Extensions ▸ Camera Extensions (NOT Privacy &
-   Security — doc drift since WWDC22).
-5. GATE (contract P2): QuickTime ▸ New Movie Recording ▸ camera picker
-   shows "MAX Camera" ▸ shows Max animating (feed maxaudiod from a live
-   call or a recorded 'V' stream). Verify with `systemextensionsctl list`
-   showing [activated].
+   `xcodebuild -scheme MaxCamHost -allowProvisioningUpdates build` ->
+   launch app -> Activate -> approve: System Settings ▸ General ▸
+   Login Items & Extensions ▸ Camera Extensions (NOT Privacy & Security —
+   doc drift since WWDC22). `systemextensionsctl list` -> [activated].
+5. GATE ladder:
+   B1 plumbing: QuickTime ▸ New Movie Recording ▸ "MAX Camera" shows the
+      moving testsrc pattern (proves door->extension->CMIO->consumer app).
+   B2 P2 gate: QuickTime shows Max ANIMATING — needs the real server
+      renderer to replace testsrc (server-side task; candidate for ai
+      Hermes delegation over A2A once inbound is enabled on both sides).
+   Chrome/Meet for P3: FULL browser restart after activation (enumeration
+   at launch, P1 pitfall).
 SIP stays ENABLED throughout; if signature checks fail, escalate one
 documented relaxation at a time (systemextensionsctl developer on relaxes
-only the /Applications location check).
+ONLY the /Applications location check).
 
 ## Open questions (tracked in contract)
-- free team + entitlement validity (step 0 resolves)
 - un-notarized dev-signed extension with SIP on: expect YES (docs only
-  describe notarization bypass via SIP-off), verify empirically.
+  describe the notarization bypass via SIP-off), verify empirically.
+- does the CMIO extension (role user _cmiodalassistants) reach the
+  tailnet (MagicDNS resolution + URLSession under sandbox): verify at B1.
 - do running apps enumerate the new camera without relaunch: assume NO
-  for Chrome (P1 pitfall: enumerate at launch); QuickTime may need relaunch.
+  for Chrome; QuickTime may need relaunch.
