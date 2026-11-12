@@ -10,11 +10,12 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { noise } from './synth2.js';
 import { MORPH_COUNT, FACECAP_INDEX } from './morph-map.js';
 
-// ---- CRT cyan-phosphor palette ----
+// ---- CRT cyan-phosphor palette (FRIENDLIER pass 2026-11-12: owner said
+// Max read as scary — lifted the void, softened the chrome, dimmed glow) ----
 export const PAL = {
-  bg: 0x04090d,
+  bg: 0x16212e,       // void lift (was 0x04090d, then 0x0c1520 — still read black)
   rim: 0x2ee6ff,      // single accent
-  skin: 0x6fa8bd,     // chrome tint (map multiplies this)
+  skin: 0x9db9c6,     // was 0x6fa8bd — brighter, less liquid-metal
   eye: 0x0a1a22,
   eyeGlow: 0x35e6ff,
   teeth: 0xbfd8e0,
@@ -69,10 +70,10 @@ export async function createFace(renderer, { modelUrl = './facecap.glb', transco
 
   const skin = new THREE.MeshPhysicalMaterial({
     color: PAL.skin, map: map || undefined,
-    metalness: 0.7, roughness: 0.38,
-    clearcoat: 0.6, clearcoatRoughness: 0.4,
+    metalness: 0.4, roughness: 0.55,          // was 0.7/0.38 — wet chrome
+    clearcoat: 0.3, clearcoatRoughness: 0.5,  // was 0.6/0.4
     envMapIntensity: 1.0,
-    emissive: 0x062b38, emissiveIntensity: 0.55,
+    emissive: 0x062b38, emissiveIntensity: 0.35,  // was 0.55; 0.25 made the face dead
   });
   skin.onBeforeCompile = ((rim) => (sh) => {
     rim(sh);
@@ -88,14 +89,18 @@ export async function createFace(renderer, { modelUrl = './facecap.glb', transco
     sh.fragmentShader = sh.fragmentShader.replace('diffuseColor *= sampledDiffuseColor;',
       `{ vec3 sc = sampledDiffuseColor.rgb;
          float scL = dot(sc, vec3(0.2126, 0.7152, 0.0722));
-         float knee = smoothstep(0.22, 0.65, scL);
-         sc = mix(sc, sc * (0.09 / max(scL, 1e-3)), knee);
+         // ONLY crush near-white (painted teeth) — was smoothstep(0.22,0.65)+0.09
+         // which turned the entire lit face into a black mask (round-3, 2026-11-12)
+         float knee = smoothstep(0.62, 0.95, scL);
+         sc = mix(sc, vec3(0.22, 0.26, 0.28), knee);
          diffuseColor *= vec4(sc, sampledDiffuseColor.a); }`);
     // and dim all lighting inside the (local-space) mouth sphere
+    // mouth dimmer: SMALLER sphere, GENTLER crush — the old 0.8*dim over a
+    // 0.4r sphere shadowed the entire lower face into a black mask
     sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>',
       `float dM = distance(vObjPosS, uMouthP);
        float mMask = 1.0 - smoothstep(0.15 * uMouthR, uMouthR, dM);
-       outgoingLight *= (1.0 - 0.8 * mMask);
+       outgoingLight *= (1.0 - 0.45 * mMask);
        #include <opaque_fragment>`);
   })(fresnelPatch(PAL.rim, 0.55, 2.8));
   headMesh.material = skin;
@@ -124,12 +129,12 @@ export async function createFace(renderer, { modelUrl = './facecap.glb', transco
   // eyes: painted iris/sclera from the facecap texture + a tight wet
   // specular (catchlight) so they read as eyes, not drilled holes
   const eyeMat = new THREE.MeshPhysicalMaterial({
-    color: 0xcfe0e6, map: map || undefined,
+    color: 0x9fb4bd, map: map || undefined,   // was 0xcfe0e6 — white decal eyes
     metalness: 0.1, roughness: 0.12,
     clearcoat: 1, clearcoatRoughness: 0.04, envMapIntensity: 1.0,
-    emissive: PAL.eyeGlow, emissiveIntensity: 0.06,
+    emissive: PAL.eyeGlow, emissiveIntensity: 0.02,   // was 0.06
   });
-  eyeMat.onBeforeCompile = fresnelPatch(PAL.eyeGlow, 0.35, 2.0);
+  eyeMat.onBeforeCompile = fresnelPatch(PAL.eyeGlow, 0.14, 2.4);  // was 0.35/2.0 — glowing wedges -> quiet eyes with catchlights
   eyeMeshes.forEach(m => { m.material = eyeMat; m.frustumCulled = false; });
 
   const teethMat = new THREE.MeshStandardMaterial({
@@ -144,7 +149,7 @@ export async function createFace(renderer, { modelUrl = './facecap.glb', transco
 
   // eye catchlights: tiny always-bright dots sell "wet glass" on a chrome face
   {
-    const gl = new THREE.MeshBasicMaterial({ color: 0xe8fbff, toneMapped: false });
+    const gl = new THREE.MeshBasicMaterial({ color: 0xdcecf2, toneMapped: false });
     eyeMeshes.forEach(em => {
       em.updateWorldMatrix(true, false);
       const b = new THREE.Box3().setFromObject(em);
@@ -154,7 +159,7 @@ export async function createFace(renderer, { modelUrl = './facecap.glb', transco
       const u0 = em.worldToLocal(c.clone());
       const u1 = em.worldToLocal(c.clone().add(new THREE.Vector3(0, 1, 0)));
       const unit = u1.distanceTo(u0) || 1;
-      const dot = new THREE.Mesh(new THREE.SphereGeometry(r * 0.22 * unit, 10, 10), gl);
+      const dot = new THREE.Mesh(new THREE.SphereGeometry(r * 0.10 * unit, 10, 10), gl);  // was 0.22 — big glowing blob
       dot.position.copy(em.worldToLocal(
         c.clone().add(new THREE.Vector3(-r * 0.05, r * 0.24, r * 1.15))));
       em.add(dot);
@@ -201,7 +206,7 @@ export async function createFace(renderer, { modelUrl = './facecap.glb', transco
     headMesh.updateWorldMatrix(true, false);
     const mw = new THREE.Vector3(0, -0.26, 0.28);
     const a = headMesh.worldToLocal(mw.clone());
-    const b = headMesh.worldToLocal(mw.clone().add(new THREE.Vector3(0, 0.40, 0)));
+    const b = headMesh.worldToLocal(mw.clone().add(new THREE.Vector3(0, 0.26, 0)));
     mouthU.value.copy(a);
     mouthRadU.value = b.distanceTo(a);
   }
@@ -225,31 +230,84 @@ export async function createFace(renderer, { modelUrl = './facecap.glb', transco
   inner.position.set(0, -0.14, 0.16);
   rig.add(inner);
 
-  // neck + collar pedestal: anchors the floating head (Max on his stand)
+  // ---- Suit bust (owner 2026-11-12: "a guy in a suit like Max Headroom") ----
+  // The pedestal cone + glowing ring read as a severed head on a bust stand
+  // (scary). Head now sits on a fabric neck inside a jacketed newscaster
+  // bust: shoulders, shirt V, collar wings, teal tie. Stylized chrome face
+  // kept on purpose — character, not uncanny human.
   const neck = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.15, 0.26, 0.36, 24, 1, true),
+    new THREE.CylinderGeometry(0.16, 0.185, 0.26, 24),
     new THREE.MeshPhysicalMaterial({
-      color: 0x3a5a66, metalness: 0.85, roughness: 0.28, envMapIntensity: 1.3,
-      side: THREE.DoubleSide,
+      color: 0x8fb0be, metalness: 0.45, roughness: 0.5, envMapIntensity: 0.9,
     }));
-  neck.position.set(0, -0.60, -0.02);
-  const collar = new THREE.Mesh(
-    new THREE.TorusGeometry(0.26, 0.024, 10, 48),
-    new THREE.MeshStandardMaterial({
-      color: 0x12313d, metalness: 0.6, roughness: 0.3,
-      emissive: PAL.rim, emissiveIntensity: 2.2,
-    }));
-  collar.rotation.x = Math.PI / 2;
-  collar.position.set(0, -0.70, -0.02);
-  rig.add(neck, collar);
-  // dedicated glow on the pedestal so it reads against the void
-  const pedLight = new THREE.PointLight(PAL.rim, 1.2, 1.4, 1.4);
-  pedLight.position.set(0, -0.66, 0.45);
-  rig.add(pedLight);
+  neck.position.set(0, -0.46, 0.02);
 
-  const key = new THREE.DirectionalLight(0xbfeeff, 1.0); key.position.set(1.2, 2.6, 3.6); scene.add(key);
-  const fill = new THREE.DirectionalLight(0x1b6f8c, 0.8); fill.position.set(-2.5, -0.5, 1.5); scene.add(fill);
-  const back = new THREE.DirectionalLight(PAL.rim, 1.0); back.position.set(-1.2, 1.6, -3.0); scene.add(back);
+  const jacketMat = new THREE.MeshStandardMaterial({ color: 0x2a3446, roughness: 0.9, metalness: 0.05 });
+  const js = new THREE.Shape();
+  js.moveTo(-0.92, -1.10);
+  js.quadraticCurveTo(-0.90, -0.52, -0.55, -0.44);   // left shoulder slope
+  js.quadraticCurveTo(-0.30, -0.40, -0.20, -0.42);   // in to the collar
+  js.lineTo(0.20, -0.42);                            // collar line (under chin)
+  js.quadraticCurveTo(0.30, -0.40, 0.55, -0.44);     // right shoulder
+  js.quadraticCurveTo(0.90, -0.52, 0.92, -1.10);
+  js.lineTo(-0.92, -1.10);
+  const jacket = new THREE.Mesh(
+    new THREE.ExtrudeGeometry(js, { depth: 0.36, bevelEnabled: true,
+      bevelThickness: 0.05, bevelSize: 0.06, bevelSegments: 3 }),
+    jacketMat);
+  jacket.position.set(0, 0, -0.20);
+
+  const shirtMat = new THREE.MeshStandardMaterial({ color: 0xe6edf2, roughness: 0.75 });
+  const ss = new THREE.Shape();
+  ss.moveTo(-0.19, -0.42); ss.lineTo(0.19, -0.42); ss.lineTo(0, -0.80); ss.closePath();
+  const shirt = new THREE.Mesh(new THREE.ShapeGeometry(ss), shirtMat);
+  shirt.position.set(0, 0, 0.215);
+
+  // collar wings flanking the tie knot
+  const cL = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.05, 0.03), shirtMat);
+  cL.position.set(-0.14, -0.415, 0.23); cL.rotation.z = 0.42;
+  const cR = cL.clone(); cR.position.x = 0.14; cR.rotation.z = -0.42;
+
+  const tieMat = new THREE.MeshStandardMaterial({ color: 0x0b6a80, roughness: 0.6 });
+  const knot = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.07, 0.03), tieMat);
+  knot.position.set(0, -0.47, 0.245);
+  const ts = new THREE.Shape();
+  ts.moveTo(-0.05, -0.51); ts.lineTo(0.05, -0.51);
+  ts.lineTo(0.032, -0.84); ts.lineTo(-0.032, -0.84); ts.closePath();
+  const tie = new THREE.Mesh(new THREE.ShapeGeometry(ts), tieMat);
+  tie.position.set(0, 0, 0.235);
+
+  rig.add(neck, jacket, shirt, cL, cR, knot, tie);
+
+  // ---- humanizers: brows + slicked hair, both fitted to the head bbox ----
+  // (brows from eye-mesh bbox failed: eye meshes too small/deep -> boxes ended
+  // up buried inside the face. Head-bbox ratios are deterministic.)
+  headMesh.updateWorldMatrix(true, false);
+  const hb = new THREE.Box3().setFromObject(headMesh);
+  const hc = hb.getCenter(new THREE.Vector3());
+  const hs = hb.getSize(new THREE.Vector3());
+  const browMat = new THREE.MeshStandardMaterial({ color: 0x14222b, roughness: 0.8 });
+  for (const side of [-1, 1]) {
+    const br = new THREE.Mesh(new THREE.BoxGeometry(hs.x * 0.21, hs.y * 0.024, hs.z * 0.10), browMat);
+    br.position.set(hc.x + side * hs.x * 0.19, hc.y + hs.y * 0.14, hc.z + hs.z * 0.42);
+    br.rotation.z = side * -0.18;   // gentle outer lift = friendly
+    rig.add(br);
+  }
+  {
+    const hair = new THREE.Mesh(
+      new THREE.SphereGeometry(0.5, 28, 20, 0, Math.PI * 2, 0, Math.PI * 0.50),  // slick cap, edge above the brows
+      new THREE.MeshStandardMaterial({ color: 0x101c24, roughness: 0.45, metalness: 0.35 }));
+    hair.scale.set(hs.x * 0.99, hs.y * 0.72, hs.z * 1.0);   // ~head-sized: intersects scalp, no floating gap
+    hair.position.set(hc.x, hc.y + hs.y * 0.04, hc.z - hs.z * 0.10);
+    rig.add(hair);
+  }
+
+  const key = new THREE.DirectionalLight(0xeae6dc, 1.35); key.position.set(0.8, 1.4, 4.2); scene.add(key);   // softer, warmer, more frontal
+  const fill = new THREE.DirectionalLight(0x2a7f9c, 1.2); fill.position.set(-2.5, -0.5, 1.5); scene.add(fill);
+  const back = new THREE.DirectionalLight(PAL.rim, 0.8); back.position.set(-1.2, 1.6, -3.0); scene.add(back);
+  // flat-on soft front light: kills the hollow-eyed mask look from one-sided rig lighting
+  const front = new THREE.DirectionalLight(0xf0f4f2, 1.2); front.position.set(0, 0.5, 5.0); scene.add(front);
+  scene.add(new THREE.HemisphereLight(0x3d5872, 0x16202c, 1.5));
 
   const cam = new THREE.PerspectiveCamera(27, 1, 0.05, 60);
   cam.position.set(0, 0.0, 2.52);
@@ -266,6 +324,11 @@ export async function createFace(renderer, { modelUrl = './facecap.glb', transco
   let gazeX = 0, gazeY = 0, gazeTargetX = 0, gazeTargetY = 0;
   let nextSaccade = 0.6, nextTurn = 2.5, yawT = 0, pitchT = 0, rollT = 0;
   let glitchAt = -1, glitchSeed = 0;
+  // friendliness layer state (blink / smile / brow) — ARKit morph indices
+  const BLINK_L = FACECAP_INDEX.eyeBlink_L, BLINK_R = FACECAP_INDEX.eyeBlink_R;
+  const SMILE_L = FACECAP_INDEX.mouthSmile_L, SMILE_R = FACECAP_INDEX.mouthSmile_R;
+  const BROW_UP = FACECAP_INDEX.browInnerUp;
+  let nextBlink = 1.2, blinkAt = -10, nextBrow = 4.0, browAt = -10, smile = 0;
 
   function update(t, dt, { energy = 0 } = {}) {
     // head turn scheduler: a new pose every ~2.5-6s
@@ -313,6 +376,32 @@ export async function createFace(renderer, { modelUrl = './facecap.glb', transco
       eg.quaternion.copy(eg.userData.baseQ).multiply(gazeQ);
     });
 
+    // ---- friendliness layer: blink, resting smile, occasional brow ----
+    // overlaid after feed.apply (Math.max) so bridge-driven A2F values win
+    if (t > nextBlink) { blinkAt = t; nextBlink = t + 2.4 + 3.6 * noise(t * 0.71, 71); }
+    let blink = 0;
+    { const e = t - blinkAt;
+      if (e >= 0 && e < 0.26) {
+        blink = e < 0.07 ? e / 0.07 : e < 0.12 ? 1 : 1 - (e - 0.12) / 0.14;
+      } }
+    influences[BLINK_L] = Math.max(influences[BLINK_L], blink, 0.22);   // resting half-lid: calm, not startled
+    influences[BLINK_R] = Math.max(influences[BLINK_R], blink, 0.22);
+
+    // resting smile fades in while quiet, out while the jaw moves
+    const talking = influences[JAW] > 0.05;
+    smile += ((talking ? 0.0 : 0.24) - smile) * (1 - Math.exp(-dt * 2.2));
+    if (smile > 0.01) {
+      influences[SMILE_L] = Math.min(1, influences[SMILE_L] + smile);
+      influences[SMILE_R] = Math.min(1, influences[SMILE_R] + smile);
+    }
+
+    // slow brow raise every ~5-14 s: an 'interested' pulse, small amplitude
+    if (t > nextBrow) { browAt = t; nextBrow = t + 5 + 9 * noise(t * 0.53, 73); }
+    let brow = 0;
+    { const e = t - browAt;
+      if (e >= 0 && e < 1.1) brow = Math.sin((e / 1.1) * Math.PI) * 0.18; }
+    influences[BROW_UP] = Math.max(influences[BROW_UP], brow);
+
     // teeth follow the jaw (they have no morphs of their own)
     if (teethMesh) teethMesh.position.y = teethBaseY - (influences[JAW] * 0.08) / teethUnit;
   }
@@ -335,10 +424,10 @@ export function createCrtPost(renderer, scene, cam) {
       tDiffuse: { value: null },
       uRes: { value: new THREE.Vector2(1, 1) },
       uTime: { value: 0 },
-      uScan: { value: 0.28 },
+      uScan: { value: 0.14 },   // was 0.28 — half the haunted-TV grain
       uCurve: { value: 0.030 },
       uAberr: { value: 0.6 },
-      uVig: { value: 0.55 },
+      uVig: { value: 0.28 },   // was 0.55 — corners no longer crushed to black
       uGlow: { value: 0.05 },
     },
     vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }`,
