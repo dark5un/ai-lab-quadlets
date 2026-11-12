@@ -156,6 +156,10 @@ MAC (Hermes-on-Mac builds from this brief):
 
 ## Handoff (2026-11-12, session cut-over)
 State: research COMPLETE, plan approved, NOTHING built yet on either machine.
+UPDATE (same day, later, code-m2): Mac side is NOT "nothing" anymore — P-1 done
+and P1 device-loop gate PASSED (MaxHole fork + maxaudiod prototype under
+`mac/`, merged to main; the P1 *Meet* gate still awaits P0's door URL). Owner
+now allows pushing to main for these merges.
 - ai server (this Hermes) owns: **P0 plexpipe** (not started) — next session
   starts with: run P0 per this doc; the door URL will be appended here.
 - code-m2 Hermes owns: P-1, P1, P2, P3. Kickoff prompt the owner pastes:
