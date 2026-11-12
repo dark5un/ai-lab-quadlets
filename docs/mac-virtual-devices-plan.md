@@ -90,10 +90,30 @@ MAC (Hermes-on-Mac builds from this brief):
    sends CMSampleBuffers with host-time PTS (V-1 write path). Later:
    receives blendshape JSON and renders locally (option b).
 
+MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
+- Sources: `mac/maxhole/` (BlackHole 0.7.1 @ 6008d295 fork; UPSTREAM.md lists
+  deltas) + `mac/maxaudiod/` (uv python prototype).
+- Installed on code-m2: `/Library/Audio/Plug-Ins/HAL/MaxHole.driver`,
+  bundle-id `io.onlyascii.maxhole`, ad-hoc signed, loaded OK on macOS 27.2.
+- Device names are exactly **"MAX Mic"** and **"MAX Out"** (2ch each,
+  48000+24000 Hz, kLatency_Frame_Size=512). Volume/mute/clock-source/
+  sample-rate are GLOBAL across the two devices; ring buffer + IO clocks are
+  per-device (fork fix, see pitfalls).
+- maxaudiod: `loopback-test` = owner-run gate (agent must NOT open input
+  streams — owner policy 2026-11-12); `run --door WSS_URL` = bridge mode,
+  uplink s16le 48k mono 'A' frames, downlink 'A' 24k played natively (no
+  resampler on Mac), JSON hello/stat, capped reconnect backoff, 'V' ignored
+  until P2.
+
 ## Phases
 - P-1 CODE-M2 ENV (Mac Hermes): sw_vers / chip / brew / Xcode CLT presence;
   tailscale status (must see ai); decide Remote Login on/off for cross-
   debugging; create a private dir for the MaxPresence sources.
+  STATUS 2026-11-12 (code-m2): **done** — macOS 27.2 / M2 Max / brew 7.0.13 /
+  Xcode CLT only (no full Xcode — P2 prerequisite to install); tailscale peer
+  `ai` live (<ai-tailnet-ip>); Remote Login kept OFF (work is local); sources
+  in this private repo under `mac/` (branch mac-maxpresence, merged to main
+  per owner).
 - P0 SERVER: implement plexpipe + door + protocol doc; loop-test with a
   python client (no Mac): feed recorded speech -> hear plex reply downlink
   + bridge lip animation. GATE: round-trip audio < 1 s.
