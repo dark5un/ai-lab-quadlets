@@ -154,10 +154,33 @@ class Observer:
         """Navigate to a Meet link and attempt the guest join flow."""
         status = {"url": url, "stage": "navigating"}
         self.page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-        try:
-            self.page.wait_for_selector('[jscontroller] , input[aria-label]', timeout=15_000)
-        except Exception:
-            pass
+        # google sometimes SOFT-redirects expired/odd guest requests to the
+        # workspace marketing landing; give it a moment and watch the URL.
+        for _ in range(10):
+            time.sleep(1)
+            if "meet.google.com" in self.page.url and \
+               self.page.evaluate("() => !!document.querySelector('[jsname], [data-page-id]')"):
+                break
+        status["final_url"] = self.page.url
+        if "workspace.google.com" in self.page.url or \
+           "Join a meeting now" in self.page.evaluate(
+               "() => document.body.innerText.slice(0,3000)"):
+            status["stage"] = "redirected-to-landing; trying Enter-code path"
+            try:
+                self.page.get_by_text("Enter code", exact=False).first.click(timeout=5000)
+                code = url.rstrip("/").split("/")[-1]
+                inp = self.page.wait_for_selector(
+                    'input[aria-label*="code" i], input[aria-label*="Meeting code" i], input[jsname]',
+                    timeout=8000)
+                inp.fill(code)
+                cont = self.page.get_by_role("button", name=re.compile(r"join|continue|next", re.I))
+                cont.first.click(timeout=5000)
+                status["stage"] = "code-submitted"
+                time.sleep(4)
+            except Exception as e2:
+                status["stage"] = "meeting-gone-or-blocked"
+                status["detail"] = f"{type(e2).__name__}: {str(e2)[:200]}"
+                return status
         status["title"] = self.page.title()
         # instant-meeting codes expire when the room empties -> Google
         # redirects to the workspace marketing landing page.

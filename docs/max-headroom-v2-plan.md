@@ -219,3 +219,17 @@ morph targets) + procedural head/eye motion     CDP screencast 30fps -> VP8 trac
   live token extraction, media servers handshake. join.py --url --hold 60
   is wired to close exactly that.
 - Hygiene: tailnet ICE IP redacted from artifacts (validation_results.json).
+
+### Phase 1 completion (2026-11-12 09:31) — REAL NIM live
+- max-face quadlet ACTIVE (nvcr image 35.9 GB pre-pulled past the quadlet 5m
+  pull timeout; UserNS=keep-id + config file modes fixed the 126/entrypoint
+  issues; weights auto-downloaded with owner NGC key; batch-1 TRT engines
+  built ~2 min). VRAM: ~790 MiB on the 4070 Ti beside personaplex (10.6/12.3
+  GB total) -> P0.1 fit CONFIRMED live.
+- FULL CHAIN with REAL A2F: speech PCM -> max-bridge -> NIM gRPC -> v2 app:
+  31 frames, 7 simultaneous blendshapes active. shot-v2-chain.png (v2 rerun).
+- Meet join saga (fact #79): headless default UA -> soft redirect to
+  workspace marketing shell (fake "no-join-button"); real-desktop-UA fix
+  reaches the true gate; owner room policy = host admission ("No one can
+  join unless invited or admitted") -> flip to "Anyone with the link".
+  join.py fast path (--skip-p2p --skip-interop) ready to fire.
