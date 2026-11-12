@@ -352,9 +352,12 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   gate pattern) while the bridge was down. Counter fingerprint: tx/rx frame
   rates perfectly real-time, but RMS tap of the device = all zeros and the
   model goes deaf after its autogreeting. RECOVERY (owner sudo): `sudo
-  launchctl kickstart -k system/com.apple.audio.coreaudiod` (driver
-  auto-reloads from /Library/Audio/Plug-Ins/HAL/MaxHole.driver) -> FULL
-  Chrome quit+restart (device UIDs change) -> re-run run-bridge.sh ->
+  killall coreaudiod` (KeepAlive job respawns in ~1 s and auto-reloads the
+  driver from /Library/Audio/Plug-Ins/HAL/MaxHole.driver). NOTE: `sudo
+  launchctl kickstart -k system/com.apple.audio.coreaudiod` FAILS on this
+  Mac — error 150 "Operation not permitted while System Integrity
+  Protection is engaged" (SIP protects com.apple.* system jobs) ->
+  FULL Chrome quit+restart (device UIDs change) -> re-run run-bridge.sh ->
   re-pick MAX devices in the incognito session (settings never survive
   incognito restart). WORKAROUND mid-call: never use link down/up to stop a
   loop — use "Mute uplink" (runtime control file does NOT reopen CoreAudio
