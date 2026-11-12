@@ -82,10 +82,12 @@ SERVER (this repo — I build this, protocol frozen for the Mac brief):
      "up_frames":int,"down_frames":int,"video_frames":int,
      "plex_up":bool,"bridge_up":bool}
   Link-active = ws open + stat arriving; "healthy" = plex_up && bridge_up.
-  MAXBar note (2026-11-12): maxbar reads maxaudiod's LOCAL heartbeat json —
-  maxaudiod should pass plex_up/bridge_up through from stat into its
-  heartbeat file so the widget can distinguish "link up but server brain
-  down" (extra json keys are backward-compatible with maxbar).
+  MAXBar note (2026-11-12): IMPLEMENTED same day (mac-maxpresence) —
+  maxaudiod passes stat plex_up/bridge_up (+server frame counters) into its
+  local heartbeat json; maxbar renders "server: plex ✓ bridge ✓" on the link
+  line and a 4th dot colour (yellow = door connected, server brain down /
+  stat stale). Unit-verified with stat frames fed through Bridge.reader()
+  without opening any audio stream.
   Also S->C {"t":"caption","text":...} (plex 0x02 monologue stream) and
   S->C {"t":"bye","reason":"busy"} when a second session tries to connect.
 MAC (Hermes-on-Mac builds from this brief):

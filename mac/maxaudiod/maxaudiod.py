@@ -36,7 +36,8 @@ class Status:
         self.data = {"pid": os.getpid(), "mode": None, "door": None,
                      "connected": False, "started": time.time(),
                      "last_connect": None, "last_stat": None,
-                     "tx_frames": 0, "rx_frames": 0, "errors": 0}
+                     "tx_frames": 0, "rx_frames": 0, "errors": 0,
+                     "plex_up": None, "bridge_up": None}
 
     def bump(self, **kw):
         with self.lock:
@@ -167,7 +168,12 @@ class Bridge:
                 except json.JSONDecodeError:
                     continue
                 if ctrl.get("t") == "stat":
-                    status.bump(last_stat=time.time())
+                    # server "brain" flags pass through (contract: doc V stat;
+                    # widget distinguishes link-up-but-server-down)
+                    status.bump(last_stat=time.time(),
+                                plex_up=ctrl.get("plex_up"), bridge_up=ctrl.get("bridge_up"),
+                                server_up_frames=ctrl.get("up_frames"),
+                                server_down_frames=ctrl.get("down_frames"))
 
     # -- audio side
     def run(self):
