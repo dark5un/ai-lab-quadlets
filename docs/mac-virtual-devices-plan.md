@@ -318,8 +318,12 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   conversation; GATE: speech-to-motion latency <= 450 ms measured, no echo,
   no artifacts.
 - P4 POLISH: option (b) local rendering (shapes over WSS -> Metal offscreen
-  three.js), launchd orchestration one-click "go live", idle/speaking
-  states, maybe VP8 instead of JPEG.
+   three.js), launchd orchestration one-click "go live", idle/speaking
+   states, maybe VP8 instead of JPEG.
+   RECOMMEND P1.5 (added 2026-11-12): port maxaudiod to Swift — stable
+   bundle-id TCC Microphone grant (python .venv identity is fragile;
+   today's TCC-blind false alarm was this class), single-binary launchd
+   citizenship, no uv/python at boot. Keep the protocol byte-identical.
 
 ## Pitfalls (paid for already — hand to Mac Hermes verbatim)
 - **personaplex is SINGLE-SESSION**: one global `async with self.lock` — any
