@@ -101,6 +101,10 @@ MAC (Hermes-on-Mac builds from this brief):
   Meet incognito: Panos' browser mic=MAX Mic, speaker=Multi-Output
   (phones+MAX Out); plexpipe uplink = meeting audio; GATE: Max answers the
   meeting out loud into the call.
+  STATUS 2026-11-12 (code-m2): MaxHole 0.1.0 installed + ad-hoc loaded by
+  coreaudiod; device-loop gate **PASS** (owner-run `maxaudiod.py
+  loopback-test`: both pipes self-loop tone-peak=1.00, cross-leak 0.00 —
+  per-device ring-buffer fix confirmed). Meet gate pending P0 door URL.
 - P2 MAC video: MaxCamHost+MaxCamExtension, JPEG 'V' path. GATE: QuickTime
   shows MAX Camera with Max animating (server-rendered).
 - P3 FULL JOIN: incognito Meet with MAX Cam + MAX Mic: 10-minute
@@ -127,6 +131,28 @@ MAC (Hermes-on-Mac builds from this brief):
   ~30 ms + video pipeline ~50 ms => <=450 ms achievable.
 - VRAM settled: personaplex + max-face (~790 MiB) coexist on the 4070 Ti.
 - GPLv3 MaxHole fork: private repos only. Never name anything "ryoku".
+- **Owner policy (code-m2, 2026-11-12)**: the agent must NOT open CoreAudio
+  input/microphone streams — capture-verifying tests are run BY THE OWNER or
+  verified via meters while the agent plays output-only. Ask each time.
+- **portaudio/AUHAL cannot open separate input and output streams on the
+  SAME device** (-10863 "cannot do in current context"); self-loop tests need
+  one duplex sd.Stream(device=(in_idx, out_idx)).
+- **pkgbuild --root flattens its argument** — with --root <bundle> the
+  Contents/ lands directly in --install-location. Stage a dir that CONTAINS
+  MaxHole.driver/ and use that as --root, else HAL gets HAL/Contents/.
+- **BlackHole 2Sink devices are NOT isolated** (hit 2026-11-12, P1): upstream
+  BlackHole.c shares ONE gRingBuffer, ONE zero-time-stamp clock and ONE
+  lastOutputSampleTime/isBufferClear state across Device+Device2 —
+  DoIOOperation/GetZeroTimeStamp `#pragma unused(inDeviceObjectID)`. Two live
+  sinks cross-talk (breaks V-3). MaxHole fork fixes this with per-device
+  arrays (device_index() helper); keep the fix on any rebase.
+- **No full Xcode needed for the HAL driver**: plain `clang -bundle` works —
+  link -framework CoreAudio -framework AudioToolbox -framework CoreFoundation
+  -framework Accelerate (CLT-only machine verified). The upstream .xcodeproj is
+  just a wrapper around the same single .c file.
+- Fresh machine: github.com may be missing from ~/.ssh/known_hosts —
+  ssh-keyscan + check against GitHub's published ED25519 fingerprint
+  (SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU), then append.
 
 ## Server endpoints inventory (for the brief)
 - personaplex :8998 loopback (wss door :8456 exists today)

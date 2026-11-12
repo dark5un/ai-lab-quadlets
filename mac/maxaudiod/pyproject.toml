@@ -1,0 +1,12 @@
+[project]
+name = "maxaudiod"
+version = "0.1.0"
+description = "MaxPresence audio bridge: MAX Out -> plexpipe uplink, plexpipe downlink -> MAX Mic (docs/mac-virtual-devices-plan.md P1)"
+requires-python = ">=3.11"
+dependencies = [
+    "sounddevice>=0.4.6",
+    "numpy>=1.26",
+    "websocket-client>=1.7",
+]
+
+[tool.uv]
