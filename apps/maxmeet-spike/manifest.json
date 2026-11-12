@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "MaxPresence mic spike",
+  "version": "0.1.0",
+  "description": "Ticket 01 spike: in-page synthetic microphone (+ slate camera) at Meet. Not the product.",
+  "content_scripts": [
+    {
+      "matches": ["https://meet.google.com/*"],
+      "js": ["inject.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://meet.google.com/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["voice.wav"],
+      "matches": ["https://meet.google.com/*"]
+    }
+  ]
+}
