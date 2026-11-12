@@ -59,6 +59,7 @@ SILENCE_RMS = float(os.environ.get("MAXFACE_SILENCE_RMS", "300"))   # int16 RMS 
 FRAME_CAP = int(os.environ.get("MAXFACE_FRAME_CAP", "60"))          # drop-oldest watermark
 AUDIO_MAX_S = float(os.environ.get("MAXFACE_AUDIO_MAX_S", "4.0"))   # ring buffer cap
 STAT_EVERY = 2.0
+DEBUG = bool(os.environ.get("MAXFACE_DEBUG", ""))
 
 MAXFACE_SLICE_SAMPLES = int(round(IN_RATE * SLICE_LEN / float(FPS)))
 
@@ -249,12 +250,19 @@ async def main():
         """25 fps CFR pump: pending generated frames, else idle-loop frames."""
         tick = 1.0 / FPS
         render_busy = False
+        dbg_n = 0
         while True:
             t0 = time.perf_counter()
             # kick one render slice when audio + queue allow it (watermark gate)
             if engine.ready and not render_busy and len(feed.pending) < FRAME_CAP:
                 s = feed.take_slice()
+                if s is not None and DEBUG:
+                    _rms = float(np.sqrt(np.mean(s.astype(np.float64) ** 2)))
+                    log.info("DBG take_slice rms=%.0f gate=%s pending=%d busy=%s",
+                             _rms, _rms > SILENCE_RMS, len(feed.pending), render_busy)
                 if s is not None and np.sqrt(np.mean(s.astype(np.float64) ** 2)) > SILENCE_RMS:
+                    if not feed.speaking:
+                        log.info("speech gate opened")
                     feed.speaking = True
 
                     def run(s=s):
@@ -272,6 +280,9 @@ async def main():
                             feed.pending.append(to_door_frame(f))
                         while len(feed.pending) > FRAME_CAP:
                             feed.pending.popleft()
+                        if DEBUG:
+                            log.info("slice done: +%d frames pending=%d",
+                                     len(frames_), len(feed.pending))
 
                     render_busy = True
                     fut = loop.run_in_executor(None, run)
@@ -279,15 +290,27 @@ async def main():
                         lambda f: loop.call_soon_threadsafe(done, f))
                 else:
                     if s is not None:
+                        if feed.speaking:
+                            log.info("speech gate closed (slice rms below gate)")
                         feed.speaking = False
                     elif time.time() - feed.last_audio_at > 2.0:
+                        if feed.speaking:
+                            log.info("speech gate closed (audio starved)")
                         feed.speaking = False
             frame = None
+            src = "none"
             if feed.pending:
                 frame = feed.pending.popleft()
+                src = "gen"
             elif engine.ready:
                 frame = to_door_frame(engine.idle_frame())
+                src = "idle"
             if frame is not None:
+                dbg_n += 1
+                if DEBUG and (dbg_n <= 60 or dbg_n % 50 == 0):
+                    log.info("DBG emit#%d src=%s idx=%d bytes=%d h=%d", dbg_n, src,
+                             engine.state.frame_index if engine.state else -1,
+                             len(frame), hash(frame) & 0xffff)
                 dead = set()
                 for ws in feed.subscribers:
                     try:
