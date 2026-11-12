@@ -189,6 +189,16 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   Meet session: mic not really on "MAX Mic", private-window mic permission,
   or Meet noise suppression squashing the synthetic voice. Gate stays
   PENDING until a PASS run (triage checklist in the runbook).
+  RUN 2 2026-11-12 (same call, live counters): browser-fault theory RETIRED
+  — owner DID hear one real answer + backchannels, so MAX Mic->Meet->mix
+  works end-to-end. New fault: after a few turns plex runs ~10 audible
+  frames/s CONTINUOUSLY with no human speech + gibberish/multilingual drift
+  = the self-hearing symptom again, via the ACOUSTIC path (Max -> human
+  speakers -> human built-in mic -> human uplink -> meeting mix -> MAX Out
+  -> plex hears itself ~300 ms late). Chrome AEC does not reliably cancel
+  synthetic voice through laptop speakers — consequence (b) below is
+  optimistic. P1 gate runs REQUIRE human-side headphones (or maxaudiod
+  --gate, which does break this cycle: 300 ms echo << 1.2 s hold).
 - P2 MAC video: MaxCamHost+MaxCamExtension, JPEG 'V' path. GATE: QuickTime
   shows MAX Camera with Max animating (server-rendered).
   PREP 2026-11-12: BLOCKED on P1 Meet gate PASS first (kickoff contract).
@@ -257,12 +267,16 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   incognito browser session with mic = MAX Mic, camera = MAX Camera (P2),
   speaker = MAX Out. The human keeps built-in mic/camera/speakers on their
   own session. Consequences: (a) Meet never returns a participant's own
-  audio to its own output, so plex CANNOT hear Max — loop is structurally
-  gone, no mixing aggregates needed (MAX Mix In / MAX Multi Out destroyed;
-  maxagg remains only for the single-session variant). (b) Chrome AEC runs
-  per session against that session's own output — acoustic echo of Max's
-  voice through the human's speakers is cancelled by the human's session,
-  never bleeds into MAX Mic. (c) maxaudiod --gate (half-duplex) is OFF by
+  audio to its own output, so plex CANNOT hear Max — DIGITAL loop is
+  structurally gone, no mixing aggregates needed (MAX Mix In / MAX Multi Out
+  destroyed; maxagg remains only for the single-session variant). BUT an
+  ACOUSTIC loop survives: Max's voice out of the HUMAN's speakers into the
+  HUMAN's mic re-enters the mix (see acoustic-loop pitfall; headphones or
+  --gate mandatory for gate runs). (b) Chrome AEC runs per session against
+  that session's own output — it SHOULD cancel Max's echo at the human
+  mic, but MEASURED 2026-11-12 it does not reliably cancel synthetic
+  voice through laptop speakers — do not trust it, separate paths
+  physically. (c) maxaudiod --gate (half-duplex) is OFF by
   default: in this topology it would only kill barge-in (personaplex is
   full-duplex by design). Keep the flag for the single-session fallback.
 - **Max hears himself — self-answer runaway loop (2026-11-12, observed live
@@ -311,6 +325,21 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   All-green + human deaf => the fault is inside Chrome/Meet (mic device
   selection, private-window mic permission, noise suppression), not Mac
   audio — don't touch the drivers, fix the browser session.
+- **Acoustic self-hearing loop survives the two-participant model**
+  (hit 2026-11-12, live Meet run 2): Max -> HUMAN speakers -> HUMAN built-in
+  mic -> human session uplink -> meeting mix -> incognito session -> MAX Out
+  -> plex hears Max ~300 ms late -> self-answers -> ~10 audible downlink
+  frames/s continuous with no human speech + gibberish/multilingual drift
+  (same symptom class as the old digital loop — signature is enough to
+  diagnose). Counter fingerprint: speaking_frames climbing steadily while
+  nobody talks; tx stays real-time. Fixes: (1) HUMAN-side headphones —
+  mandatory for P1 gate runs, not optional; (2) maxaudiod --gate breaks the
+  cycle (echo << 1.2 s hold) at the half-duplex cost — CLI-only flag today,
+  runtime toggle via cmd-maxaudiod.json is a small P2-era win; (3) permanent:
+  server-side AEC at P4. Mid-call loop-kill = MAXBar "Mute uplink"; NEVER
+  kill/restart maxaudiod mid-call (drops the plex session, forces reconnect
+  churn + 'rejecting second session' storm while the server still holds the
+  dead leg).
 - Fresh machine: github.com may be missing from ~/.ssh/known_hosts —
   ssh-keyscan + check against GitHub's published ED25519 fingerprint
   (SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU), then append.
