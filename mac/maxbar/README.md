@@ -57,6 +57,26 @@ against a chmod-000 status dir (renders ✗ + NSCocoaError 257).
 `plex_up`/`bridge_up`/`server_*` pass through from the door's stat frames
 (plexpipe contract) — added 2026-11-12, keys optional/back-compatible.
 
+## Controls (kill-switches, since 2026-11-12)
+The menu can, without any sudo or new permissions, write per-daemon command
+files the daemons poll every heartbeat:
+`~/Library/Application Support/MaxPresence/cmd-maxaudiod.json`
+```json
+{"link":"up"|"down","mute_mic":bool,"mute_uplink":bool}
+```
+- Take link down: bridge drops the door socket and idles (plexpipe's one-session
+  slot frees); Resume reconnects. Verified live.
+- Mute MAX Mic: downlink frames are drained but not played -> MAX Mic emits
+  silence -> the meeting stops hearing Max.
+- Mute uplink: MAX Out capture is replaced by zeros -> plex stops hearing the
+  meeting.
+- Mute MAX Camera: only surfaced when the camera exists; future MaxCamHost
+  consumes `cmd-maxcamhost.json {"mute":bool}` (same pattern).
+Checkmarks/state read back from the cmd file AND echoed via heartbeat fields
+`link_requested`/`mic_muted`/`uplink_muted`, so a manual file edit or a dead
+daemon can't desync the UI. Deleting the cmd file resets controls (daemon
+republishes defaults).
+
 ## Build / run / install
 ```sh
 ./build.sh                       # swiftc (CLT-only ok), ad-hoc signed .app

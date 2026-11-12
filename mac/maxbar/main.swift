@@ -103,6 +103,7 @@ struct Daemon {
     var age: TimeInterval = .greatestFiniteMagnitude   // seconds since last write
     var lastStatAge: TimeInterval = .greatestFiniteMagnitude  // server stat heartbeat
     var plexUp: Bool?, bridgeUp: Bool?
+    var j_micMuted = false, j_upMuted = false, j_linkHeld = false
     var fresh: Bool { age < kHeartbeatFresh }
     var statFresh: Bool { lastStatAge < 6 }            // server sends every ~2 s
     var healthy: Bool { fresh && connected && statFresh && plexUp == true && bridgeUp == true }
@@ -113,7 +114,10 @@ struct Daemon {
     var state: String {
         if !fresh && age == .greatestFiniteMagnitude { return "no status file" }
         if !fresh { return "down — last seen \(Int(age)) s ago" }
-        return connected ? "LINK UP (\(door)) — \(brain)" : "up, link down"
+        var extra = ""
+        if (j_micMuted) { extra += " · MIC MUTED" }
+        if (j_upMuted) { extra += " · UPLINK MUTED" }
+        return connected ? "LINK UP (\(door)) — \(brain)\(extra)" : "up, link down\(extra)"
     }
 }
 func readDaemons() -> [Daemon] {
@@ -121,7 +125,8 @@ func readDaemons() -> [Daemon] {
     let now = Date().timeIntervalSince1970
     var out: [Daemon] = []
     guard let files = try? fm.contentsOfDirectory(atPath: kStatusDir) else { return out }
-    for f in files.sorted() where f.hasSuffix(".json") {
+    for f in files.sorted() where f.hasSuffix(".json") && !f.hasPrefix("cmd-") {
+        // cmd-* files are CONTROLS (we write them), not daemon heartbeats
         var d = Daemon(name: String(f.dropLast(5)))
         guard let data = fm.contents(atPath: kStatusDir + "/" + f),
               let j = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { out.append(d); continue }
@@ -133,6 +138,9 @@ func readDaemons() -> [Daemon] {
         d.errors = (j["errors"] as? Int) ?? 0
         if let v = j["plex_up"] as? Bool { d.plexUp = v }
         if let v = j["bridge_up"] as? Bool { d.bridgeUp = v }
+        d.j_micMuted = (j["mic_muted"] as? Bool) ?? false
+        d.j_upMuted = (j["uplink_muted"] as? Bool) ?? false
+        d.j_linkHeld = (j["link_requested"] as? String) == "down"
         if let ts = j["ts"] as? Double { d.age = now - ts }
         if let ls = j["last_stat"] as? Double { d.lastStatAge = now - ls }
         out.append(d)
@@ -300,6 +308,37 @@ final class Bar: NSObject, NSMenuDelegate {
         item.button?.title = s.caps.contains(where: { !$0.ok }) ? "⚠" : ""
         item.button?.toolTip = Bar.tooltip(s)
     }
+    // ------------------------------------------------------------ controls
+    // Kill-switches written to the daemon's cmd file (contract:
+    // {"link":"up"|"down","mute_mic":bool,"mute_uplink":bool}); read back
+    // for checkmarks. P2 camera: same pattern via cmd-maxcamhost.json.
+    func cmdPath(_ daemon: String) -> String { kStatusDir + "/cmd-\(daemon).json" }
+    func readCmd(_ daemon: String) -> [String: Any] {
+        guard let d = FileManager.default.contents(atPath: cmdPath(daemon)),
+              let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return [:] }
+        return j
+    }
+    func writeCmd(_ daemon: String, _ j: [String: Any]) {
+        try? FileManager.default.createDirectory(atPath: kStatusDir, withIntermediateDirectories: true)
+        let fm = FileManager.default
+        let p = cmdPath(daemon), tmp = p + ".\(ProcessInfo.processInfo.processIdentifier).tmp"
+        if fm.fileExists(atPath: tmp) { try? fm.removeItem(atPath: tmp) }
+        try? JSONSerialization.data(withJSONObject: j).write(to: URL(fileURLWithPath: tmp))
+        if fm.fileExists(atPath: p) { try? fm.removeItem(atPath: p) }
+        try? fm.moveItem(atPath: tmp, toPath: p)
+    }
+    var audCmd: [String: Any] { readCmd("maxaudiod") }
+    @objc func tLink() { var c = audCmd; c["link"] = (c["link"] as? String) == "down" ? "up" : "down"; writeCmd("maxaudiod", c) }
+    @objc func tMic() { var c = audCmd; c["mute_mic"] = !((c["mute_mic"] as? Bool) ?? false); writeCmd("maxaudiod", c) }
+    @objc func tUplink() { var c = audCmd; c["mute_uplink"] = !((c["mute_uplink"] as? Bool) ?? false); writeCmd("maxaudiod", c) }
+    @objc func tCam() {
+        var c: [String: Any] = readCmd("maxcamhost"); c["mute"] = !((c["mute"] as? Bool) ?? false); writeCmd("maxcamhost", c)
+    }
+    func action(_ title: String, _ on: Bool, _ sel: Selector) -> NSMenuItem {
+        let i = NSMenuItem(title: title, action: sel, keyEquivalent: "")
+        i.target = self; i.state = on ? .on : .off; return i
+    }
+
     // rebuild the menu only when it opens — polling stays cheap
     func menuNeedsUpdate(_ menu: NSMenu) {
         snap = poll(); menu.removeAllItems()
@@ -308,7 +347,7 @@ final class Bar: NSObject, NSMenuDelegate {
         row("Link — door bridge (maxaudiod)")
         if s.daemons.isEmpty { row("   no daemons; start: maxaudiod.py run --door URL") }
         for d in s.daemons {
-            row("   \(d.name): \(d.state)")
+            row("   \(d.name): \(d.state)\(d.j_linkHeld ? " [HELD DOWN]" : "")")
             if d.fresh && d.connected { row("     up \(d.tx) frames · down \(d.rx) · errors \(d.errors)") }
         }
         menu.addItem(.separator())
@@ -319,6 +358,16 @@ final class Bar: NSObject, NSMenuDelegate {
         row("Video — virtual camera (P2)")
         row(s.cam.present ? "   MAX Camera: \(s.cam.inUse ? "INSTALLED · streaming" : "installed · idle")"
                           : "   MAX Camera: not installed (pending P2)")
+        menu.addItem(.separator())
+        let linkDown = (audCmd["link"] as? String) == "down"
+        row("Controls")
+        menu.addItem(action(linkDown ? "Resume link (plexpipe door)" : "Take link down", false, #selector(tLink)))
+        menu.addItem(action("Mute MAX Mic (Max silent to meeting)", (audCmd["mute_mic"] as? Bool) ?? false, #selector(tMic)))
+        menu.addItem(action("Mute uplink (Max deaf to meeting)", (audCmd["mute_uplink"] as? Bool) ?? false, #selector(tUplink)))
+        if s.cam.present {
+            menu.addItem(action("Mute MAX Camera (Max unseen)", (readCmd("maxcamhost")["mute"] as? Bool) ?? false, #selector(tCam)))
+        }
+        if linkDown { row("   link held down — daemon idling, door slot free") }
         menu.addItem(.separator())
         row(s.caps.allSatisfy { $0.ok } ? "Self-check — no special rights needed" : "Self-check — FAILURES:")
         for c in s.caps { row("   \(c.ok ? "✓" : "✗") \(c.name) — \(c.hint)") }
@@ -355,7 +404,10 @@ if let i = CommandLine.arguments.firstIndex(of: "--icon-dump"), i + 1 < CommandL
 if CommandLine.arguments.contains("--selftest") {
     let s = poll()
     print("link: \(s.healthy ? "UP + server healthy" : s.linkUp ? "UP but server NOT healthy" : (s.daemonUp ? "daemon up / link down" : "down"))")
-    for d in s.daemons { print("daemon \(d.name): \(d.state) [age \(Int(d.age))s tx \(d.tx) rx \(d.rx) err \(d.errors)]") }
+    for d in s.daemons {
+        let age = d.age == .greatestFiniteMagnitude ? -1 : Int(d.age)   // Int(inf) traps!
+        print("daemon \(d.name): \(d.state) [age \(age)s tx \(d.tx) rx \(d.rx) err \(d.errors)]")
+    }
     print("MAX Mic: \(s.mic.map { "installed, in-use \($0.inUse)" } ?? "NOT INSTALLED")")
     print("MAX Out: \(s.out.map { "installed, in-use \($0.inUse)" } ?? "NOT INSTALLED")")
     print("MAX Camera: \(s.cam.present ? (s.cam.inUse ? "installed, streaming" : "installed, idle") : "not installed")")

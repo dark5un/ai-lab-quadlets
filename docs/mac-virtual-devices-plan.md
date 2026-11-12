@@ -122,6 +122,15 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   ~/Library/Application Support/MaxPresence/maxaudiod.json (schema in
   mac/maxbar/README.md) — consumed by MAXBar; future hosts (MaxCamHost)
   drop same-schema files in that dir.
+  CONTROL channel (2026-11-12, owner ask): widget/owner may write
+  cmd-maxaudiod.json {"link":"up|down","mute_mic":bool,"mute_uplink":bool};
+  maxaudiod polls it every heartbeat — link-down drops the socket and idles
+  (frees plexpipe session slot), mic-mute drains downlink without playing
+  (MAX Mic -> silence for the meeting), uplink-mute zeroes capture (plex
+  deaf). Daemon echoes state in heartbeat (link_requested/mic_muted/
+  uplink_muted). MaxCamHost P2 contract: cmd-maxcamhost.json {"mute":bool}.
+  Verified live end-to-end (down/up/mutes/reset), incl. auto-reconnect
+  after backoff. cmd-* files must be excluded from daemon enumeration.
 - maxagg (`mac/maxagg/`): CLI for the two aggregate devices the Meet gate
   needs: "MAX Mix In" (built-in mic FIRST + MAX Mic, plain concat in=[1+2])
   = one mic input for both you and Max; "MAX Multi Out" (stacked=1,

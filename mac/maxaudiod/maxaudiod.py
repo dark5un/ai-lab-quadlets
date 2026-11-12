@@ -63,10 +63,53 @@ class Status:
 
     def heartbeat(self, stop):
         while not stop.wait(2):
+            controls.poll()
             self.flush()
 
 
 status = Status()
+
+# ---------------------------------------------------------------- controls
+# MAXBar (or a human) writes cmd-maxaudiod.json next to the heartbeat:
+#   {"link":"up"|"down", "mute_mic":bool, "mute_uplink":bool}
+# polled every heartbeat tick; absent file = all permissive defaults.
+CMD_PATH = os.path.join(STATUS_DIR, "cmd-maxaudiod.json")
+
+
+class Controls:
+    def __init__(self):
+        self.link = "up"
+        self.mute_mic = False
+        self.mute_uplink = False
+        self._mtime = None
+
+    def poll(self):
+        try:
+            m = os.stat(CMD_PATH).st_mtime
+        except OSError:
+            if self._mtime is not None:
+                log.info("cmd file gone - controls reset to defaults")
+                self.__init__()
+                status.bump(link_requested="up", mic_muted=False, uplink_muted=False)
+            return
+        if m == self._mtime:
+            return
+        self._mtime = m
+        try:
+            with open(CMD_PATH) as f:
+                j = json.load(f)
+            self.link = "down" if j.get("link") == "down" else "up"
+            self.mute_mic = bool(j.get("mute_mic"))
+            self.mute_uplink = bool(j.get("mute_uplink"))
+            log.info("controls: link=%s mute_mic=%s mute_uplink=%s",
+                     self.link, self.mute_mic, self.mute_uplink)
+        except Exception as e:
+            log.warning("cmd file unreadable: %s", e)
+        status.bump(link_requested=self.link, mic_muted=self.mute_mic,
+                    uplink_muted=self.mute_uplink)
+
+
+controls = Controls()
 
 
 def find_device(name, kind):
@@ -200,7 +243,7 @@ class Bridge:
             # other participants are also muted while Max talks; permanent
             # fix is server-side AEC/gating at P4 (doc pitfall).
             status.inc("tx_frames")
-            if self.gate and time.time() - self.last_downlink < GATE_HOLD:
+            if controls.mute_uplink or (self.gate and time.time() - self.last_downlink < GATE_HOLD):
                 status.inc("gated_frames")
                 self.tx.put(b"A" + (b"\x00" * 2 * frames))
                 return
@@ -224,13 +267,29 @@ class Bridge:
                             raise
                     try:
                         chunk = self.play_q.get(timeout=0.05)
-                        play.write(chunk.reshape(-1, 1))
+                        if controls.mute_mic:
+                            pass  # drained, not played: MAX Mic stays silent
+                        else:
+                            play.write(chunk.reshape(-1, 1))
                     except queue.Empty:
                         pass
+                    if controls.link == "down":
+                        log.info("link down requested - dropping door socket")
+                        if self.ws is not None:
+                            try:
+                                self.ws.close()
+                            except Exception:
+                                pass
+                        return
 
     def loop(self):
         backoff = 1
         while not self.stop.is_set():
+            controls.poll()
+            if controls.link == "down":
+                status.bump(connected=False)
+                self.stop.wait(1)
+                continue
             try:
                 self.connect()
                 self.run()
