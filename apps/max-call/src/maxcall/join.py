@@ -97,6 +97,8 @@ def main() -> int:
     ap.add_argument("--url", help="live Meet link to join as guest")
     ap.add_argument("--hold", type=float, default=60.0)
     ap.add_argument("--skip-probes", action="store_true")
+    ap.add_argument("--skip-p2p", action="store_true")
+    ap.add_argument("--skip-interop", action="store_true")
     ap.add_argument("--report", default=str(APP / "spike-report.md"))
     args = ap.parse_args()
 
@@ -104,10 +106,12 @@ def main() -> int:
     if not args.skip_probes:
         print("[1/3] probing Meet/alkaline + STUN endpoints...", file=sys.stderr)
         sections["probe"] = run_probe()
-    print("[2/3] aiortc<->aiortc local P2P...", file=sys.stderr)
-    sections["local_p2p"] = run_local_p2p(min(args.hold, 10))
-    print("[3/3] Chromium<->aiortc interop (fake devices)...", file=sys.stderr)
-    sections["interop"] = run_interop(min(args.hold, 10))
+    if not args.skip_p2p:
+        print("[2/3] aiortc<->aiortc local P2P...", file=sys.stderr)
+        sections["local_p2p"] = run_local_p2p(min(args.hold, 10))
+    if not args.skip_interop:
+        print("[3/3] Chromium<->aiortc interop (fake devices)...", file=sys.stderr)
+        sections["interop"] = run_interop(min(args.hold, 10))
 
     if args.url and re.match(r"^https://meet\.google\.com/[a-z0-9-]+", args.url):
         print(f"[live] joining {args.url}...", file=sys.stderr)

@@ -159,6 +159,14 @@ class Observer:
         except Exception:
             pass
         status["title"] = self.page.title()
+        # instant-meeting codes expire when the room empties -> Google
+        # redirects to the workspace marketing landing page.
+        if "workspace.google.com" in self.page.url or \
+           "Join a meeting now" in self.page.evaluate(
+               "() => document.body.innerText.slice(0,2000)"):
+            status["stage"] = "meeting-gone-or-notfound"
+            status["final_url"] = self.page.url
+            return status
         # "Join now" on the prejoin screen (guest, not signed in)
         try:
             join_btn = self.page.get_by_test_id("join-button")
