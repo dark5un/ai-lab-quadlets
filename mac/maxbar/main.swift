@@ -18,6 +18,7 @@
 import AppKit
 import CoreAudio
 import CoreMediaIO
+import AVFoundation
 
 let kSys = AudioObjectID(kAudioObjectSystemObject)
 let kMaxMic = "MAX Mic", kMaxOut = "MAX Out", kMaxCam = "MAX Camera"
@@ -128,16 +129,74 @@ func readDaemons() -> [Daemon] {
     return out
 }
 
+// ---------------------------------------------------------------- self-check (rights)
+// MAXBar is a pure property-reader: measured on macOS 27.2 it needs NO TCC
+// right (mic, camera, Accessibility...) — queries succeed while authorization
+// status is notDetermined, and no prompt ever appears. But that is an
+// assumption about THIS OS build, so the widget verifies its own capabilities
+// every poll and surfaces failures (plus the rights that would gate them)
+// instead of silently showing wrong state. Note: ad-hoc signing means a
+// rebuild can drop any future grant — TCC keys on cdhash.
+struct Capability { let name: String; let ok: Bool; let hint: String }
+
+func caNameStatus(_ obj: AudioObjectID) -> OSStatus {
+    var a = caAddress(kAudioObjectPropertyName); var n: Unmanaged<CFString>?
+    var sz = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+    return AudioObjectGetPropertyData(obj, &a, 0, nil, &sz, &n)
+}
+func caps() -> [Capability] {
+    var out: [Capability] = []
+    let devs = caDevices()
+    let nameOK = devs.contains { caNameStatus($0) == noErr }
+    let goneOK = devs.contains { caUInt32($0, kAudioDevicePropertyDeviceIsRunningSomewhere) != nil }
+    out.append(Capability(name: "CoreAudio enumerate+state", ok: nameOK && goneOK,
+        hint: nameOK && goneOK ? "no rights required"
+              : "coreaudiod/MaxHole unhealthy? (killall -9 coreaudiod) — TCC never gates these reads"))
+    let sys = CMIOObjectID(kCMIOObjectSystemObject)
+    var a = cmioAddress(kCMIOHardwarePropertyDevices); var sz: UInt32 = 0
+    let enumSt = CMIOObjectGetPropertyDataSize(sys, &a, 0, nil, &sz)
+    var cmOK = enumSt == noErr && sz > 0
+    if cmOK {
+        var ids = [CMIOObjectID](repeating: 0, count: Int(sz) / MemoryLayout<CMIOObjectID>.stride)
+        var used: UInt32 = 0
+        if CMIOObjectGetPropertyData(sys, &a, 0, nil, sz, &used, &ids) == noErr {
+            cmOK = ids.contains { id in
+                var ga = cmioAddress(kCMIODevicePropertyDeviceIsRunningSomewhere)
+                var g: UInt32 = 0; var u: UInt32 = 0
+                return CMIOObjectGetPropertyData(id, &ga, 0, nil, 4, &u, &g) == noErr
+            }
+        }
+    }
+    let camAuth = AVCaptureDevice.authorizationStatus(for: .video)
+    out.append(Capability(name: "CMIO enumerate+state", ok: cmOK,
+        hint: cmOK ? "no rights required (verified notDetermined=\(camAuth == .notDetermined))"
+              : "camera state queries blocked — System Settings › Privacy & Security › Camera"
+                + (camAuth == .denied ? " (DENIED for MAXBar; re-grant after every rebuild: ad-hoc cdhash changes)" : "")))
+    let dirExists = FileManager.default.fileExists(atPath: kStatusDir)
+    var listErr: String?
+    if dirExists {  // real read attempt — isReadableFile() lies on dirs (verified)
+        do { _ = try FileManager.default.contentsOfDirectory(atPath: kStatusDir) }
+        catch { listErr = "\(error)" }
+    }
+    let dirOK = !dirExists || listErr == nil
+    out.append(Capability(name: "heartbeat dir readable", ok: dirOK,
+        hint: dirOK ? (dirExists ? "readable" : "absent (no daemon has run yet — fine)")
+              : "BLOCKED — fix perms on \(kStatusDir): \(listErr!)"))
+    let needsInput = false   // MAXBar never opens streams; if that ever changes: mic right
+    out.append(Capability(name: "audio input capture", ok: !needsInput, hint: "not used — by design (owner consent policy)"))
+    return out
+}
+
 // ---------------------------------------------------------------- snapshot + UI
 struct Snapshot {
-    let mic: AudioDev?, out: AudioDev?, cam: (present: Bool, inUse: Bool), daemons: [Daemon]
+    let mic: AudioDev?, out: AudioDev?, cam: (present: Bool, inUse: Bool), daemons: [Daemon], caps: [Capability]
     var audioActive: Bool { (mic?.inUse ?? false) || (out?.inUse ?? false) }
     var linkUp: Bool { daemons.contains { $0.fresh && $0.connected } }
     var daemonUp: Bool { daemons.contains { $0.fresh } }
 }
 func poll() -> Snapshot {
     let (mic, out) = findMaxAudio()
-    return Snapshot(mic: mic, out: out, cam: findMaxCamera(), daemons: readDaemons())
+    return Snapshot(mic: mic, out: out, cam: findMaxCamera(), daemons: readDaemons(), caps: caps())
 }
 
 final class Bar: NSObject, NSMenuDelegate {
@@ -154,8 +213,9 @@ final class Bar: NSObject, NSMenuDelegate {
     func render() {
         let s = snap
         let color: NSColor = s.linkUp ? .systemGreen : (s.daemonUp ? .systemOrange : .systemGray)
+        let warn = s.caps.contains { !$0.ok } ? "⚠ " : ""
         let title = NSMutableAttributedString(
-            string: "MAX ", attributes: [.font: NSFont.menuBarFont(ofSize: 0)])
+            string: "\(warn)MAX ", attributes: [.font: NSFont.menuBarFont(ofSize: 0)])
         title.append(NSAttributedString(string: "●", attributes: [.font: NSFont.menuBarFont(ofSize: 11), .foregroundColor: color]))
         item.button?.attributedTitle = title
     }
@@ -179,6 +239,9 @@ final class Bar: NSObject, NSMenuDelegate {
         row(s.cam.present ? "   MAX Camera: \(s.cam.inUse ? "INSTALLED · streaming" : "installed · idle")"
                           : "   MAX Camera: not installed (pending P2)")
         menu.addItem(.separator())
+        row(s.caps.allSatisfy { $0.ok } ? "Self-check — no special rights needed" : "Self-check — FAILURES:")
+        for c in s.caps { row("   \(c.ok ? "✓" : "✗") \(c.name) — \(c.hint)") }
+        menu.addItem(.separator())
         let q = NSMenuItem(title: "Quit MAXBar", action: #selector(NSApp.terminate(_:)), keyEquivalent: "q"); menu.addItem(q)
     }
     func audioLine(_ label: String, _ d: AudioDev?) -> String {
@@ -196,6 +259,7 @@ if CommandLine.arguments.contains("--selftest") {
     print("MAX Mic: \(s.mic.map { "installed, in-use \($0.inUse)" } ?? "NOT INSTALLED")")
     print("MAX Out: \(s.out.map { "installed, in-use \($0.inUse)" } ?? "NOT INSTALLED")")
     print("MAX Camera: \(s.cam.present ? (s.cam.inUse ? "installed, streaming" : "installed, idle") : "not installed")")
+    for c in s.caps { print("cap \(c.ok ? "✓" : "✗"): \(c.name) — \(c.hint)") }
     exit(0)
 }
 let app = NSApplication.shared

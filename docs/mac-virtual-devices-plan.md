@@ -112,7 +112,9 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   ad-hoc signed, LSUIElement) showing link state (heartbeat), MAX Mic/Out
   installed+STREAMING (CoreAudio 'gone'; 'sact' is static 1 on MaxHole —
   useless), MAX Camera present+streaming (CMIO, lights up at P2). Read-only:
-  opens no streams → no TCC prompt. Installed ~/Applications/MAXBar.app.
+  opens no streams → no TCC prompt. Self-checks its own capability each poll
+  (needs NO rights today; failure would show ⚠ + named gate in the menu).
+  Installed ~/Applications/MAXBar.app.
 
 ## Phases
 - P-1 CODE-M2 ENV (Mac Hermes): sw_vers / chip / brew / Xcode CLT presence;
