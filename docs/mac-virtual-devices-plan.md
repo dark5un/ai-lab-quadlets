@@ -209,6 +209,20 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   trustworthy). Next: clean gate attempt — single bridge (pgrep check),
   fresh Chrome, re-pick incognito devices, headphones; if deaf recurs run
   `uv run python tap_maxout.py` FROM THE OWNER TERMINAL while speaking.
+  MEET GATE run 6 2026-11-12 ~12:55 (owner, headphones): **PASS with
+  caveats** — Max answers questions in the meeting mix (811 audible
+  downlink frames this call), canary silent when Max idle, sustained
+  multi-minute conversation with NO resets and NO runaway after ONE link
+  down/up done right after the incognito participant joined a NEW meeting.
+  That reset turned out to be the cure for the day's recurring "deaf plex"
+  (see new pitfall: personaplex conversation state is blind to browser
+  session changes). CAVEATS carried to P4 polish: (a) crackle on Max's
+  voice — Meet re-encodes the synthetic mic stream through its own WebRTC
+  Opus/AEC/AGC pipeline (independent of noise-cancellation setting; A/B'd);
+  the wasm app lacks those two hops, which is why it sounds cleaner;
+  (b) response latency above wasm baseline — expected, two extra
+  encode/jitter-buffer hops, within P1 usability; P3 must measure the
+  <=450 ms spec for real. P1 GATES NOW GREEN -> P2 UNBLOCKED.
 - P2 MAC video: MaxCamHost+MaxCamExtension, JPEG 'V' path. GATE: QuickTime
   shows MAX Camera with Max animating (server-rendered).
   PREP 2026-11-12: BLOCKED on P1 Meet gate PASS first (kickoff contract).
@@ -368,6 +382,22 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   door's single-session policy ('door connected -> Connection to remote
   host was lost -> retry' storm; server logs 'rejecting second session').
   Before ANY link debugging: `pgrep -fl maxaudiod.py` — exactly one.
+- **personaplex conversation state is BLIND to browser session changes**
+  (root-caused 2026-11-12 — this, not the ring, was the recurring "deaf
+  plex"): new meeting or new incognito tab = the model keeps listening to
+  the old call and answers nothing (autogreet at leg creation works, then
+  silence). Cure: ONE link down/up via MAXBar right AFTER the incognito
+  participant joins — fresh plex leg, fresh conversation, autogreets in
+  1-2 s; then the conversation runs indefinitely with no further resets
+  (validated: 800+ audible frames, canary clean). Never reset mid-
+  conversation; mid-call loop-kills stay "Mute uplink".
+- **Crackle on Max's voice in Meet = WebRTC re-encode, not the bridge**
+  (A/B'd 2026-11-12): Meet runs its mic pipeline (Opus + AEC/AGC) over the
+  synthetic MAX Mic stream regardless of the noise-cancellation setting;
+  the wasm max-headroom app lacks those two WebRTC hops and sounds clean.
+  Steady 25/s downlink + zero HAL overload logs rule out transport/driver.
+  P4: server-side AEC + codec path review; P3 must measure the <=450 ms
+  latency spec against this known overhead.
 - Fresh machine: github.com may be missing from ~/.ssh/known_hosts —
   ssh-keyscan + check against GitHub's published ED25519 fingerprint
   (SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU), then append.
