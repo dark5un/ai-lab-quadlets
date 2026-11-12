@@ -149,7 +149,11 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   tailscale status (must see ai); decide Remote Login on/off for cross-
   debugging; create a private dir for the MaxPresence sources.
   STATUS 2026-11-12 (code-m2): **done** — macOS 27.2 / M2 Max / brew 7.0.13 /
-  Xcode CLT only (no full Xcode — P2 prerequisite to install); tailscale peer
+  Xcode CLT active dir (UPDATE P2-prep 2026-11-12: Xcode.app 27.2 found
+  installed in /Applications, 3.7G on disk, never activated — `sudo
+  xcode-select -s /Applications/Xcode.app/Contents/Developer` is the
+  owner-run switch needed before P2 builds; verify xcodebuild -version
+  after); tailscale peer
   `ai` peer live (tailnet IP not committed); Remote Login kept OFF (work is local); sources
   in this private repo under `mac/` (branch mac-maxpresence, merged to main
   per owner).
@@ -174,9 +178,28 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   STATUS 2026-11-12 (code-m2): MaxHole 0.1.0 installed + ad-hoc loaded by
   coreaudiod; device-loop gate **PASS** (owner-run `maxaudiod.py
   loopback-test`: both pipes self-loop tone-peak=1.00, cross-leak 0.00 —
-  per-device ring-buffer fix confirmed). Meet gate pending P0 door URL.
+  per-device ring-buffer fix confirmed).
+  MEET GATE run 1 2026-11-12 (owner, two-participant model): **FAIL — human
+  heard no Max in the call**, Mac audio chain exonerated by counters (see
+  counter-triage pitfall): link UP all along, uplink tx at exact real-time
+  rate (plex heard the human), plex ANSWERED (280 audible downlink frames
+  ~= 5.6 s speech, played into MAX Mic, mute flags false), and NO
+  self-hearing runaway (gated_frames=0 with half-duplex gate OFF —
+  two-participant topology validated live). Break is inside the incognito
+  Meet session: mic not really on "MAX Mic", private-window mic permission,
+  or Meet noise suppression squashing the synthetic voice. Gate stays
+  PENDING until a PASS run (triage checklist in the runbook).
 - P2 MAC video: MaxCamHost+MaxCamExtension, JPEG 'V' path. GATE: QuickTime
   shows MAX Camera with Max animating (server-rendered).
+  PREP 2026-11-12: BLOCKED on P1 Meet gate PASS first (kickoff contract).
+  Prereq: full Xcode — Xcode.app 27.2 is already on disk (see P-1 update);
+  needs the owner-run `sudo xcode-select -s` switch, then `xcodebuild
+  -version` sanity + first probe of Camera Extension build/sign/enable
+  path (System Settings > Privacy & Security > Camera Extensions; whether
+  ad-hoc signing suffices locally or a dev policy profile is needed is an
+  OPEN question — verify against Apple docs before building, WWDC22 10022).
+  maxaudiod currently ignores 'V' frames (reader: tag==b'V' -> pass); P2
+  adds the MaxCamHost consumer + XPC leg to the extension.
 - P3 FULL JOIN: incognito Meet with MAX Cam + MAX Mic: 10-minute
   conversation; GATE: speech-to-motion latency <= 450 ms measured, no echo,
   no artifacts.
@@ -278,6 +301,16 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   link -framework CoreAudio -framework AudioToolbox -framework CoreFoundation
   -framework Accelerate (CLT-only machine verified). The upstream .xcodeproj is
   just a wrapper around the same single .c file.
+- **Counter-triage localizes "can't hear Max" WITHOUT opening any audio
+  stream** (proven 2026-11-12, Meet run 1): diff the heartbeat at
+  ~/Library/Application Support/MaxPresence/maxaudiod.json over ~6 s.
+  tx climbing at ~50/s = meeting audio IS reaching plex (incognito speaker
+  routing to MAX Out is fine). rx ~12.5-25/s with speaking_frames Δ=0 =
+  connected-but-silent plex (silence padding). speaking_frames Δ>0 =
+  audible plex speech WAS played into MAX Mic (with mute flags false).
+  All-green + human deaf => the fault is inside Chrome/Meet (mic device
+  selection, private-window mic permission, noise suppression), not Mac
+  audio — don't touch the drivers, fix the browser session.
 - Fresh machine: github.com may be missing from ~/.ssh/known_hosts —
   ssh-keyscan + check against GitHub's published ED25519 fingerprint
   (SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU), then append.
