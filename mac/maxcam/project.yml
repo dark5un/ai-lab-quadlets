@@ -27,8 +27,8 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: "MAX Camera Extension"
         # Code=9 fix (2026-11-12): sysextd requires CFBundleShortVersionString
         # in the EXTENSION plist; these generate it (Xcode template parity).
-        MARKETING_VERSION: "1.0.0"
-        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "1.0.1"
+        CURRENT_PROJECT_VERSION: "2"
         CODE_SIGN_ENTITLEMENTS: ext.entitlements
   MaxCamHost:
     type: application
