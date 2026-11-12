@@ -234,10 +234,13 @@ class Bridge:
 
     def write_mailbox(self, payload: bytes):
         """Atomic latest-frame handoff for the Camera Extension (P2)."""
-        tmp = os.path.join(self.mailbox, ".frame.tmp.jpg")
+        mailbox = self.mailbox
+        if not mailbox:
+            return
+        tmp = os.path.join(mailbox, ".frame.tmp.jpg")
         with open(tmp, "wb") as f:
             f.write(payload)
-        os.replace(tmp, os.path.join(self.mailbox, "frame.jpg"))
+        os.replace(tmp, os.path.join(mailbox, "frame.jpg"))
         status.inc("mailbox_frames")
 
     # -- audio side
