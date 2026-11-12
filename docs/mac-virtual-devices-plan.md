@@ -114,6 +114,18 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
 - Sources: `mac/maxhole/` (BlackHole 0.7.1 @ 6008d295 fork; UPSTREAM.md lists
   deltas) + `mac/maxaudiod/` (uv python prototype).
 - Installed on code-m2: `/Library/Audio/Plug-Ins/HAL/MaxHole.driver`,
+- maxaudiod RUNS AS LaunchAgent `com.onlyascii.maxaudiod` since 2026-11-12
+  (owner-approved: answers "must I keep running run-bridge.sh manually" ->
+  no). Files: `mac/maxaudiod/com.onlyascii.maxaudiod.plist` +
+  `manage-launchd.sh` (install/remove/status; bootstrap itself must be run
+  by a human or from outside the agent sandbox — agent launchctl calls are
+  hard-blocked). Log: ~/Library/Application Support/MaxPresence/maxaudiod.log.
+  Policy shift: the standing per-case mic-consent rule now reads "owner
+  pre-approved autostart of the bridge; per-session consent = MAXBar
+  link/kill switch + the runtime control file". KeepAlive auto-heals door/
+  plexpipe restarts (observed: 502s during P0 deploys recovered in ~8 s);
+  NEVER leave a manual run-bridge.sh terminal running alongside the agent —
+  duplicate-bridge race pitfall still applies (manage-launchd.sh pkills first).
   bundle-id `io.onlyascii.maxhole`, ad-hoc signed, loaded OK on macOS 27.2.
 - Device names are exactly **"MAX Mic"** and **"MAX Out"** (2ch each,
   48000+24000 Hz, kLatency_Frame_Size=512). Volume/mute/clock-source/
@@ -481,6 +493,18 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   Steady 25/s downlink + zero HAL overload logs rule out transport/driver.
   P4: server-side AEC + codec path review; P3 must measure the <=450 ms
   latency spec against this known overhead.
+- **com.apple.developer.system-extension.install is ENFORCEMENT-GATED**
+  (proven 2026-11-12, binary-search on code-m2): a host app carrying this
+  entitlement WITHOUT a valid provisioning profile granting System
+  Extensions is SIGKILLed at exec ('Killed: 9') — by the entitlement alone,
+  ad-hoc or Apple-Development-signed alike, hardened or not; remove the
+  entitlement and the identical bundle runs. NO manual-signing workaround
+  exists for the host app: the profile is mandatory, so an Apple ID whose
+  team owns the capability MUST be signed into Xcode (free personal team:
+  UNTESTED whether Apple grants a dev profile with System Extensions —
+  that is the remaining build-day question). Diagnostic: codesign --verify
+  passes; only exec dies; no crash report — grep nothing in AMFI default
+  logs; binary-search the entitlement set instead of hunting logs.
 - Fresh machine: github.com may be missing from ~/.ssh/known_hosts —
   ssh-keyscan + check against GitHub's published ED25519 fingerprint
   (SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU), then append.

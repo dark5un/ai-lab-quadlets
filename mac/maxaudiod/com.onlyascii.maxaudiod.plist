@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key><string>com.onlyascii.maxaudiod</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/px/Workspaces/github.com/dark5un/ai-lab-quadlets/mac/maxaudiod/run-bridge.sh</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/px/Workspaces/github.com/dark5un/ai-lab-quadlets/mac/maxaudiod</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key><string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>ThrottleInterval</key><integer>15</integer>
+    <key>StandardOutPath</key>
+    <string>/Users/px/Library/Application Support/MaxPresence/maxaudiod.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/px/Library/Application Support/MaxPresence/maxaudiod.log</string>
+</dict>
+</plist>
