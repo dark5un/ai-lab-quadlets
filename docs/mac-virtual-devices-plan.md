@@ -3,10 +3,19 @@
 Status: PLAN v2 (investigated 2026-11-12; owner directive: build it ourselves,
 task-specific — no OBS/BlackHole as end-user tools; fork only where the OS
 forces a driver shape). Mac side is built by Hermes-on-the-Mac from this brief.
-Scenario: Panos joins Meet incognito from his Mac like any human; picks
-"MAX Camera" + "MAX Mic" devices that this tool produces from the server
-stack (personaplex + max-face + max-bridge). Zero browser automation, zero
-Google bot-gate fights (fact #79 killed the CDP route to fallback-only).
+Scenario: Panos joins Meet incognito from the stepping-stone Mac like any
+human; picks "MAX Camera" + "MAX Mic" devices that this tool produces from
+the server stack (personaplex + max-face + max-bridge). Zero browser
+automation, zero Google bot-gate fights (fact #79 killed the CDP route to
+fallback-only).
+
+STEPPING-STONE MACHINE (owner, 2026-11-12): **code-m2** — a Mac separate
+from mini-m4 (mini-m4 stays the rerank/MLX inference node). tailnet
+<code-m2-tailnet-ip>, user panos@, currently NO ssh from ai (port 22 refused —
+enable Remote Login if the Mac Hermes needs remote help, otherwise work
+happens locally on code-m2 where its own Hermes runs). Expect macOS 13+
+(M2-era): confirm sw_vers at P-1; per-app output device assignment needs
+macOS 14+.
 
 ## Verified DIY mechanisms (source-checked 2026-11-12)
 - V-1 VIDEO: CoreMediaIO **Camera Extensions** (WWDC22 session 10022, macOS
@@ -41,9 +50,10 @@ Google bot-gate fights (fact #79 killed the CDP route to fallback-only).
 - V-4 Rates: build MaxHole kSampleRates={48000,24000}; agent resamples
   24k (plex native) <-> 48k (CoreAudio default) — libsamplerate or
   AVAudioConverter on Mac; ffmpeg on server.
-- V-5 Transport: tailnet (Mac = mini-m4 M4 16GB, ssh px@, fact #67).
-  Server exposes plexpipe via `tailscale serve --https=84xx` (WSS door
-  pattern already proven live with the :8456 plex door).
+- V-5 Transport: tailnet — code-m2 and ai are already peers on the same
+  tailnet (both in `tailscale status`). Server exposes plexpipe via
+  `tailscale serve --https=84xx` (WSS door pattern already proven live
+  with the :8456 plex door).
 - V-6 Rendering: P1 server-side (headless chromium screencasts JPEG frames
   down the door — the exact pipeline apps/max-call already proved);
   polish phase Mac-side (extension renders blendshape JSON -> three.js
@@ -81,6 +91,9 @@ MAC (Hermes-on-Mac builds from this brief):
    receives blendshape JSON and renders locally (option b).
 
 ## Phases
+- P-1 CODE-M2 ENV (Mac Hermes): sw_vers / chip / brew / Xcode CLT presence;
+  tailscale status (must see ai); decide Remote Login on/off for cross-
+  debugging; create a private dir for the MaxPresence sources.
 - P0 SERVER: implement plexpipe + door + protocol doc; loop-test with a
   python client (no Mac): feed recorded speech -> hear plex reply downlink
   + bridge lip animation. GATE: round-trip audio < 1 s.
