@@ -55,7 +55,9 @@ FEAT_RATE = 16000   # HuBERT frontend is 16k-hard (Wav2Vec2FeatureExtractor
                     # raises on other sampling_rate) -> slices resampled per call
 OUT_W, OUT_H = 640, 480                                             # door 'V' contract
 JPEG_QUALITY = int(os.environ.get("MAXFACE_JPEG_QUALITY", "82"))
-SILENCE_RMS = float(os.environ.get("MAXFACE_SILENCE_RMS", "300"))   # int16 RMS gate (~ -40 dBFS)
+SILENCE_RMS = float(os.environ.get("MAXFACE_SILENCE_RMS", "1200"))   # int16 RMS gate; hysteresis at 0.4x below
+SILENCE_HOLD = float(os.environ.get("MAXFACE_SILENCE_HOLD", "500"))  # keep rendering while above this once speech opened
+GLOBAL_NORM = os.environ.get("MAXFACE_GLOBAL_NORM", "1") == "1"      # normalize slices with stream stats instead of per-slice std
 FRAME_CAP = int(os.environ.get("MAXFACE_FRAME_CAP", "60"))          # drop-oldest watermark
 AUDIO_MAX_S = float(os.environ.get("MAXFACE_AUDIO_MAX_S", "4.0"))   # ring buffer cap
 STAT_EVERY = 2.0
@@ -89,6 +91,10 @@ class Engine:
             output_transform="bgr",
         )
         self.state = self.worker.make_state()
+        if GLOBAL_NORM:
+            # offline path normalized the whole clip once; per-slice
+            # do_normalize amplifies quiet gaps into speech-like features
+            self.worker.v2.feature_extractor.do_normalize = False
         self.ready = True
         log.info("QuickTalk worker ready in %.1fs frames=%d fps=%s",
                  time.perf_counter() - t0, len(self.worker.frames), self.worker.fps)
@@ -103,7 +109,7 @@ class Engine:
         self.stats["idle_frames"] += 1
         return frame
 
-    def render_slice(self, pcm: np.ndarray):
+    def render_slice(self, pcm: np.ndarray, norm: tuple[float, float] | None = None):
         """One speech slice -> generated frames (blocking; runs in a thread)."""
         from scipy.signal import resample_poly
 
@@ -112,7 +118,14 @@ class Engine:
             from math import gcd
             d = gcd(IN_RATE, FEAT_RATE)
             pcm = resample_poly(pcm.astype(np.float64),
-                                FEAT_RATE // d, IN_RATE // d).astype(np.int16)
+                                FEAT_RATE // d, IN_RATE // d)
+        else:
+            pcm = pcm.astype(np.float64)
+        if norm is not None:
+            mean, std = norm
+            pcm = np.clip((pcm - mean) / std, -4.0, 4.0).astype(np.float32)
+        else:
+            pcm = np.clip(pcm, -32768, 32767).astype(np.int16)
         reps, _feat_s = self.worker.prepare_pcm_features(pcm, FEAT_RATE)
         out = []
         for frame in self.worker.generate_frames_from_reps(reps, state=self.state):
@@ -150,13 +163,29 @@ class Feed:
         self.subscribers: set = set()
         self.speaking = False
         self.last_audio_at = 0.0
+        # running stats over all received speech-candidate samples (global
+        # normalization emulation of the offline whole-clip path)
+        self.n_sum = 0.0
+        self.n_sq = 0.0
+        self.n_cnt = 0
 
     def push_pcm(self, chunk: np.ndarray):
+        f = chunk.astype(np.float64)
+        self.n_sum += float(f.sum())
+        self.n_sq += float((f * f).sum())
+        self.n_cnt += f.size
         self.audio = np.concatenate([self.audio, chunk])
         cap = int(IN_RATE * AUDIO_MAX_S)
         if self.audio.size > cap:
             self.audio = self.audio[-cap:]
         self.last_audio_at = time.time()
+
+    def norm_stats(self) -> tuple[float, float] | None:
+        if self.n_cnt < IN_RATE:      # < 1 s of audio: not trustworthy
+            return None
+        mean = self.n_sum / self.n_cnt
+        var = max(self.n_sq / self.n_cnt - mean * mean, 1.0)
+        return mean, var ** 0.5
 
     def take_slice(self) -> np.ndarray | None:
         if self.audio.size < MAXFACE_SLICE_SAMPLES:
@@ -253,20 +282,32 @@ async def main():
         dbg_n = 0
         while True:
             t0 = time.perf_counter()
+            if not feed.subscribers:
+                # demand-driven (maxvid precedent): no viewer -> no pumping;
+                # audio ring still trims via push_pcm cap
+                feed.audio = np.zeros(0, np.int16)
+                feed.pending.clear()
+                await asyncio.sleep(0.2)
+                continue
             # kick one render slice when audio + queue allow it (watermark gate)
             if engine.ready and not render_busy and len(feed.pending) < FRAME_CAP:
                 s = feed.take_slice()
+                rms = 0.0
+                if s is not None:
+                    rms = float(np.sqrt(np.mean(s.astype(np.float64) ** 2)))
                 if s is not None and DEBUG:
-                    _rms = float(np.sqrt(np.mean(s.astype(np.float64) ** 2)))
-                    log.info("DBG take_slice rms=%.0f gate=%s pending=%d busy=%s",
-                             _rms, _rms > SILENCE_RMS, len(feed.pending), render_busy)
-                if s is not None and np.sqrt(np.mean(s.astype(np.float64) ** 2)) > SILENCE_RMS:
+                    log.info("DBG take_slice rms=%.0f pending=%d busy=%s",
+                             rms, len(feed.pending), render_busy)
+                gate_open = s is not None and (
+                    rms > SILENCE_RMS or (feed.speaking and rms > SILENCE_HOLD))
+                if gate_open:
                     if not feed.speaking:
-                        log.info("speech gate opened")
+                        log.info("speech gate opened (rms=%.0f)", rms)
                     feed.speaking = True
+                    norm = feed.norm_stats() if GLOBAL_NORM else None
 
-                    def run(s=s):
-                        return engine.render_slice(s)
+                    def run(s=s, norm=norm):
+                        return engine.render_slice(s, norm)
 
                     def done(fut):
                         nonlocal render_busy
