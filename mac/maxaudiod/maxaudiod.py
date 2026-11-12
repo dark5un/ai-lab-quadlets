@@ -39,6 +39,7 @@ class Status:
                      "last_connect": None, "last_stat": None,
                      "tx_frames": 0, "rx_frames": 0, "errors": 0,
                      "gated_frames": 0, "speaking_frames": 0,
+                     "mailbox_frames": 0,
                      "plex_up": None, "bridge_up": None}
 
     def bump(self, **kw):
@@ -176,9 +177,12 @@ def loopback_test():
 
 # ---------------------------------------------------------------- door bridge
 class Bridge:
-    def __init__(self, door, gate=False):
+    def __init__(self, door, gate=False, mailbox=None):
         self.door = door
         self.gate = gate
+        self.mailbox = mailbox
+        if mailbox:
+            os.makedirs(mailbox, exist_ok=True)
         self.last_downlink = 0.0
         self.tx = queue.Queue()
         self.ws = None
@@ -213,7 +217,8 @@ class Bridge:
                         status.inc("speaking_frames")
                     self.play_q.put(pcm24)
                 elif tag == b"V":
-                    pass  # video is P2; ignore for now
+                    if self.mailbox:
+                        self.write_mailbox(payload)
             else:
                 try:
                     ctrl = json.loads(msg)
@@ -226,6 +231,14 @@ class Bridge:
                                 plex_up=ctrl.get("plex_up"), bridge_up=ctrl.get("bridge_up"),
                                 server_up_frames=ctrl.get("up_frames"),
                                 server_down_frames=ctrl.get("down_frames"))
+
+    def write_mailbox(self, payload: bytes):
+        """Atomic latest-frame handoff for the Camera Extension (P2)."""
+        tmp = os.path.join(self.mailbox, ".frame.tmp.jpg")
+        with open(tmp, "wb") as f:
+            f.write(payload)
+        os.replace(tmp, os.path.join(self.mailbox, "frame.jpg"))
+        status.inc("mailbox_frames")
 
     # -- audio side
     def run(self):
@@ -312,6 +325,10 @@ def main():
                          "two-session model (Max joins as his own participant) "
                          "Meet never feeds Max his own voice, so the gate is "
                          "unneeded and would kill barge-in.")
+    ap.add_argument("--mailbox", default=None,
+                    help="P2: dir (App Group container/mailbox) where JPEG 'V' "
+                         "frames are written atomically as frame.jpg for the "
+                         "MAX Camera extension; unset = drop V frames (P1 behaviour)")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
@@ -337,7 +354,7 @@ def main():
             sys.exit(loopback_test())
         if not args.door:
             raise SystemExit("run mode needs --door (see docs/mac-virtual-devices-plan.md; P0 door URL lands in the doc)")
-        Bridge(args.door, gate=args.gate).loop()
+        Bridge(args.door, gate=args.gate, mailbox=args.mailbox).loop()
     finally:
         stop.set()
         status.bump(connected=False)
