@@ -127,6 +127,19 @@ MAC (Hermes-on-Mac builds from this brief):
   ~30 ms + video pipeline ~50 ms => <=450 ms achievable.
 - VRAM settled: personaplex + max-face (~790 MiB) coexist on the 4070 Ti.
 - GPLv3 MaxHole fork: private repos only. Never name anything "ryoku".
+- **BlackHole 2Sink devices are NOT isolated** (hit 2026-11-12, P1): upstream
+  BlackHole.c shares ONE gRingBuffer, ONE zero-time-stamp clock and ONE
+  lastOutputSampleTime/isBufferClear state across Device+Device2 —
+  DoIOOperation/GetZeroTimeStamp `#pragma unused(inDeviceObjectID)`. Two live
+  sinks cross-talk (breaks V-3). MaxHole fork fixes this with per-device
+  arrays (device_index() helper); keep the fix on any rebase.
+- **No full Xcode needed for the HAL driver**: plain `clang -bundle` works —
+  link -framework CoreAudio -framework AudioToolbox -framework CoreFoundation
+  -framework Accelerate (CLT-only machine verified). The upstream .xcodeproj is
+  just a wrapper around the same single .c file.
+- Fresh machine: github.com may be missing from ~/.ssh/known_hosts —
+  ssh-keyscan + check against GitHub's published ED25519 fingerprint
+  (SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU), then append.
 
 ## Server endpoints inventory (for the brief)
 - personaplex :8998 loopback (wss door :8456 exists today)
