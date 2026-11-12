@@ -19,6 +19,7 @@ OUT = "MAX Out"     # our read target; meeting app writes to its OUTPUT side
 CAP_RATE = 48000
 PLAY_NATIVE = 24000  # downlink rate == MaxHole native; no resample needed
 FRAME_MS = 20
+GATE_HOLD = 1.2  # s — half-duplex loop-break (see Bridge.on_capture)
 
 log = logging.getLogger("maxaudiod")
 
@@ -37,6 +38,7 @@ class Status:
                      "connected": False, "started": time.time(),
                      "last_connect": None, "last_stat": None,
                      "tx_frames": 0, "rx_frames": 0, "errors": 0,
+                     "gated_frames": 0, "speaking_frames": 0,
                      "plex_up": None, "bridge_up": None}
 
     def bump(self, **kw):
@@ -133,6 +135,7 @@ def loopback_test():
 class Bridge:
     def __init__(self, door):
         self.door = door
+        self.last_downlink = 0.0
         self.tx = queue.Queue()
         self.ws = None
         self.stop = threading.Event()
@@ -159,6 +162,11 @@ class Bridge:
                 if tag == b"A":
                     status.inc("rx_frames")
                     pcm24 = np.frombuffer(payload, dtype="<i2").astype(np.float32) / 32768.0
+                    # energy-aware gate: plexpipe pads the downlink with
+                    # silent real-time frames — gate only on actual speech
+                    if float(np.sqrt(np.mean(pcm24 ** 2))) > 0.01:
+                        self.last_downlink = time.time()
+                        status.inc("speaking_frames")
                     self.play_q.put(pcm24)
                 elif tag == b"V":
                     pass  # video is P2; ignore for now
@@ -183,7 +191,18 @@ class Bridge:
         cap_frames = int(CAP_RATE * FRAME_MS / 1000)
 
         def on_capture(indata, frames, tsi, status_info):
+            # HALF-DUPLEX GATE (2026-11-12): Meet plays back Max's own voice
+            # through the speaker path straight into MAX Out, so plexpipe
+            # hears Max and answers itself — a self-sustaining loop (observed
+            # live: downlink frame rate climbs with no human speaking).
+            # While a downlink chunk is recent, uplink is silenced. Trade-off:
+            # other participants are also muted while Max talks; permanent
+            # fix is server-side AEC/gating at P4 (doc pitfall).
             status.inc("tx_frames")
+            if time.time() - self.last_downlink < GATE_HOLD:
+                status.inc("gated_frames")
+                self.tx.put(b"A" + (b"\x00" * 2 * frames))
+                return
             mono = (indata[:, 0] + indata[:, 1]) * 0.5  # L+R downmix
             pcm = (np.clip(mono, -1, 1) * 32767).astype("<i2")  # s16le 48k mono
             self.tx.put(b"A" + pcm.tobytes())

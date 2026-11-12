@@ -219,6 +219,19 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   pick one channel — if so, fallback = in-driver mixing: anything played into
   MAX Mic is summed in the ring buffer, so a tiny mic->MAX-Mic pump gives a
   true mono mix (needs standing mic consent; decide at P3-echo time).
+- **Max hears himself — self-answer runaway loop (2026-11-12, observed live
+  in Meet + fixed in maxaudiod)**: Meet re-plays everything it receives,
+  including Max's voice from MAX Mic/MAX Mix In; that playback reaches MAX
+  Out -> uplink -> plex hears Max -> answers itself (downlink rate climbs
+  with no human speech; multilingual model drifts language — owner heard
+  "Chinese"). maxaudiod now gates UPLINK for 1.2 s after each *audible*
+  downlink frame (energy rms>0.01 — plexpipe pads silence at 12.5-25/s
+  real-time, a content-blind gate jams the uplink permanently — measured).
+  Verified: runaway decayed to zero new speaking frames; gate never fires
+  on silence. Trade-off = half-duplex: humans are muted for ~1.2 s after
+  Max speaks; permanent fix is server-side AEC at P4 (plexpipe knows its
+  own playback exactly). Interim: owner should use headphones — acoustic
+  speaker->built-in-mic echo into MAX Mix In also loops into the meeting.
 - **Trailing-dot SNI kills tailscale-serve doors for OpenSSL-family clients
   (2026-11-12, root-caused by byte-level ClientHello capture+replay on ai)**:
   `tailscale status --json` gives peer DNSName WITH a trailing dot
