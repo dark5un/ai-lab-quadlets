@@ -11,6 +11,10 @@ tailscale serve :8457). Protocol (JSON control + binary tag 'A'/'V'):
   C->S {"t":"testvideo","on":true|false}  (video leg: swap the real
        server-rendered feed for an ffmpeg testsrc 'V' feed (plumbing-test
        fallback), and back with on:false)
+  C->S {"t":"skin","skin":"mannequin"|"quicktalk"}  (video leg: which
+       server-rendered feed to relay — mannequin = maxvid three.js
+       (default), quicktalk = maxface learned-face renderer (ticket 07);
+       switching is immediate, each feed relays with reconnect/backoff)
 
 The video leg streams REAL Max frames by default: it relays JPEG frames from
 the maxvid renderer (MAXVID_URL, V-6a: headless chromium of the max-headroom
@@ -21,7 +25,9 @@ heartbeats and retries; the testvideo toggle still works as fallback
 Internals: 'A' uplink -> ffmpeg 48k->24k -> sphn OpusStreamWriter ->
 personaplex 0x01+Ogg (framing mirrors duplex-bus fdb_personaplex.py, the
 live-proven python mirror). plex downlink 0x01+Ogg -> sphn OpusStreamReader
--> PCM fan-out: (1) 'A' downlink to the Mac, (2) max-bridge /feed (lips).
+-> PCM fan-out: (1) 'A' downlink to the Mac, (2) max-bridge /feed (lips),
+(3) maxface /audio-in (learned-face renderer; persistent like the bridge
+feed, cheap no-op while maxface is down).
 While the uplink starves we pad silence so both streams stay continuous
 (full-duplex plex + A2F NIM low-fps rule).
 
@@ -42,6 +48,8 @@ PORT = int(os.environ.get("PLEXPIPE_PORT", "8991"))
 PLEX_URL = os.environ.get("PLEX_URL", "ws://systemd-personaplex:8998")
 BRIDGE_URL = os.environ.get("BRIDGE_URL", "ws://systemd-max-bridge:8990")
 MAXVID_URL = os.environ.get("MAXVID_URL", "ws://systemd-maxvid:8992/frames")
+MAXFACE_URL = os.environ.get("MAXFACE_URL", "ws://systemd-maxface:8993/frames")
+MAXFACE_AUDIO_URL = os.environ.get("MAXFACE_AUDIO_URL", "ws://systemd-maxface:8993/audio-in")
 TEXT_PROMPT = os.environ.get("PLEX_TEXT_PROMPT", "You enjoy having a good conversation.")
 VOICE_PROMPT = os.environ.get("PLEX_VOICE_PROMPT", "pxvoice.wav")
 
@@ -94,8 +102,47 @@ class BridgeFeed:
             pass  # drop oldest-facing: lips animation is best-effort
 
 
+class PcmFeed:
+    """Persistent maxface /audio-in connection: JSON header then PCM chunks.
+    Mirror of BridgeFeed — the learned-face renderer taps the same downlink."""
+
+    def __init__(self, url: str, label: str):
+        self.url = url
+        self.label = label
+        self.q: asyncio.Queue = asyncio.Queue(maxsize=200)
+        self.up = False
+
+    async def run(self, stop: asyncio.Event):
+        while not stop.is_set():
+            try:
+                async with websockets.connect(self.url) as ws:
+                    await ws.send(json.dumps({"rate": SR}))
+                    self.up = True
+                    log(f"{self.label} feed connected")
+                    while not stop.is_set():
+                        try:
+                            chunk = await asyncio.wait_for(self.q.get(), timeout=0.5)
+                        except asyncio.TimeoutError:
+                            continue
+                        await ws.send(chunk)
+            except Exception as e:
+                self.up = False
+                if stop.is_set():
+                    break
+                log(f"{self.label} feed down: {e!r}")
+                await asyncio.sleep(1.0)
+        self.up = False
+
+    def push(self, pcm16: bytes):
+        try:
+            self.q.put_nowait(pcm16)
+        except asyncio.QueueFull:
+            pass  # renderer is best-effort: drop like the lips feed
+
+
 async def plex_session(ws, stop: asyncio.Event, stats: dict,
-                       ff_buf: bytearray, bridge: "BridgeFeed"):
+                       ff_buf: bytearray, bridge: "BridgeFeed",
+                       renderer: "PcmFeed"):
     """Dial personaplex and run the duplex loop for one Mac session."""
     url = f"{PLEX_URL}/api/chat?text_prompt={quote(TEXT_PROMPT)}&voice_prompt={quote(VOICE_PROMPT)}"
     ow = sphn.OpusStreamWriter(SR)
@@ -150,6 +197,7 @@ async def plex_session(ws, stop: asyncio.Event, stats: dict,
                         stats["down_bytes"] += len(s16)
                         stats["down_frames"] += 1
                         bridge.push(s16)
+                        renderer.push(s16)
                         try:
                             await ws.send(b"A" + s16)
                         except Exception:
@@ -231,8 +279,9 @@ async def handle(ws):
     stop = asyncio.Event()
     stats = {"t0": time.time(), "up_bytes": 0, "down_bytes": 0,
              "up_frames": 0, "down_frames": 0, "video_frames": 0,
-             "plex_up": False, "bridge_up": False}
+             "plex_up": False, "bridge_up": False, "renderer_up": False}
     bridge = BridgeFeed()
+    renderer = PcmFeed(MAXFACE_AUDIO_URL, "maxface")
     ff_buf = bytearray()
 
     ff = await asyncio.create_subprocess_exec(
@@ -269,6 +318,7 @@ async def handle(ws):
     async def heartbeat():
         while not stop.is_set():
             stats["bridge_up"] = bridge.up
+            stats["renderer_up"] = renderer.up
             payload = {k: v for k, v in stats.items()
                        if not k.startswith("_") and k != "up_bytes_mark"}
             payload["t"] = "stat"
@@ -280,7 +330,8 @@ async def handle(ws):
             await asyncio.sleep(STAT_EVERY)
 
     tasks = [asyncio.create_task(c) for c in
-             (bridge.run(stop), plex_session(ws, stop, stats, ff_buf, bridge),
+             (bridge.run(stop), renderer.run(stop),
+              plex_session(ws, stop, stats, ff_buf, bridge, renderer),
               ff_reader(), door_reader(), heartbeat())]
     done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
     # door_reader or plex_session finishing ends the session
@@ -298,14 +349,15 @@ async def handle(ws):
         f"{ {k: stats[k] for k in ('up_bytes', 'down_bytes', 'plex_up')} }")
 
 
-async def real_feed(ws, stop: asyncio.Event, stats: dict):
-    """Relay maxvid server-rendered JPEG frames as 'V' (V-6a real feed)."""
+async def relay_feed(ws, stop: asyncio.Event, stats: dict, url: str, label: str):
+    """Relay JPEG frames from a renderer (maxvid mannequin / maxface
+    QuickTalk) as 'V', with reconnect + backoff."""
     backoff = 1.0
     while not stop.is_set():
         try:
-            async with websockets.connect(MAXVID_URL, max_size=2**22) as vws:
-                log(f"maxvid feed connected ({MAXVID_URL})")
-                stats["video_source"] = "real"
+            async with websockets.connect(url, max_size=2**22) as vws:
+                log(f"{label} feed connected ({url})")
+                stats["video_source"] = label
                 backoff = 1.0
                 async for msg in vws:
                     if stop.is_set():
@@ -313,23 +365,30 @@ async def real_feed(ws, stop: asyncio.Event, stats: dict):
                     if isinstance(msg, (bytes, bytearray)):
                         stats["video_frames"] += 1
                         await ws.send(b"V" + msg)
+                    elif isinstance(msg, str):
+                        try:
+                            stats["renderer_stat"] = json.loads(msg)
+                        except json.JSONDecodeError:
+                            pass
         except Exception as e:
             if stop.is_set():
                 break
             stats["video_source"] = "down"
-            log(f"maxvid feed down: {e!r}; retry in {backoff:.0f}s")
+            log(f"{label} feed down: {e!r}; retry in {backoff:.0f}s")
             await asyncio.sleep(backoff)
             backoff = min(RECONNECT_MAX, backoff * 2)
 
 
 async def video_session(ws, peer):
     """Video leg (MAX Camera extension): stat heartbeat + 'V' JPEG frames.
-    Default feed = real server-rendered Max via maxvid; the {"t":"testvideo"}
-    control swaps in an ffmpeg testsrc feed (plumbing-test fallback) and back."""
+    Default feed = real server-rendered Max (mannequin = maxvid); the
+    {"t":"skin"} control swaps between mannequin and quicktalk (maxface)
+    renders, and the legacy {"t":"testvideo"} control swaps in an ffmpeg
+    testsrc feed (plumbing-test fallback) and back."""
     stop = asyncio.Event()
-    stats = {"t0": time.time(), "video_frames": 0, "video_source": "real"}
+    stats = {"t0": time.time(), "video_frames": 0, "video_source": "mannequin"}
     feed_task: asyncio.Task | None = None
-    feed_mode = ["real"]
+    feed_mode = ["mannequin"]
 
     def switch_feed(mode: str):
         nonlocal feed_task
@@ -339,15 +398,21 @@ async def video_session(ws, peer):
         if mode == "testsrc":
             stats["video_source"] = "testsrc"
             feed_task = asyncio.create_task(test_feed())
+        elif mode == "quicktalk":
+            stats["video_source"] = "quicktalk"
+            feed_task = asyncio.create_task(
+                relay_feed(ws, stop, stats, MAXFACE_URL, "quicktalk"))
         else:
-            stats["video_source"] = "real"
-            feed_task = asyncio.create_task(real_feed(ws, stop, stats))
+            stats["video_source"] = "mannequin"
+            feed_task = asyncio.create_task(
+                relay_feed(ws, stop, stats, MAXVID_URL, "mannequin"))
         log(f"video feed = {mode}")
 
     async def heartbeat():
         while not stop.is_set():
             payload = {"t": "stat", "video_frames": stats["video_frames"],
                        "video_source": stats["video_source"],
+                       "renderer": stats.get("renderer_stat"),
                        "session_s": round(time.time() - stats["t0"], 1)}
             try:
                 await ws.send(json.dumps(payload))
@@ -397,7 +462,12 @@ async def video_session(ws, peer):
             if ctrl.get("t") == "bye":
                 break
             if ctrl.get("t") == "testvideo":
-                want = "testsrc" if ctrl.get("on") else "real"
+                want = "testsrc" if ctrl.get("on") else "mannequin"
+                if feed_mode[0] != want:
+                    switch_feed(want)
+            if ctrl.get("t") == "skin":
+                want = ("quicktalk" if ctrl.get("skin") == "quicktalk"
+                        else "mannequin")
                 if feed_mode[0] != want:
                     switch_feed(want)
 

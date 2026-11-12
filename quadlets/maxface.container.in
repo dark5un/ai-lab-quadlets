@@ -1,0 +1,52 @@
+# maxface: MaxPresence ticket-07 renderer (learned face, QuickTalk/opentalking
+# on CUDA — production path per official docs; Apple Silicon is dev-only).
+# Streams 640x480 JPEG frames over ai.network only (ws systemd-maxface:8993
+# /frames + /audio-in PCM push from plexpipe); plexpipe relays them as the
+# door 'V' leg when skin=quicktalk, mannequin (maxvid) stays the fallback.
+# VRAM: QuickTalk pth + HuBERT(fp16 feats) target the ~2.4 GB headroom beside
+# personaplex on the 4070 Ti; if it does not fit, max-face NIM yields (it is
+# only needed by the mannequin skin).
+# Weights: ~/.local/share/ai-lab/models/quicktalk/checkpoints (HF
+# datascale-ai/quicktalk); avatar template under
+# ~/.local/share/ai-lab/maxface/avatars (built Mac-side, ticket 06).
+
+[Unit]
+Description=MaxPresence QuickTalk face renderer (4070 Ti)
+Wants=ai-network.service
+After=ai-network.service
+After=systemd-personaplex.service
+# Same-card cooperative with personaplex (its downlink PCM is the drive
+# source); conflicts only with units that take the whole 4070 Ti.
+Conflicts=soulx-duplug.service minicpmo-omni.service llama-cpp-4070ti.service llama-cpp-both.service strata-4070ti.service strata-4070ti-524k.service strata-4070ti-1m.service docling-4070ti.service comfyui-4070ti.service
+
+[Container]
+ContainerName=systemd-maxface
+Image=localhost/maxface:latest
+Network=ai.network
+AddDevice=nvidia.com/gpu=all
+Environment=CUDA_VISIBLE_DEVICES=__GPU_4070TI_UUID__
+Environment=OPENTALKING_QUICKTALK_ASSET_ROOT=/models/quicktalk
+Environment=MAXFACE_TEMPLATE=/models/avatars/maximilian/source/maximilian_livetune10.mp4
+Environment=MAXFACE_DEVICE=cuda:0
+# 12 frames = 0.48 s of audio per generation slice: conversational lip
+# latency while HuBERT stays efficient. Full pacing semantics = ticket 08.
+Environment=MAXFACE_SLICE_LEN=12
+Volume=%h/.local/share/ai-lab/models/quicktalk:/models/quicktalk:ro,Z
+Volume=%h/.local/share/ai-lab/maxface/avatars:/models/avatars:ro,Z
+# writable face-cache volume: template face detection (~10-20 s for the
+# 250-frame clip) is persisted here across restarts
+Environment=MAXFACE_FACE_CACHE_DIR=/var/tmp/maxface-cache
+Volume=maxface-cache:/var/tmp/maxface-cache:Z
+UserNS=keep-id
+SecurityLabelDisable=true
+PodmanArgs=--security-opt label=disable
+
+[Service]
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=15
+# First start pays torch load + full-clip face detection (cached afterwards).
+TimeoutStartSec=600
+MemoryMax=16G
+
+# No [Install] section by design: opt-in via ai-lab (avatar group, boot=false).

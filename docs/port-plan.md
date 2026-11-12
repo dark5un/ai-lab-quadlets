@@ -160,3 +160,4 @@ only, never deployed.
 |------------|-------|----------------|
 | max-bridge | 8990  | 127.0.0.1 only; blendshape fan-out WS hub (/feed /shapes); tailnet door deferred to Phase 4 (plan: reuse or new :84xx serve) |
 | max-face   | none  | ai.network internal only (gRPC systemd-max-face:52000); Audio2Face-3D NIM, opt-in, 4070 Ti ~0.9 GB single-stream |
+| maxface    | none  | ai.network internal only (WS systemd-maxface:8993 /frames + /audio-in); QuickTalk learned-face renderer (ticket 07), opt-in, 4070 Ti ~1.5-2 GB beside personaplex |

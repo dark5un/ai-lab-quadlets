@@ -1213,6 +1213,22 @@
       "group": "avatar"
     },
     {
+      "name": "maxface",
+      "unit": "maxface.service",
+      "container": "systemd-maxface",
+      "host_port": null,
+      "container_port": 8993,
+      "bind": "none",
+      "health": "-",
+      "tier": "opt-in",
+      "image": "localhost/maxface:latest",
+      "boot": false,
+      "auth": "none",
+      "gpu": "4070ti",
+      "note": "ticket-07 learned-face renderer (QuickTalk/opentalking on CUDA): ws systemd-maxface:8993 /frames JPEG + /audio-in PCM push, ai.network only; plexpipe relays as 'V' when skin=quicktalk (mannequin=maxvid fallback); ~1.5-2 GB VRAM beside personaplex on the 4070 Ti",
+      "group": "avatar"
+    },
+    {
       "name": "plexpipe",
       "unit": "plexpipe.service",
       "container": "systemd-plexpipe",

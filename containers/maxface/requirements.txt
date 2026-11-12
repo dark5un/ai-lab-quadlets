@@ -1,0 +1,9 @@
+# maxface: QuickTalk renderer service (ticket 07, docs/.../issues/07-*.md).
+# opentalking pinned to the upstream commit this project's studies are based
+# on. Bump procedure: checkout the new commit in ~/Workspaces/.../opentalking,
+# re-run the offline POC quality gate (dense-frame montage + vision score),
+# then update the SHA here and rebuild the image.
+websockets>=12
+numpy>=1.26
+opencv-python-headless>=4.8,<4.12
+opentalking[models,quicktalk-cuda] @ git+https://github.com/datascale-ai/opentalking@8c739a5a6f114daf71aeace832a668c3ad60f536

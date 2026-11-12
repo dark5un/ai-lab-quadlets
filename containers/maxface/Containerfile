@@ -1,0 +1,22 @@
+# maxface: MaxPresence learned-face renderer (ticket 07).
+# QuickTalk (opentalking runtime_v2/V3) on CUDA — the supported production
+# path (Apple Silicon is dev-only per official docs). Runs on the 4070 Ti
+# beside personaplex; streams 640x480 JPEG 'V'-compatible frames to plexpipe.
+# Python 3.11 pinned: upstream requires-python + the interpreter the CUDA
+# dep set (onnxruntime-gpu) resolves for; the Mac POC used 3.11 too.
+# GPU access comes from the quadlet (AddDevice nvidia CDI), nothing NVIDIA
+# is baked here beyond what torch/onnxruntime-gpu wheels carry themselves.
+# ffmpeg comes from imageio-ffmpeg (pulled by the quicktalk-cuda extra);
+# the template video is already 25 fps so conversion normally does not run.
+FROM docker.io/library/python:3.11-slim
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libglib2.0-0 libgl1 \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY requirements.txt .
+# PyPI directly (upstream pyproject's default index is a China mirror; pip
+# ignores tool.uv.index anyway). torch resolves to the CUDA build on linux.
+RUN pip install --no-cache-dir -r requirements.txt
+COPY server.py .
+EXPOSE 8993
+CMD ["python", "-u", "server.py"]
