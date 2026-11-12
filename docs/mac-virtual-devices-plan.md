@@ -10,8 +10,9 @@ automation, zero Google bot-gate fights (fact #79 killed the CDP route to
 fallback-only).
 
 STEPPING-STONE MACHINE (owner, 2026-11-12): **code-m2** — a Mac separate
-from mini-m4 (mini-m4 stays the rerank/MLX inference node). tailnet
-<code-m2-tailnet-ip>, user panos@, currently NO ssh from ai (port 22 refused —
+from mini-m4 (mini-m4 stays the rerank/MLX inference node). On the known
+tailnet (IP deliberately not committed; `tailscale status` on ai lists it),
+user panos@, currently NO ssh from ai (port 22 refused —
 enable Remote Login if the Mac Hermes needs remote help, otherwise work
 happens locally on code-m2 where its own Hermes runs). Expect macOS 13+
 (M2-era): confirm sw_vers at P-1; per-app output device assignment needs
@@ -111,7 +112,7 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   debugging; create a private dir for the MaxPresence sources.
   STATUS 2026-11-12 (code-m2): **done** — macOS 27.2 / M2 Max / brew 7.0.13 /
   Xcode CLT only (no full Xcode — P2 prerequisite to install); tailscale peer
-  `ai` live (<ai-tailnet-ip>); Remote Login kept OFF (work is local); sources
+  `ai` peer live (tailnet IP not committed); Remote Login kept OFF (work is local); sources
   in this private repo under `mac/` (branch mac-maxpresence, merged to main
   per owner).
 - P0 SERVER: implement plexpipe + door + protocol doc; loop-test with a
