@@ -42,3 +42,6 @@ apps/max-call/*.log
 apps/artifacts/
 apps/max-call/artifacts/validation_results.json
 mac/maxbar/build/
+
+# agent issue tracker (contains internal identifiers; repo is public)
+.scratch/
