@@ -1,0 +1,4 @@
+webgl renderer: ANGLE (NVIDIA Corporation, NVIDIA GeForce RTX 5090/PCIe/SSE2, OpenGL ES 3.2)
+url: https://meet.google.com/meet/agn-ezui-qwe
+buttons: ['|Sign in', '|more_vert', '|mic', '|videocam', '|blur_on\nblur_on', '|mic_none\nFake Default Audio Input', '|Fake Default Audio Output', '|videocam\nfake_device_0', '|visual_effects\nBackgrounds and effects', '|Join now', '|meeting_roomUse Companion mode', '|present_to_allPresent']
+has-join-now: True | text head: Meet Sign in more_vert More options mic Turn off microphone (ctrl + d) videocam Turn off camera (ctrl + e) blur_on blur_on Turn on background blur mic_none Fake Default Audio Input
