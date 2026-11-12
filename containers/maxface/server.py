@@ -45,7 +45,7 @@ PORT = int(os.environ.get("MAXFACE_PORT", "8993"))
 ASSET_ROOT = os.environ.get("OPENTALKING_QUICKTALK_ASSET_ROOT",
                             os.path.expanduser("~/.local/share/maxface/quicktalk"))
 TEMPLATE = os.environ.get("MAXFACE_TEMPLATE",
-                          os.path.expanduser("~/.local/share/maxface/avatars/maximilian/source/maximilian_livetune10.mp4"))
+                          os.path.expanduser("~/.local/share/maxface/avatars/maximilian/source/maximilian_d3.mp4"))
 DEVICE = os.environ.get("MAXFACE_DEVICE", "cuda:0")
 FACE_CACHE_DIR = (Path(p) if (p := os.environ.get("MAXFACE_FACE_CACHE_DIR", "").strip()) else None)
 FPS = int(os.environ.get("OPENTALKING_QUICKTALK_FPS", "25"))
@@ -55,8 +55,12 @@ FEAT_RATE = 16000   # HuBERT frontend is 16k-hard (Wav2Vec2FeatureExtractor
                     # raises on other sampling_rate) -> slices resampled per call
 OUT_W, OUT_H = 640, 480                                             # door 'V' contract
 JPEG_QUALITY = int(os.environ.get("MAXFACE_JPEG_QUALITY", "82"))
-SILENCE_RMS = float(os.environ.get("MAXFACE_SILENCE_RMS", "1200"))   # int16 RMS gate; hysteresis at 0.4x below
-SILENCE_HOLD = float(os.environ.get("MAXFACE_SILENCE_HOLD", "500"))  # keep rendering while above this once speech opened
+SILENCE_RMS = float(os.environ.get("MAXFACE_SILENCE_RMS", "1200"))   # int16 RMS that opens the speech gate
+# Utterance-internal gaps stay rendered: once loud, keep the gate open until
+# this many seconds pass without a loud slice (replaces per-slice rms
+# hysteresis, which flapped open/closed mid-utterance -> idle flicker between
+# words).
+SPEECH_HOLD_S = float(os.environ.get("MAXFACE_SPEECH_HOLD_S", "0.5"))
 GLOBAL_NORM = os.environ.get("MAXFACE_GLOBAL_NORM", "1") == "1"      # normalize slices with stream stats instead of per-slice std
 FRAME_CAP = int(os.environ.get("MAXFACE_FRAME_CAP", "60"))          # drop-oldest watermark
 AUDIO_MAX_S = float(os.environ.get("MAXFACE_AUDIO_MAX_S", "4.0"))   # ring buffer cap
@@ -163,6 +167,7 @@ class Feed:
         self.subscribers: set = set()
         self.speaking = False
         self.last_audio_at = 0.0
+        self.last_loud_at = 0.0   # gate hold-timer anchor (see SPEECH_HOLD_S)
         # running stats over all received speech-candidate samples (global
         # normalization emulation of the offline whole-clip path)
         self.n_sum = 0.0
@@ -298,12 +303,19 @@ async def main():
                 if s is not None and DEBUG:
                     log.info("DBG take_slice rms=%.0f pending=%d busy=%s",
                              rms, len(feed.pending), render_busy)
-                gate_open = s is not None and (
-                    rms > SILENCE_RMS or (feed.speaking and rms > SILENCE_HOLD))
-                if gate_open:
+                now = time.time()
+                loud = s is not None and rms > SILENCE_RMS
+                # hold-timer hysteresis: gaps shorter than SPEECH_HOLD_S since
+                # the last loud slice stay inside the utterance (rendered),
+                # so inter-word silence no longer flickers back to idle.
+                held = s is not None and feed.speaking and (
+                    now - feed.last_loud_at) < SPEECH_HOLD_S
+                if loud or held:
                     if not feed.speaking:
                         log.info("speech gate opened (rms=%.0f)", rms)
                     feed.speaking = True
+                    if loud:
+                        feed.last_loud_at = now
                     norm = feed.norm_stats() if GLOBAL_NORM else None
 
                     def run(s=s, norm=norm):
@@ -332,7 +344,8 @@ async def main():
                 else:
                     if s is not None:
                         if feed.speaking:
-                            log.info("speech gate closed (slice rms below gate)")
+                            log.info("speech gate closed (no loud slice for %.2fs)",
+                                     now - feed.last_loud_at)
                         feed.speaking = False
                     elif time.time() - feed.last_audio_at > 2.0:
                         if feed.speaking:
