@@ -18,6 +18,7 @@ Network=ai.network
 PublishPort=127.0.0.1:8991:8991/tcp
 # same persona as the max-headroom app (apps/max-headroom/src/main2.js PERSONA)
 Environment=PLEX_TEXT_PROMPT="You are Max Headroom: a sarcastic, paranoid AI video-host from a 1980s TV station. You stutter on consonants ('p-p-people'), insult the caller, drop catchphrases like 'let's play some crackle' and 'boot boot boot', and never admit to being an assistant. Keep replies to one or two punchy sentences."
+Environment=MAXVID_URL=ws://systemd-maxvid:8992/frames
 
 [Service]
 SuccessExitStatus=143

@@ -1,0 +1,38 @@
+# maxvid: MaxPresence P2 server video renderer (docs/mac-virtual-devices-plan.md V-6a).
+# Headless chromium (SwiftShader software WebGL — CPU-only; the 4070 Ti / 5090
+# VRAM budgets are untouched) renders the max-headroom v2 app at 640x480 and
+# streams paced JPEG frames on :8992 /frames to plexpipe (internal client),
+# which relays them down the door as 'V' frames. The app is NOT baked into
+# the image: /web is a read-only mount of apps/max-headroom/dist — rebuild
+# with `node node_modules/vite/bin/vite.js build` in that dir after src edits.
+# Blendshapes arrive live from systemd-max-bridge:8990 (the bridge feeds only
+# while an audio session is open; the app's autonomous head motion keeps the
+# idle face alive). Chromium starts/stops with subscriber demand.
+
+[Unit]
+Description=MaxPresence P2 video renderer (headless chromium -> JPEG frames)
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-maxvid
+Image=localhost/maxvid:latest
+Network=ai.network
+PublishPort=127.0.0.1:8992:8992/tcp
+Volume=%h/workspace/github.com/dark5un/ai-lab-quadlets/apps/max-headroom/dist:/web:ro,Z
+Environment=BRIDGE_URL=ws://systemd-max-bridge:8990
+Environment=FRAME_FPS=30
+Environment=JPEG_QUALITY=70
+# measured ~4 cores at 640x480@30 SwiftShader; hard-cap so a runaway
+# restart loop can never eat the box (plex/audio legs get the rest).
+# (quadlet has no Cpus= key; PodmanArgs= is the documented escape hatch)
+PodmanArgs=--cpus=6
+RunInit=true
+
+[Service]
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+
+# No [Install] section by design: opt-in via ai-lab (avatar group, boot=false).

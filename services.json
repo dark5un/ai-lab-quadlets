@@ -1226,6 +1226,21 @@
       "auth": "none",
       "note": "MaxPresence P0 door bridge (ws :8991, one Mac session; JSON ctrl + binary 'A'/'V'); 48k uplink -> ffmpeg 24k -> sphn Ogg/Opus -> systemd-personaplex:8998; downlink -> 'A' + systemd-max-bridge /feed; tailnet door tailscale serve :8457 (docs/mac-virtual-devices-plan.md)",
       "group": "avatar"
+    },
+    {
+      "name": "maxvid",
+      "unit": "maxvid.service",
+      "container": "systemd-maxvid",
+      "host_port": 8992,
+      "container_port": 8992,
+      "bind": "127.0.0.1",
+      "health": "-",
+      "tier": "opt-in",
+      "image": "localhost/maxvid:latest",
+      "boot": false,
+      "auth": "none",
+      "note": "MaxPresence P2 video renderer (V-6a): headless chromium (SwiftShader, CPU-only) of the max-headroom v2 app at 640x480; CDP paced screenshots -> ws :8992 /frames -> plexpipe relays as 'V'; app served from apps/max-headroom/dist volume; chromium starts/stops with subscriber demand",
+      "group": "avatar"
     }
   ]
 }

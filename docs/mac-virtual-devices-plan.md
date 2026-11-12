@@ -265,6 +265,29 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   (owner registered account). NEXT: B1 plumbing gate (QuickTime shows
   testsrc through MAX Camera) once the Xcode template project exists
   (owner GUI), then the server renderer for B2 = the actual P2 gate.
+  STATUS 2026-11-12 (ai): **SERVER RENDERER LIVE (B2 server-side done)** —
+  new containers/maxvid quadlet (systemd-maxvid, avatar group, boot=false):
+  headless chromium (Debian pkg, SwiftShader software GL — CPU-only, capped
+  --cpus=6 via PodmanArgs; ~4 cores at 640x480@30) renders the max-headroom
+  v2 app at ?v2=1&nohud=1&feed=bridge&door=ws://systemd-max-bridge:8990.
+  The app is served from a :ro volume of apps/max-headroom/dist (rebuild
+  after src edits: `node node_modules/vite/bin/vite.js build` in the app
+  dir). CDP Page.startScreencast (jpeg q70, everyNthFrame=round(60/FPS)) ->
+  ws :8992 /frames -> plexpipe relays 'V' on the video leg by DEFAULT now;
+  {"t":"testvideo","on":true} swaps in the testsrc fallback, off swaps back.
+  Chromium lifecycle follows demand (starts on first /frames subscriber,
+  stops when the last leaves; re-subscribe pays a ~1.5-2 s boot — one fresh
+  cached frame is sent instantly). Door protocol UNCHANGED for the Mac;
+  video-role stat gains "video_source": real|testsrc|down. nohud mode is a
+  purely additive app flag (HUD/bars/mic-probe hidden, canvas fills the
+  frame). VERIFY (python door client): 30/30 UNIQUE V-frames collected in
+  1.3-4.5 s runs @ ~22-30 fps steady WHILE the live Mac maxaudiod audio
+  session held its slot (73-251 concurrent bridge /shapes frames counted);
+  jaw_open stayed 0 with silent Mac uplink (no speech = neutral mouth —
+  correct). Samples: /tmp/p2-verify/frame-*.jpg show the cyan facecap bust
+  + CRT scanlines + glowing pedestal, no testsrc bars. Remaining P2 gate:
+  Mac-side QuickTime sees MAX Camera showing ANIMATING Max (B1 testsrc
+  passed already per 69d0e62).
 - P3 FULL JOIN: incognito Meet with MAX Cam + MAX Mic: 10-minute
   conversation; GATE: speech-to-motion latency <= 450 ms measured, no echo,
   no artifacts.
@@ -302,6 +325,21 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   ~30 ms + video pipeline ~50 ms => <=450 ms achievable.
 - VRAM settled: personaplex + max-face (~790 MiB) coexist on the 4070 Ti.
 - GPLv3 MaxHole fork: private repos only. Never name anything "ryoku".
+- **Quadlet generator strictness (ai, 2026-11-12)**: an unknown key in
+  [Container] (e.g. `Cpus=`) makes the generator DROP the whole unit —
+  `systemctl start` then says "Unit not found". Diagnose with
+  `journalctl --user | grep quadlet-generator`; resource caps go through
+  the documented escape hatch `PodmanArgs=--cpus=N`.
+- **CDP capture cadence (ai, 2026-11-12)**: polling Page.captureScreenshot
+  caps at ~12 fps (≈80 ms request round-trip per frame on a SwiftShader
+  page). Page.startScreencast + immediate screencastFrameAck is
+  event-driven and sustains 22-30 fps at 640x480 on ~4 CPU cores.
+- **maxvid is demand-driven (ai, 2026-11-12)**: chromium boots (~1.5-2 s)
+  when plexpipe's video leg first subscribes and stops when the leg closes.
+  Toggling testvideo back to real pays that restart again. If the renderer
+  unit is not running, a video session heartbeats with
+  `"video_source":"down"` and NO frames — there is no automatic testsrc
+  fallback (by design, keep the camera feed honest).
 - **Owner policy (code-m2, 2026-11-12)**: the agent must NOT open CoreAudio
   input/microphone streams — capture-verifying tests are run BY THE OWNER or
   verified via meters while the agent plays output-only. Ask each time.
@@ -462,6 +500,9 @@ now allows pushing to main for these merges.
 ## Server endpoints inventory (for the brief)
 - personaplex :8998 loopback (wss door :8456 exists today)
 - max-bridge :8990 loopback (needs door in P4 option b)
+- maxvid :8992 loopback (P2 renderer frames ws /frames — internal door
+  client only; NOT exposed on the tailnet; plexpipe consumes it over
+  ai.network as ws://systemd-maxvid:8992/frames)
 - plexpipe :8991 loopback (LIVE; tailnet door `tailscale serve --https=8457`,
   assigned at P0 2026-11-12)
 - apps/max-call = CDP fallback route, keep, don't extend.

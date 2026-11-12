@@ -108,11 +108,15 @@ for name in "${NAMES[@]}"; do
                       -f "$ROOT/containers/kb-watcher/Containerfile" ;;
         plexpipe) build plexpipe "$ROOT/containers/plexpipe" \
                       -f "$ROOT/containers/plexpipe/Containerfile" ;;
+        maxvid) build maxvid "$ROOT/containers/maxvid" \
+                      -f "$ROOT/containers/maxvid/Containerfile" ;;
         avatar) pull max-face;
                 build max-bridge "$ROOT/containers/max-bridge" \
                       -f "$ROOT/containers/max-bridge/Containerfile";
                 build plexpipe "$ROOT/containers/plexpipe" \
-                      -f "$ROOT/containers/plexpipe/Containerfile" ;;
+                      -f "$ROOT/containers/plexpipe/Containerfile";
+                build maxvid "$ROOT/containers/maxvid" \
+                      -f "$ROOT/containers/maxvid/Containerfile" ;;
         automation) pull windmill-postgres; pull windmill-server; pull windmill-worker;
                 build notebook "$ROOT/containers/notebook" \
                       -f "$ROOT/containers/notebook/Containerfile" ;;

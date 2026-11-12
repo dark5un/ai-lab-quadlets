@@ -1,0 +1,15 @@
+# maxvid: MaxPresence P2 server video renderer (docs/mac-virtual-devices-plan.md V-6a).
+# Headless chromium (SwiftShader software WebGL — CPU-only, no NVIDIA touch)
+# renders the max-headroom v2 app; a small python service drives it over CDP
+# and streams paced JPEG frames to plexpipe on :8992 /frames. The app itself
+# is NOT baked: /web is a read-only volume of apps/max-headroom/dist (repo).
+FROM docker.io/library/python:3.12-slim
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends chromium fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY server.py .
+EXPOSE 8992
+CMD ["python", "-u", "server.py"]

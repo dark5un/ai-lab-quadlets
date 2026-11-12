@@ -63,3 +63,10 @@ body[data-app="v2"] { margin: 0; height: 100%; background: var(--bg); color: var
 #boot2 { position: absolute; inset: 0; display: grid; place-items: center;
   color: var(--ink-dim); z-index: 5; pointer-events: none; }
 #warn2 { color: var(--warn); font-size: 12px; margin-left: auto; }
+
+/* ?nohud=1 — camera-clean frame for the maxvid server renderer:
+   canvas fills the viewport, every HUD/control hidden. */
+body.nohud #topbar2, body.nohud #bar2, body.nohud #settings2,
+body.nohud #caption2 { display: none !important; }
+body.nohud #frame2 { margin: 0; border: none; border-radius: 0; }
+body.nohud { overflow: hidden; }

@@ -14,6 +14,10 @@ const isLoop = ['127.0.0.1', 'localhost'].includes(location.hostname);
 const BRIDGE_DOOR = params.get('door') || 'ws://127.0.0.1:8990';
 const PLEX_DOOR = params.get('plex') || (isLoop ? 'ws://127.0.0.1:8998' : `wss://${location.hostname}:8456`);
 const BS_FILE = params.get('bsfile') || './fixture/bs-frames.csv';
+// ?nohud=1: camera-clean full-viewport frame for the maxvid server renderer
+// (no top/bottom bars, no captions, no mic probe). Additive; default UI untouched.
+const NOHUD = params.get('nohud') === '1';
+if (NOHUD) document.body.classList.add('nohud');
 const VOICE = params.get('voice') || 'pxvoice.wav';
 const PERSONA = params.get('persona') ||
   "You are Max Headroom: a sarcastic, paranoid AI video-host from a 1980s TV station. " +
@@ -108,7 +112,9 @@ try {
 }
 
 // mic capture for LISTENING state + synthetic feed (works with zero backend)
+// (skipped in ?nohud=1: headless renderers need no devices)
 (async () => {
+  if (NOHUD) return;
   try {
     const actx = new (window.AudioContext || window.webkitAudioContext)();
     const stream = await navigator.mediaDevices.getUserMedia(

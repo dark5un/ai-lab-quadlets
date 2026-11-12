@@ -8,8 +8,15 @@ tailscale serve :8457). Protocol (JSON control + binary tag 'A'/'V'):
   S->C binary 'V' = JPEG 640x480 frame            (-> MAX Camera, video leg)
   S->C {"t":"stat",...} ~2s heartbeats (Mac watchdog + status-bar widget)
   S->C {"t":"caption","text":...} plex monologue stream (0x02, optional UI)
-  C->S {"t":"testvideo","on":true|false}  (video leg: ffmpeg testsrc 'V'
-       feed for plumbing tests until the real server renderer lands)
+  C->S {"t":"testvideo","on":true|false}  (video leg: swap the real
+       server-rendered feed for an ffmpeg testsrc 'V' feed (plumbing-test
+       fallback), and back with on:false)
+
+The video leg streams REAL Max frames by default: it relays JPEG frames from
+the maxvid renderer (MAXVID_URL, V-6a: headless chromium of the max-headroom
+app) as fast as they arrive (~20-30 fps). If maxvid is down the leg idles with
+heartbeats and retries; the testvideo toggle still works as fallback
+(switching back to real costs a ~2s chromium restart in maxvid — demand-driven).
 
 Internals: 'A' uplink -> ffmpeg 48k->24k -> sphn OpusStreamWriter ->
 personaplex 0x01+Ogg (framing mirrors duplex-bus fdb_personaplex.py, the
@@ -34,6 +41,7 @@ import websockets
 PORT = int(os.environ.get("PLEXPIPE_PORT", "8991"))
 PLEX_URL = os.environ.get("PLEX_URL", "ws://systemd-personaplex:8998")
 BRIDGE_URL = os.environ.get("BRIDGE_URL", "ws://systemd-max-bridge:8990")
+MAXVID_URL = os.environ.get("MAXVID_URL", "ws://systemd-maxvid:8992/frames")
 TEXT_PROMPT = os.environ.get("PLEX_TEXT_PROMPT", "You enjoy having a good conversation.")
 VOICE_PROMPT = os.environ.get("PLEX_VOICE_PROMPT", "pxvoice.wav")
 
@@ -290,17 +298,56 @@ async def handle(ws):
         f"{ {k: stats[k] for k in ('up_bytes', 'down_bytes', 'plex_up')} }")
 
 
+async def real_feed(ws, stop: asyncio.Event, stats: dict):
+    """Relay maxvid server-rendered JPEG frames as 'V' (V-6a real feed)."""
+    backoff = 1.0
+    while not stop.is_set():
+        try:
+            async with websockets.connect(MAXVID_URL, max_size=2**22) as vws:
+                log(f"maxvid feed connected ({MAXVID_URL})")
+                stats["video_source"] = "real"
+                backoff = 1.0
+                async for msg in vws:
+                    if stop.is_set():
+                        break
+                    if isinstance(msg, (bytes, bytearray)):
+                        stats["video_frames"] += 1
+                        await ws.send(b"V" + msg)
+        except Exception as e:
+            if stop.is_set():
+                break
+            stats["video_source"] = "down"
+            log(f"maxvid feed down: {e!r}; retry in {backoff:.0f}s")
+            await asyncio.sleep(backoff)
+            backoff = min(RECONNECT_MAX, backoff * 2)
+
+
 async def video_session(ws, peer):
     """Video leg (MAX Camera extension): stat heartbeat + 'V' JPEG frames.
-    Real render feed lands with the P2 server renderer; until then the
-    client can toggle an ffmpeg testsrc feed for plumbing tests."""
+    Default feed = real server-rendered Max via maxvid; the {"t":"testvideo"}
+    control swaps in an ffmpeg testsrc feed (plumbing-test fallback) and back."""
     stop = asyncio.Event()
-    stats = {"t0": time.time(), "video_frames": 0}
+    stats = {"t0": time.time(), "video_frames": 0, "video_source": "real"}
     feed_task: asyncio.Task | None = None
+    feed_mode = ["real"]
+
+    def switch_feed(mode: str):
+        nonlocal feed_task
+        if feed_task is not None and not feed_task.done():
+            feed_task.cancel()
+        feed_mode[0] = mode
+        if mode == "testsrc":
+            stats["video_source"] = "testsrc"
+            feed_task = asyncio.create_task(test_feed())
+        else:
+            stats["video_source"] = "real"
+            feed_task = asyncio.create_task(real_feed(ws, stop, stats))
+        log(f"video feed = {mode}")
 
     async def heartbeat():
         while not stop.is_set():
             payload = {"t": "stat", "video_frames": stats["video_frames"],
+                       "video_source": stats["video_source"],
                        "session_s": round(time.time() - stats["t0"], 1)}
             try:
                 await ws.send(json.dumps(payload))
@@ -350,14 +397,11 @@ async def video_session(ws, peer):
             if ctrl.get("t") == "bye":
                 break
             if ctrl.get("t") == "testvideo":
-                if ctrl.get("on") and (feed_task is None or feed_task.done()):
-                    feed_task = asyncio.create_task(test_feed())
-                    log("video test feed ON")
-                elif not ctrl.get("on") and feed_task and not feed_task.done():
-                    feed_task.cancel()
-                    feed_task = None
-                    log("video test feed OFF")
+                want = "testsrc" if ctrl.get("on") else "real"
+                if feed_mode[0] != want:
+                    switch_feed(want)
 
+    switch_feed("real")  # default: server-rendered Max
     tasks = [asyncio.create_task(c) for c in (heartbeat(), control_reader())]
     await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
     stop.set()
