@@ -262,9 +262,23 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   testsrc until the real renderer lands). mac/maxcam scaffold re-pointed
   to FrameClient WSS client (App Group mailbox demoted to fallback;
   maxaudiod --mailbox retained). Xcode Apple-Development cert present
-  (owner registered account). NEXT: B1 plumbing gate (QuickTime shows
+  (owner registered account).  NEXT: B1 plumbing gate (QuickTime shows
   testsrc through MAX Camera) once the Xcode template project exists
   (owner GUI), then the server renderer for B2 = the actual P2 gate.
+  STATUS 2026-11-12 (later): server renderer DONE EARLY (ai-Hermes, commit
+  3692a53: headless chromium max-headroom via CDP screencast -> :8992 ->
+  plexpipe video leg, video_source:'real'); code-m2 INDEPENDENTLY verified
+  door frames (real Max avatar face, vision-checked). GUI-free build now:
+  mac/maxcam/{project.yml,build.sh} (xcodegen+xcodebuild; SystemExtensions
+  embed + re-sign). B1 BLOCKERS (owner-side): (1) Xcode Settings > Accounts
+  Apple ID session missing on this machine (needed for the System-Extension
+  provisioning profile under Automatic signing); (2) codesign hung on
+  private-key ACL -> run security set-key-partition-list -S
+  apple-tool:,apple:,codesign: -s -k '<pw>' ~/Library/Keychains/login.keychain-db.
+  Then ./build.sh && /Applications/MaxCamHost.app/Contents/MacOS/MaxCamHost
+  --activate && approve in System Settings (Login Items & Extensions) &&
+  systemextensionsctl list && QuickTime. NOTE: free-team + profile
+  question now folded into that flow (test at activation).
   STATUS 2026-11-12 (ai): **SERVER RENDERER LIVE (B2 server-side done)** —
   new containers/maxvid quadlet (systemd-maxvid, avatar group, boot=false):
   headless chromium (Debian pkg, SwiftShader software GL — CPU-only, capped
