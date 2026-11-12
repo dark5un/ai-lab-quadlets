@@ -122,6 +122,11 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   ~/Library/Application Support/MaxPresence/maxaudiod.json (schema in
   mac/maxbar/README.md) — consumed by MAXBar; future hosts (MaxCamHost)
   drop same-schema files in that dir.
+- maxagg (`mac/maxagg/`): CLI for the two aggregate devices the Meet gate
+  needs: "MAX Mix In" (built-in mic FIRST + MAX Mic, plain concat in=[1+2])
+  = one mic input for both you and Max; "MAX Multi Out" (stacked=1,
+  out=[2+2] fan-out) = meeting audio to speakers AND MAX Out. Verified by
+  per-buffer channel maps; destroy via `maxagg destroy NAME`.
 - MAXBar (`mac/maxbar/`): Swift/AppKit menu-bar widget (CLT swiftc build,
   ad-hoc signed, LSUIElement) showing link state (heartbeat), MAX Mic/Out
   installed+STREAMING (CoreAudio 'gone'; 'sact' is static 1 on MaxHole —
@@ -206,6 +211,14 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
 - **portaudio/AUHAL cannot open separate input and output streams on the
   SAME device** (-10863 "cannot do in current context"); self-loop tests need
   one duplex sd.Stream(device=(in_idx, out_idx)).
+- **Aggregates (2026-11-12, measured + wiki-confirmed)**: AudioHardwareCreateAggregateDevice
+  REQUIRES top-level "uid" (own persistent id) or returns 'inva'. "stacked":1 =
+  multi-output fan-out; absent = plain concat. For MAX Mix In: physical mic
+  FIRST — Meet/Chrome use the first two channels; BlackHole/MAX-first ordering
+  is the documented Meet failure mode (Google community thread). Meet may still
+  pick one channel — if so, fallback = in-driver mixing: anything played into
+  MAX Mic is summed in the ring buffer, so a tiny mic->MAX-Mic pump gives a
+  true mono mix (needs standing mic consent; decide at P3-echo time).
 - **Trailing-dot SNI kills tailscale-serve doors for OpenSSL-family clients
   (2026-11-12, root-caused by byte-level ClientHello capture+replay on ai)**:
   `tailscale status --json` gives peer DNSName WITH a trailing dot
