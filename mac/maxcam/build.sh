@@ -9,8 +9,15 @@ cd "$(dirname "$0")"
 IDENTITY="Apple Development: Panagiotis Xynos (E6W58DTJJ8)"
 
 xcodegen generate
-xcodebuild -project MaxCamHost.xcodeproj -scheme MaxCamHost -configuration Release \
-  -derivedDataPath build -allowProvisioningUpdates build
+if [ "${NO_PROFILE:-0}" = "1" ]; then
+  # Path B: compile without any signing (no account/profile session needed);
+  # we hand-sign below with the existing Apple Development identity.
+  xcodebuild -project MaxCamHost.xcodeproj -scheme MaxCamHost -configuration Release \
+    -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+else
+  xcodebuild -project MaxCamHost.xcodeproj -scheme MaxCamHost -configuration Release \
+    -derivedDataPath build -allowProvisioningUpdates build
+fi
 
 REL=build/Build/Products/Release
 APP="$REL/MaxCamHost.app"
@@ -24,8 +31,19 @@ cp -R "$APPEX" "$APP/Contents/Library/SystemExtensions/"
 
 # re-sign the OUTER app only (appex keeps its own signature); preserve the
 # automatically-provisioned entitlements by extracting them first
-codesign -d --entitlements :- "$APP" > /tmp/maxcamhost-ent.plist 2>/dev/null
-codesign --force --options runtime --sign "$IDENTITY" --entitlements /tmp/maxcamhost-ent.plist "$APP"
+if [ "${NO_PROFILE:-0}" = "1" ]; then
+  # Path B: sign BOTH by hand, entitlements straight from our files
+  # (hardened runtime on; free-team/no-profile activation = the experiment).
+  # codesign does NOT expand Xcode macros — pre-substitute the team prefix.
+  sed 's|\$(TeamIdentifierPrefix)|E6W58DTJJ8.|g' ext.entitlements  > /tmp/maxcam-ext-ent.plist
+  sed 's|\$(TeamIdentifierPrefix)|E6W58DTJJ8.|g' host.entitlements > /tmp/maxcam-host-ent.plist
+  codesign --force --options runtime --sign "$IDENTITY" --entitlements /tmp/maxcam-ext-ent.plist \
+    "$APP/Contents/Library/SystemExtensions/MaxCamExtension.appex"
+  codesign --force --options runtime --sign "$IDENTITY" --entitlements /tmp/maxcam-host-ent.plist "$APP"
+else
+  codesign -d --entitlements :- "$APP" > /tmp/maxcamhost-ent.plist 2>/dev/null
+  codesign --force --options runtime --sign "$IDENTITY" --entitlements /tmp/maxcamhost-ent.plist "$APP"
+fi
 codesign --verify --verbose=2 "$APP"
 
 echo "== installing to /Applications =="
