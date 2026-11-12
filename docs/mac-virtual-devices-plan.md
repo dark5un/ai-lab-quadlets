@@ -154,6 +154,25 @@ MAC (Hermes-on-Mac builds from this brief):
   ssh-keyscan + check against GitHub's published ED25519 fingerprint
   (SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU), then append.
 
+## Handoff (2026-11-12, session cut-over)
+State: research COMPLETE, plan approved, NOTHING built yet on either machine.
+- ai server (this Hermes) owns: **P0 plexpipe** (not started) — next session
+  starts with: run P0 per this doc; the door URL will be appended here.
+- code-m2 Hermes owns: P-1, P1, P2, P3. Kickoff prompt the owner pastes:
+  "Clone https://github.com/dark5un/ai-lab-quadlets into
+  ~/workspace/github.com/dark5un/ai-lab-quadlets (private repo — if this
+  machine has no credentials, stop and ask). Read
+  docs/mac-virtual-devices-plan.md end to end; it is the contract. Execute
+  MaxPresence phases P-1 then P1 on THIS machine (you are the stepping-stone
+  Mac). P2+ only after P1 gates pass. plexpipe (P0) is owned by the ai
+  server Hermes; the door URL arrives in this doc. Commit locally, do NOT
+  push to main. New pitfalls you hit: append to this doc in your commit.
+  Ask before sudo/installer steps."
+- CDP/Playwright Meet route: fallback only (Google guest-gate anti-abuse
+  flapping — see fact #79 and apps/max-call/ git log); hardened and committed.
+- Housekeeping: validation_results.json untracked (meeting codes); old
+  versions linger in private-repo history — ephemeral codes, accepted risk.
+
 ## Server endpoints inventory (for the brief)
 - personaplex :8998 loopback (wss door :8456 exists today)
 - max-bridge :8990 loopback (needs door in P4 option b)

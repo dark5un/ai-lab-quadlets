@@ -21,12 +21,51 @@ import argparse, asyncio, base64, json, os, re, struct, sys, time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+ART_DIR = HERE.parent.parent / 'artifacts'
 INJECT = (HERE / 'inject.js').read_text()
 ECHO = HERE / 'echo.html'
 FFMPEG = os.path.expanduser('~/.hermes/tools/ffmpeg-9.0.1-linux-x64/bin/ffmpeg')
 APP_URL = os.environ.get('APP', 'http://127.0.0.1:4174/?v2=1&feed=bridge')
 UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko)"
       " Chrome/141.0.0.0 Safari/537.36")
+
+
+async def join_attempt(call, target) -> bool:
+    """One lobby->join pass. Returns True if leave-call control appeared."""
+    try:
+        await call.get_by_role('button',
+            name=re.compile(r'allow microphone and camera', re.I)
+            ).first.click(timeout=1200)
+    except Exception:
+        pass
+    try:
+        nm = call.locator('input[aria-label*="name" i]')
+        if await nm.count() and await nm.first.input_value() == '':
+            await nm.first.fill('MAX HEADROOM', timeout=2000)
+    except Exception:
+        pass
+    try:
+        btn = call.get_by_test_id("join")
+        if await btn.count() == 0:
+            btn = call.get_by_role("button", name=re.compile(r"join now", re.I))
+        await btn.first.click(timeout=2000)
+        print('[driver] clicked JOIN NOW', flush=True)
+    except Exception:
+        t = await call.evaluate("() => document.body.innerText.slice(0,140)")
+        print('[driver] join pass: no button |', ' '.join(t.split())[:120], flush=True)
+        return False
+    await asyncio.sleep(6)
+    inc = await call.evaluate("""() =>
+        !!document.querySelector('[data-id="leave-call-button"]') ||
+        !!document.querySelector('button[aria-label*="Leave"]')""")
+    print('[driver] in-call:', inc, '| url:', call.url, flush=True)
+    try:
+        from pathlib import Path as _P
+        ART = _P(__file__).resolve().parents[2] / 'artifacts'
+        await call.screenshot(path=str(ART / 'after_join.png'))
+    except Exception:
+        pass
+    return bool(inc)
 
 
 async def run(target: str, hold: float, self_test: bool) -> int:
@@ -77,14 +116,19 @@ async def run(target: str, hold: float, self_test: bool) -> int:
         await appctx.add_init_script('window.__maxRole="app";')
         await appctx.add_init_script(INJECT)
         app = await appctx.new_page()
+        app.on('console', lambda m: print('[app-console]', m.type, m.text[:160], flush=True)
+               if m.type in ('error', 'warning') else None)
         await app.goto(APP_URL)
         # go live on the app (its own GO LIVE button)
-        try:
-            await app.wait_for_selector('button', timeout=15000)
-            await app.get_by_role('button', name=re.compile('go live', re.I)).first.click(timeout=5000)
-            print('[driver] app GO LIVE clicked', flush=True)
-        except Exception as e:
-            print('[driver] GO LIVE click failed:', type(e).__name__, str(e)[:140], flush=True)
+        for _ in range(15):
+            ok = await app.evaluate('''() => {
+                const b = [...document.querySelectorAll('button')]
+                    .find(x => /go live/i.test(x.innerText || ''));
+                if (b) { b.click(); return true; } return false; }''')
+            if ok:
+                print('[driver] app GO LIVE clicked (js)', flush=True)
+                break
+            await asyncio.sleep(1)
         cdp = await appctx.new_cdp_session(app)
         frame_box = []
 
@@ -98,12 +142,16 @@ async def run(target: str, hold: float, self_test: bool) -> int:
                         'maxWidth': 640, 'maxHeight': 480})
 
         callctx = await browser.new_context(user_agent=UA, locale='en-GB')
-        await callctx.add_init_script('window.__maxRole="call";')
+        await callctx.add_init_script('window.__maxRole="call";'
+                                      + ('window.__maxNoPc=1;' if os.environ.get('MINIMAL_PC') else '')
+                                      + ('window.__maxNoMicQ=1;' if os.environ.get('MINIMAL_PC') else ''))
         await callctx.add_init_script(INJECT)
         call = await callctx.new_page()
         await call.goto(target, wait_until='domcontentloaded', timeout=45000)
 
-        joined = self_test  # echo page needs no join click
+        joined = self_test
+        next_attempt_at = 0.0
+        COOLDOWN_S = 35.0
         t0 = time.time()
         ticks = 0
         while time.time() - t0 < hold:
@@ -141,25 +189,26 @@ async def run(target: str, hold: float, self_test: bool) -> int:
                                            struct.pack(f'<{len(mic)}h', *mic)).decode())
             except Exception:
                 pass
-            # 4) meet join flow
-            if not joined:
-                try:
-                    btn = call.get_by_test_id("join-button")
-                    if await btn.count() == 0:
-                        btn = call.get_by_role("button",
-                                               name=re.compile(r"join now", re.I))
-                    await btn.first.click(timeout=2500)
+            # 4) meet join: fresh-load cycle with cooldown when rejected
+            if not joined and (ticks == 1 or time.time() > next_attempt_at):
+                ok = await join_attempt(call, target)
+                if ok:
                     joined = True
-                    print('[driver] clicked JOIN NOW', flush=True)
-                except Exception:
-                    if ticks % 40 == 1:
-                        t = await call.evaluate("() => document.body.innerText.slice(0,150)")
-                        print('[driver] prejoin text:', ' '.join(t.split())[:140], flush=True)
+                else:
+                    next_attempt_at = time.time() + COOLDOWN_S
+                    try:
+                        await call.goto(target, wait_until='domcontentloaded',
+                                        timeout=30000)
+                    except Exception:
+                        pass
             if ticks % 200 == 1:
                 try:
                     stt = await app.evaluate("() => String(window.__max2 && window.__max2.state)")
                     if stt == 'STANDBY':
-                        await app.get_by_role('button', name=re.compile('go live', re.I)).first.click(timeout=2000)
+                        await app.evaluate('''() => {
+                            const b = [...document.querySelectorAll('button')]
+                                .find(x => /go live/i.test(x.innerText || ''));
+                            if (b) b.click(); }''')
                         print('[driver] re-click GO LIVE (was STANDBY)', flush=True)
                 except Exception:
                     pass
@@ -171,6 +220,11 @@ async def run(target: str, hold: float, self_test: bool) -> int:
                     print('[driver] probe fail:', repr(e), flush=True)
             await asyncio.sleep(0.05)
 
+        try:
+            await call.screenshot(path=str(HERE.parent.parent.parent /
+                                   'artifacts/final_call_tab.png'))
+        except Exception:
+            pass
         if self_test:
             st = await call.evaluate('window.__echo')
             print('echo state:', json.dumps(st), flush=True)

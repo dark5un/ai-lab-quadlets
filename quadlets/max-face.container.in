@@ -30,9 +30,10 @@ Environment=USE_NEW_NVSTREAMMUX=yes
 Volume=max-face-cache:/tmp/a2x:Z
 Volume=max-face-cache:/tmp/nim-cache:Z
 Volume=%h/.config/containers/config/max-face:/mnt/configs:ro,Z
+UserNS=keep-id
 PodmanArgs=--security-opt label=disable --shm-size=8g
 Entrypoint=/bin/sh
-Cmd=/mnt/configs/run.sh
+Exec=/mnt/configs/run.sh
 
 [Service]
 SuccessExitStatus=143
