@@ -6,6 +6,6 @@
     <key>com.apple.security.app-sandbox</key><true/>
     <key>com.apple.security.network.client</key><true/>
     <key>com.apple.security.application-groups</key>
-    <array><string>$(TeamIdentifierPrefix)io.onlyascii.maxpresence</string></array>
+    <array><string>$(TeamIdentifierPrefix)io.onlyascii.maxcam</string></array>
 </dict>
 </plist>

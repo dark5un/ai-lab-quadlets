@@ -16,13 +16,15 @@ settings:
     ENABLE_HARDENED_RUNTIME: YES
 targets:
   MaxCamExtension:
-    type: app-extension
+    type: system-extension
     platform: macOS
     sources: [ext]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: io.onlyascii.maxcam
+        PRODUCT_BUNDLE_IDENTIFIER: io.onlyascii.maxcam.extension
         INFOPLIST_FILE: ext/Info.plist
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: "MAX Camera Extension"
         CODE_SIGN_ENTITLEMENTS: ext.entitlements
   MaxCamHost:
     type: application
@@ -32,6 +34,6 @@ targets:
       - target: MaxCamExtension
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: io.onlyascii.maxcamhost
+        PRODUCT_BUNDLE_IDENTIFIER: io.onlyascii.maxcam
         INFOPLIST_FILE: host/Info.plist
         CODE_SIGN_ENTITLEMENTS: host.entitlements

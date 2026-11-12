@@ -7,7 +7,7 @@
 import Foundation
 
 final class FrameClient: NSObject, URLSessionWebSocketDelegate {
-    static let groupID = "R2XM78R4TE.io.onlyascii.maxpresence"
+    static let groupID = "R2XM78R4TE.io.onlyascii.maxcam"
 
     let onFrame: (Data) -> Void
     private var task: URLSessionWebSocketTask?

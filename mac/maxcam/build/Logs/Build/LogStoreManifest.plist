@@ -6,7 +6,7 @@
 	<integer>13</integer>
 	<key>logs</key>
 	<dict>
-		<key>17ED492E-A502-429B-9C0F-7BED5C4E7389</key>
+		<key>62357718-3F29-4791-90AD-7D86619AABC0</key>
 		<dict>
 			<key>className</key>
 			<string>IDECommandLineBuildLog</string>
@@ -15,7 +15,7 @@
 			<key>domainType</key>
 			<string>Xcode.IDEActivityLogDomainType.BuildLog</string>
 			<key>fileName</key>
-			<string>17ED492E-A502-429B-9C0F-7BED5C4E7389.xcactivitylog</string>
+			<string>62357718-3F29-4791-90AD-7D86619AABC0.xcactivitylog</string>
 			<key>hasPrimaryLog</key>
 			<true/>
 			<key>primaryObservable</key>
@@ -40,139 +40,13 @@
 			<key>signature</key>
 			<string>Building project MaxCamHost with scheme MaxCamHost and configuration Release</string>
 			<key>timeStartedRecording</key>
-			<real>816185270.31834102</real>
+			<real>816186432.57958305</real>
 			<key>timeStoppedRecording</key>
-			<real>816185275.32568395</real>
+			<real>816186439.08022499</real>
 			<key>title</key>
 			<string>Building project MaxCamHost with scheme MaxCamHost and configuration Release</string>
 			<key>uniqueIdentifier</key>
-			<string>17ED492E-A502-429B-9C0F-7BED5C4E7389</string>
-		</dict>
-		<key>229DDBE6-1E80-49C6-9D4E-659FD2A20653</key>
-		<dict>
-			<key>className</key>
-			<string>IDECommandLineBuildLog</string>
-			<key>documentTypeString</key>
-			<string>&lt;nil&gt;</string>
-			<key>domainType</key>
-			<string>Xcode.IDEActivityLogDomainType.BuildLog</string>
-			<key>fileName</key>
-			<string>229DDBE6-1E80-49C6-9D4E-659FD2A20653.xcactivitylog</string>
-			<key>hasPrimaryLog</key>
-			<true/>
-			<key>primaryObservable</key>
-			<dict>
-				<key>highLevelStatus</key>
-				<string>E</string>
-				<key>totalNumberOfAnalyzerIssues</key>
-				<integer>0</integer>
-				<key>totalNumberOfErrors</key>
-				<integer>1</integer>
-				<key>totalNumberOfTestFailures</key>
-				<integer>0</integer>
-				<key>totalNumberOfWarnings</key>
-				<integer>0</integer>
-			</dict>
-			<key>schemeIdentifier-containerName</key>
-			<string>MaxCamHost project</string>
-			<key>schemeIdentifier-schemeName</key>
-			<string>MaxCamHost</string>
-			<key>schemeIdentifier-sharedScheme</key>
-			<integer>1</integer>
-			<key>signature</key>
-			<string>Building project MaxCamHost with scheme MaxCamHost and configuration Release</string>
-			<key>timeStartedRecording</key>
-			<real>816185247.95763004</real>
-			<key>timeStoppedRecording</key>
-			<real>816185252.19404101</real>
-			<key>title</key>
-			<string>Building project MaxCamHost with scheme MaxCamHost and configuration Release</string>
-			<key>uniqueIdentifier</key>
-			<string>229DDBE6-1E80-49C6-9D4E-659FD2A20653</string>
-		</dict>
-		<key>430A37DE-70D5-458E-82FD-2755633624C1</key>
-		<dict>
-			<key>className</key>
-			<string>IDECommandLineBuildLog</string>
-			<key>documentTypeString</key>
-			<string>&lt;nil&gt;</string>
-			<key>domainType</key>
-			<string>Xcode.IDEActivityLogDomainType.BuildLog</string>
-			<key>fileName</key>
-			<string>430A37DE-70D5-458E-82FD-2755633624C1.xcactivitylog</string>
-			<key>hasPrimaryLog</key>
-			<true/>
-			<key>primaryObservable</key>
-			<dict>
-				<key>highLevelStatus</key>
-				<string>E</string>
-				<key>totalNumberOfAnalyzerIssues</key>
-				<integer>0</integer>
-				<key>totalNumberOfErrors</key>
-				<integer>4</integer>
-				<key>totalNumberOfTestFailures</key>
-				<integer>0</integer>
-				<key>totalNumberOfWarnings</key>
-				<integer>0</integer>
-			</dict>
-			<key>schemeIdentifier-containerName</key>
-			<string>MaxCamHost project</string>
-			<key>schemeIdentifier-schemeName</key>
-			<string>MaxCamHost</string>
-			<key>schemeIdentifier-sharedScheme</key>
-			<integer>1</integer>
-			<key>signature</key>
-			<string>Building project MaxCamHost with scheme MaxCamHost and configuration Release</string>
-			<key>timeStartedRecording</key>
-			<real>816185061.18807006</real>
-			<key>timeStoppedRecording</key>
-			<real>816185063.83790398</real>
-			<key>title</key>
-			<string>Building project MaxCamHost with scheme MaxCamHost and configuration Release</string>
-			<key>uniqueIdentifier</key>
-			<string>430A37DE-70D5-458E-82FD-2755633624C1</string>
-		</dict>
-		<key>632E1F08-5090-41BB-AC40-21E1AD630B0D</key>
-		<dict>
-			<key>className</key>
-			<string>IDECommandLineBuildLog</string>
-			<key>documentTypeString</key>
-			<string>&lt;nil&gt;</string>
-			<key>domainType</key>
-			<string>Xcode.IDEActivityLogDomainType.BuildLog</string>
-			<key>fileName</key>
-			<string>632E1F08-5090-41BB-AC40-21E1AD630B0D.xcactivitylog</string>
-			<key>hasPrimaryLog</key>
-			<true/>
-			<key>primaryObservable</key>
-			<dict>
-				<key>highLevelStatus</key>
-				<string>S</string>
-				<key>totalNumberOfAnalyzerIssues</key>
-				<integer>0</integer>
-				<key>totalNumberOfErrors</key>
-				<integer>0</integer>
-				<key>totalNumberOfTestFailures</key>
-				<integer>0</integer>
-				<key>totalNumberOfWarnings</key>
-				<integer>0</integer>
-			</dict>
-			<key>schemeIdentifier-containerName</key>
-			<string>MaxCamHost project</string>
-			<key>schemeIdentifier-schemeName</key>
-			<string>MaxCamHost</string>
-			<key>schemeIdentifier-sharedScheme</key>
-			<integer>1</integer>
-			<key>signature</key>
-			<string>Building project MaxCamHost with scheme MaxCamHost and configuration Release</string>
-			<key>timeStartedRecording</key>
-			<real>816185324.12777197</real>
-			<key>timeStoppedRecording</key>
-			<real>816185326.15663302</real>
-			<key>title</key>
-			<string>Building project MaxCamHost with scheme MaxCamHost and configuration Release</string>
-			<key>uniqueIdentifier</key>
-			<string>632E1F08-5090-41BB-AC40-21E1AD630B0D</string>
+			<string>62357718-3F29-4791-90AD-7D86619AABC0</string>
 		</dict>
 	</dict>
 </dict>

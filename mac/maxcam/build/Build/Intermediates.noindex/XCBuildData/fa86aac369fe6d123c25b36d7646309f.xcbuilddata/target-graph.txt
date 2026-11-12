@@ -1,4 +1,0 @@
-Target dependency graph (2 targets)
-Target 'MaxCamHost' in project 'MaxCamHost'
-➜ Explicit dependency on target 'MaxCamExtension' in project 'MaxCamHost'
-Target 'MaxCamExtension' in project 'MaxCamHost' (no dependencies)

@@ -51,7 +51,7 @@ final class ActivationActions: NSObject {
     static let shared = ActivationActions()
     @objc func activate(_ sender: Any?) {
         let req = OSSystemExtensionRequest.activationRequest(
-            forExtensionWithIdentifier: "io.onlyascii.maxcam",
+            forExtensionWithIdentifier: "io.onlyascii.maxcam.extension",
             queue: .main)
         req.delegate = delegate
         OSSystemExtensionManager.shared.submitRequest(req)

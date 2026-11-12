@@ -10,8 +10,8 @@
 		0F5DC5A3870DD397BAC29ECC /* MaxCamProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D27DFCE0EED58CC2D778D2 /* MaxCamProvider.swift */; };
 		32C8BA7A226E73F969A56181 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6324FD91BA37BB47416E8021 /* main.swift */; };
 		47F6F950AA9FDF6711B907A1 /* FrameClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6044FCD6C57E0EF45E2727F /* FrameClient.swift */; };
-		66B2524B30F1FF1FFA5E1A38 /* MaxCamExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 7C405B1B34AC4E59ED86FCCD /* MaxCamExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		7BE94FE1379F365582C28A01 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF6C816571C973F7BC312BDC /* main.swift */; };
+		897B3E7FF6DF8AFD7A0CF455 /* MaxCamExtension.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 588612C5F736B75B66B6D846 /* MaxCamExtension.systemextension */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -25,23 +25,23 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		A88B6A97B65D1074D171A679 /* Embed Foundation Extensions */ = {
+		13FDCEFDB79649DC1D9D6D05 /* Embed System Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 13;
+			dstPath = "$(SYSTEM_EXTENSIONS_FOLDER_PATH)";
+			dstSubfolderSpec = 16;
 			files = (
-				66B2524B30F1FF1FFA5E1A38 /* MaxCamExtension.appex in Embed Foundation Extensions */,
+				897B3E7FF6DF8AFD7A0CF455 /* MaxCamExtension.systemextension in Embed System Extensions */,
 			);
-			name = "Embed Foundation Extensions";
+			name = "Embed System Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		4286E791135397F74B5B9949 /* MaxCamHost.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MaxCamHost.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		588612C5F736B75B66B6D846 /* MaxCamExtension.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = MaxCamExtension.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
 		6324FD91BA37BB47416E8021 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
-		7C405B1B34AC4E59ED86FCCD /* MaxCamExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MaxCamExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		95FC6225F271A8A12E4FCE7B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		9DF1733C886B2709A1B38E80 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		C6044FCD6C57E0EF45E2727F /* FrameClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameClient.swift; sourceTree = "<group>"; };
@@ -73,7 +73,7 @@
 		8B04993C80B00CCE45A5B00F /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				7C405B1B34AC4E59ED86FCCD /* MaxCamExtension.appex */,
+				588612C5F736B75B66B6D846 /* MaxCamExtension.systemextension */,
 				4286E791135397F74B5B9949 /* MaxCamHost.app */,
 			);
 			name = Products;
@@ -96,7 +96,7 @@
 			buildConfigurationList = 0623B7566D632812062C99E0 /* Build configuration list for PBXNativeTarget "MaxCamHost" */;
 			buildPhases = (
 				EFBA05628A67E0A19C751D6C /* Sources */,
-				A88B6A97B65D1074D171A679 /* Embed Foundation Extensions */,
+				13FDCEFDB79649DC1D9D6D05 /* Embed System Extensions */,
 			);
 			buildRules = (
 			);
@@ -124,8 +124,8 @@
 			packageProductDependencies = (
 			);
 			productName = MaxCamExtension;
-			productReference = 7C405B1B34AC4E59ED86FCCD /* MaxCamExtension.appex */;
-			productType = "com.apple.product-type.app-extension";
+			productReference = 588612C5F736B75B66B6D846 /* MaxCamExtension.systemextension */;
+			productType = "com.apple.product-type.system-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -207,7 +207,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.onlyascii.maxcamhost;
+				PRODUCT_BUNDLE_IDENTIFIER = io.onlyascii.maxcam;
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -217,13 +217,14 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ext.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ext/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "MAX Camera Extension";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
-					"@executable_path/../../../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.onlyascii.maxcam;
+				PRODUCT_BUNDLE_IDENTIFIER = io.onlyascii.maxcam.extension;
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -360,13 +361,14 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = ext.entitlements;
 				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = ext/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "MAX Camera Extension";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
-					"@executable_path/../../../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.onlyascii.maxcam;
+				PRODUCT_BUNDLE_IDENTIFIER = io.onlyascii.maxcam.extension;
 				SDKROOT = macosx;
 			};
 			name = Release;
@@ -382,7 +384,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = io.onlyascii.maxcamhost;
+				PRODUCT_BUNDLE_IDENTIFIER = io.onlyascii.maxcam;
 				SDKROOT = macosx;
 			};
 			name = Release;

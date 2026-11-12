@@ -6,25 +6,32 @@
 	<dict/>
 	<key>files2</key>
 	<dict>
-		<key>Library/SystemExtensions/MaxCamExtension.appex/Contents/Info.plist</key>
+		<key>Library/SystemExtensions/MaxCamExtension.systemextension/Contents/Info.plist</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			R5Ae453VrouXPdjfqNM52L9gIRpQFVF02W0A+PKm7mU=
+			MoNnP+zP2rB8VC9XdmHN2yIpsTK0GdSzdLKDuhsyvJ4=
 			</data>
 		</dict>
-		<key>Library/SystemExtensions/MaxCamExtension.appex/Contents/MacOS/MaxCamExtension</key>
+		<key>Library/SystemExtensions/MaxCamExtension.systemextension/Contents/MacOS/MaxCamExtension</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			TGCpCoobroyONFUO36BKA8m2w8lScu0FwsQxGtE28WI=
+			fRnskdfHy7IQ6IVLMNArfPAYQnY1w3D1l1JvyHqjl2Q=
 			</data>
 		</dict>
-		<key>Library/SystemExtensions/MaxCamExtension.appex/Contents/_CodeSignature/CodeResources</key>
+		<key>Library/SystemExtensions/MaxCamExtension.systemextension/Contents/_CodeSignature/CodeResources</key>
 		<dict>
 			<key>hash2</key>
 			<data>
 			ZobeEKKKL+EbNsu4bcusyCfPxOoRa02r8YReWu5inps=
+			</data>
+		</dict>
+		<key>embedded.provisionprofile</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			D4NrOPdyjmtZuKCmhFDe5svdWODEKA9i6Ubu7BPLejg=
 			</data>
 		</dict>
 	</dict>
