@@ -101,6 +101,10 @@ MAC (Hermes-on-Mac builds from this brief):
   Meet incognito: Panos' browser mic=MAX Mic, speaker=Multi-Output
   (phones+MAX Out); plexpipe uplink = meeting audio; GATE: Max answers the
   meeting out loud into the call.
+  STATUS 2026-11-12 (code-m2): MaxHole 0.1.0 installed + ad-hoc loaded by
+  coreaudiod; device-loop gate **PASS** (owner-run `maxaudiod.py
+  loopback-test`: both pipes self-loop tone-peak=1.00, cross-leak 0.00 —
+  per-device ring-buffer fix confirmed). Meet gate pending P0 door URL.
 - P2 MAC video: MaxCamHost+MaxCamExtension, JPEG 'V' path. GATE: QuickTime
   shows MAX Camera with Max animating (server-rendered).
 - P3 FULL JOIN: incognito Meet with MAX Cam + MAX Mic: 10-minute
