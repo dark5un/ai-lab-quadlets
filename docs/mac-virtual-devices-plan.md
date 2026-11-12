@@ -199,6 +199,10 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   synthetic voice through laptop speakers — consequence (b) below is
   optimistic. P1 gate runs REQUIRE human-side headphones (or maxaudiod
   --gate, which does break this cycle: 300 ms echo << 1.2 s hold).
+  END OF SESSION 2026-11-12: after two MAXBar link down/up resets the
+  MaxHole ring WEDGED (device reads pure zeros — see ring-wedge pitfall);
+  gate still PENDING. Recovery = coreaudiod kickstart + full Chrome
+  restart + fresh run-bridge.sh + re-pick incognito devices, headphones ON.
 - P2 MAC video: MaxCamHost+MaxCamExtension, JPEG 'V' path. GATE: QuickTime
   shows MAX Camera with Max animating (server-rendered).
   PREP 2026-11-12: BLOCKED on P1 Meet gate PASS first (kickoff contract).
@@ -340,6 +344,23 @@ MAC BUILD NOTES (as actually built, 2026-11-12 — frozen facts for P1 tests):
   kill/restart maxaudiod mid-call (drops the plex session, forces reconnect
   churn + 'rejecting second session' storm while the server still holds the
   dead leg).
+- **MaxHole fork RING WEDGES after capture-stream close/reopen cycles**
+  (hit 2026-11-12, live Meet session): door link down/up (and any reconnect
+  that re-enters `with sd.InputStream`) tears down and re-opens the HAL
+  stream; after a couple of such cycles MAX Out reads EXACT digital zero for
+  every reader — proven with a single-client duplex tone self-loop (the P0
+  gate pattern) while the bridge was down. Counter fingerprint: tx/rx frame
+  rates perfectly real-time, but RMS tap of the device = all zeros and the
+  model goes deaf after its autogreeting. RECOVERY (owner sudo): `sudo
+  launchctl kickstart -k system/com.apple.audio.coreaudiod` (driver
+  auto-reloads from /Library/Audio/Plug-Ins/HAL/MaxHole.driver) -> FULL
+  Chrome quit+restart (device UIDs change) -> re-run run-bridge.sh ->
+  re-pick MAX devices in the incognito session (settings never survive
+  incognito restart). WORKAROUND mid-call: never use link down/up to stop a
+  loop — use "Mute uplink" (runtime control file does NOT reopen CoreAudio
+  streams). ROOT CAUSE TODO: audit fork per-device arrays / device_index()
+  teardown; repro = open+close InputStream on one MAX device repeatedly,
+  then duplex tone self-loop test.
 - Fresh machine: github.com may be missing from ~/.ssh/known_hosts —
   ssh-keyscan + check against GitHub's published ED25519 fingerprint
   (SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU), then append.
