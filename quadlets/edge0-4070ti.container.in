@@ -1,0 +1,37 @@
+# Edge0-120B serve on the RTX 4070 Ti — Epic E0 lab experiment (see
+# .scratch/edge0-evaluation/VERDICT.md). NOT part of Max's chain: the smart
+# brain is minis strata. Kept as a runnable, documented config of what works.
+# Proven (E03/E05): 120B-q3k fits the 12.28 GiB card (11.67 GiB used, ~50 tok/s
+# decode, bake-off 10/16). The serve proxy binds container-local 127.0.0.1
+# unless --host 0.0.0.0 is given — without it the published port resets.
+# Experts (28.6 GB) are resident-pinned in host RAM; PLE streams from SSD.
+# No [Install]: nothing starts at boot.
+
+[Unit]
+Description=Edge0-120B serve (RTX 4070 Ti 12 GB, experiment)
+Wants=ai-network.service
+After=ai-network.service
+# Whole-card service: mutually exclusive with everything else on the 4070 Ti.
+Conflicts=maxface.service personaplex.service llama-cpp-4070ti.service llama-cpp-both.service strata-4070ti.service strata-4070ti-524k.service strata-4070ti-1m.service docling-4070ti.service comfyui-4070ti.service soulx-duplug.service minicpmo-omni.service
+
+[Container]
+ContainerName=systemd-edge0-4070ti
+Image=localhost/edge0-build:latest
+Network=ai.network
+AddDevice=nvidia.com/gpu=__GPU_4070TI_UUID__
+SecurityLabelDisable=true
+UserNS=keep-id
+Exec=/src/edge0-infer/build/cpu/bin/edge0-infer serve --model /models/Edge0-120B-q3k --context 65536 --host 0.0.0.0 --port 8000 --strata-dir /src/edge0-strata --strata-python /src/edge0-strata/.venv/bin/python --strata-ready-timeout 600
+Volume=%h/workspace/github.com/Edge0-AI/Edge0:/src:ro,Z
+Volume=%h/.local/share/ai-lab/models:/models:ro,Z
+# http://<host>:8000/v1 (lab containers: http://systemd-edge0-4070ti:8000/v1)
+PublishPort=0.0.0.0:8000:8000
+
+[Service]
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+# Model load ~60-90 s after start; poll /health, don't blind-sleep.
+TimeoutStartSec=1200
+# 28.6 GiB resident experts + KV + slack.
+MemoryMax=45G
