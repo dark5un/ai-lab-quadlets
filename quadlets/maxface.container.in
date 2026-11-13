@@ -29,10 +29,10 @@ Network=ai.network
 AddDevice=nvidia.com/gpu=all
 Environment=CUDA_VISIBLE_DEVICES=__GPU_4070TI_UUID__
 Environment=OPENTALKING_QUICKTALK_ASSET_ROOT=/models/quicktalk
-# Owner pick (2026-11-12): d3 = smooth + synced but head moves too much (sway 1.25);
-# deployed skin is d3s = same anchor reenacted with LivePortrait --driving-multiplier 0.6
-# (sway 0.84, between bench_en 0.51 "conservative" and d3 "too much").
-Environment=MAXFACE_TEMPLATE=/models/avatars/maximilian/source/maximilian_d3s.mp4
+# Owner pick (2026-11-12): Max's base = the owner's own 75s listening take,
+# chunk-reenacted onto the anchor (own_idle -> maximilian_idleown.mp4,
+# sway 0.20, closed-mouth idle semantics, no stock-driver quirks).
+Environment=MAXFACE_TEMPLATE=/models/avatars/maximilian/source/maximilian_idleown.mp4
 Environment=MAXFACE_DEVICE=cuda:0
 # 6 frames = 0.24 s of audio per generation slice: keeps lip latency under
 # ~0.4 s at the seam (render headroom: 52 fps gen vs 25 fps consumption).
@@ -53,7 +53,8 @@ SuccessExitStatus=143
 Restart=on-failure
 RestartSec=15
 # First start pays torch load + full-clip face detection (cached afterwards).
-TimeoutStartSec=600
+# Owner idle template = 2267 frames -> cache build ~10-15 min (536f ~ 3min).
+TimeoutStartSec=1800
 MemoryMax=16G
 
 # No [Install] section by design: opt-in via ai-lab (avatar group, boot=false).
