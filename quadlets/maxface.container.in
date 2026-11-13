@@ -34,6 +34,9 @@ Environment=OPENTALKING_QUICKTALK_ASSET_ROOT=/models/quicktalk
 # sway 0.20, closed-mouth idle semantics, no stock-driver quirks).
 Environment=MAXFACE_TEMPLATE=/models/avatars/maximilian/source/maximilian_idleown.mp4
 Environment=MAXFACE_DEVICE=cuda:0
+# 999-frame template peaks just over the ~2 GiB headroom behind personaplex;
+# reclaim allocator fragmentation (219 MiB reserved-unallocated in the OOM log).
+Environment=PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # 6 frames = 0.24 s of audio per generation slice: keeps lip latency under
 # ~0.4 s at the seam (render headroom: 52 fps gen vs 25 fps consumption).
 # Full shared-clock pacing + A/V offset compensation = ticket 08.
