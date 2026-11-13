@@ -82,7 +82,7 @@ EOF
     grep -qx "Environment=PRESET=$name" "$f" || err "$name: PRESET is not $name"
     case "$variant" in 5090*) quant=IQ3_S ;; *) quant=IQ3_XXS ;; esac
     grep -qx "Environment=MODEL_PATH=/data/models/$quant" "$f" || err "$name: MODEL_PATH is not /data/models/$quant"
-    case "$variant" in 5090*) par=2 ;; *) par=1 ;; esac
+    case "$variant" in 5090*-1m) par=1 ;; 5090*) par=2 ;; *) par=1 ;; esac
     grep -qx "Environment=PARALLEL=$par" "$f" || err "$name: PARALLEL is not $par"
     for d in state install home Strata-data; do
         grep -q "Volume=%h/.local/share/strata/$d:/data/$d:Z" "$f" || err "$name: /data/$d not persisted"

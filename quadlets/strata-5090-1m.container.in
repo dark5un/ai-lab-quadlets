@@ -39,7 +39,9 @@ Exec=-c __CPUS_MAIN__ /opt/strata/entrypoint.sh run
 EnvironmentFile=%h/.config/containers/config/strata/service.env
 Environment=PRESET=strata-5090-1m
 Environment=MODEL_PATH=/data/models/IQ3_S
-Environment=PARALLEL=2
+# PARALLEL=1: 1M-context KV cache eats ~111 GiB with 2 slots on this
+# 125 GiB host (global OOM 2026-11-13); one slot keeps real headroom.
+Environment=PARALLEL=1
 # Per-variant settings. The 0.2.0 image saves these choices as the preset
 # named in PRESET= (under /data/config = config-<v>); delete that preset to
 # re-run setup, or change a value here and it re-saves on the next start.
