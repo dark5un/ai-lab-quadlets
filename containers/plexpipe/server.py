@@ -72,6 +72,7 @@ FRAME_BYTES = FRAME * 2
 STAT_EVERY = 2.0
 RECONNECT_MAX = 15.0
 UP_STALL_S = 0.3       # no door audio for this long: the uplink has stopped, pad the stream
+UP_WATERMARK_BYTES = 4800  # 0.1 s of 24 kHz s16: above this the buffer is startup backlog, shed it
 
 
 sessions = {}  # role ("audio"/"video") -> ws ; one Mac per role at a time
@@ -227,7 +228,13 @@ async def plex_session(ws, stop: asyncio.Event, stats: dict,
                     if len(ff_buf) >= FRAME_BYTES:
                         if t0 is None:
                             t0 = now
-                        if sent < int((now - t0) / 0.08) + 1:
+                        # Above the watermark the buffer is the startup backlog: audio captured while the
+                        # plex handshake ran, measured at 200 kB = 3.3 s and then flat forever, because a
+                        # 1.0x pump never consumes what it is behind. Shed it at one frame per 20 ms
+                        # iteration (up to 4x real time) -- the audio is real and in order, so positions
+                        # stay exact; only the first couple of seconds after link-up play fast.
+                        shed = len(ff_buf) > UP_WATERMARK_BYTES
+                        if shed or sent < int((now - t0) / 0.08) + 1:
                             frame = bytes(ff_buf[:FRAME_BYTES])
                             del ff_buf[:FRAME_BYTES]
                             ow.append_pcm(np.frombuffer(frame, dtype="<i2").astype(np.float32) / 32768.0)
@@ -236,6 +243,8 @@ async def plex_session(ws, stop: asyncio.Event, stats: dict,
                                 await plex.send(b"\x01" + payload)
                             sent += 1
                             last_data = now
+                            if shed:
+                                stats["up_shed"] = stats.get("up_shed", 0) + 1
                     elif (t0 is not None and now - last_data > UP_STALL_S
                           and sent < int((now - t0) / 0.08) + 1):
                         log("uplink stalled: sending silence to keep the plex stream open")
