@@ -78,6 +78,50 @@ containers/tyger-gateway/scripts/dev-check.sh
 Start order (the reconnect-storm rule, `PLAN-V03-step2.md` §3): **tyger healthy → gateway healthy →
 plexpipe → then link maxaudiod up.** Never the reverse.
 
+## Gate 1 evidence — 2026-11-14, 13:48–13:55 GMT (all on the real chain)
+
+Run by the owner (recorded harness) and by the agent (unrecorded turns), on branch
+`v03/tyger-gateway`, image `localhost/tyger-gateway:latest`, tyger-v1 on the 5090.
+
+| # | check (PLAN-V03-step2.md §2) | result |
+|---|---|---|
+| 1 | exactly one `plex streaming` line; `plex_up:true`, up/down bytes rising | **1** line; `server_up_frames` rising (16732 → 26924); `down_bytes` non-zero each session |
+| 2 | gateway log: token decision, `ready` with `hop_ms:320`/`sr:16000`, N mic blocks, reply id + samples, `played:` sent | all present: `token: none (TYGER_API_SECRET unset)`, `ready hop_ms=320 sr=16000 mouth=True voice=max`, `mic blocks=250…15500` at 50/s `dropped=0`, `played:1:272640 sent` |
+| 3 | `maxaudiod.json` advanced: connected, down frames grew, gated frames grew | `connected:true`, `rx_frames` 0→150, `gated_frames` 0→444+, `speaking_frames` 0→89, keyed off `last_stat` (the stale `plex_up`/`bridge_up` fields were ignored) |
+| 4 | tyger's own log shows the session | `conversation start`, `endpoint by=head turn_s=19.52 segments=1`, `response_onset 310 ms`, `turn_done barged=False … echo -96.3 dB` |
+| 5 | MAX Out/Mic recording contains speech whose transcript matches the gateway's reply | `turn-20261114T135033.wav`: speech 18.25–24.77 s = 6.52 s of a 7.20 s reply, seven consecutive seconds of steady RMS; whisper transcription matches the reply text verbatim |
+| 6 | `plex streaming` count unchanged over a 60 s idle window | unchanged |
+
+Exact three-way delivery check on one turn (counters, not impressions): the gateway put
+**288 000 samples (12.00 s)** on the wire in 150 frames; maxaudiod wrote **282 240 samples (11.76 s)**
+to MAX Mic — the 0.24 s difference is exactly 3 header/empty frames. Everything else arrives.
+
+## Open finding: the MAX Mic pair wobbles audio (not V03)
+
+Measured 2026-11-14 13:36 with **no gateway, no tyger and no plexpipe in the picture**: a pure 440 Hz
+tone written into MAX Mic with `ffmpeg -f audiotoolbox` and captured back with `ffmpeg -f avfoundation`
+comes back with **130 discontinuities spaced ~75 ms**, its energy split across 435–449 Hz instead of one
+line (the source tone measures 100 % in-band). The owner's ear on the recorded reply: "lots of breaking
+and cracks". The same capture also runs ~11 % short (a 10 s tone spans 8.82 s; a 45 s capture writes a
+39.8 s file), which is why a complete reply reads as 91 % in a recording.
+
+This is a MAX Mic / MaxHole property, so personaplex would hit it identically. It is not a V03
+deliverable; it is a ticket against the device pair, and Gate 2 (a real Meet) is what says whether a
+meeting app hears it.
+
+## Receipts / how to reproduce
+
+```
+# on the ai box
+systemctl --user is-active tyger-gateway plexpipe
+curl -sS http://127.0.0.1:8994/health
+containers/tyger-gateway/scripts/dev-check.sh
+podman logs -t systemd-tyger-gateway | grep -E 'ready|endpoint|played:|turn_done|downlink'
+# on the Mac (a shell holding the microphone grant)
+mac/maxaudiod/gate1-turn.sh          # one turn, recorded off MAX Mic
+mac/maxaudiod/gate1-mic-loopback.sh  # known tone through the device pair, gateway not involved
+```
+
 ## Acceptance
 
 Gate 1 is the real chain without a human: `afplay` a real WAV into MAX Mic → real `maxaudiod --gate` → real
