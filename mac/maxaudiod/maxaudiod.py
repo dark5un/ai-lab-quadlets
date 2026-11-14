@@ -261,7 +261,7 @@ class Bridge:
                         "not pacing this playback (queue %d, handed over %.2f s so far)",
                         self.play_i, n, want * 1e3, dt * 1e3, self.play_q.qsize(),
                         self.play_samples / PLAY_NATIVE)
-        elif self.play_i <= 3 or self.play_i % 10 == 0:
+        elif self.play_i % 100 == 0:                  # one line per ~8 s of playback
             log.info("play #%d: %d samples (%.0f ms), write %.0f ms, queue %d, handed over %.2f s",
                      self.play_i, n, want * 1e3, dt * 1e3, self.play_q.qsize(),
                      self.play_samples / PLAY_NATIVE)
