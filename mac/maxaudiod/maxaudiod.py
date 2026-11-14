@@ -6,6 +6,11 @@ Modes:
   run --door URL  bridge MAX Out (capture) -> WSS 'A' uplink 48k s16le mono,
                   WSS downlink 'A' 24k s16le mono -> MAX Mic playback
                   protocol: docs/mac-virtual-devices-plan.md (JSON control + binary tag 'A'/'V')
+  V03 step 4 (full duplex, I-26): every uplink block is followed by a 'P' tag
+                  [rid][reply sample at 24k, -1 none][capture position at 48k], and a played-out
+                  reply is reported as the text command played:<rid>:<samples>. The downlink gains
+                  two JSON controls: {"t":"reply","rid":N} and {"t":"drain","rid":N}. The tag is
+                  measured from PortAudio's device clock, not modelled (see PlayTrace).
 
 Native rates dodge resampling: capture 48k, play downlink at 24k (MaxHole kSampleRates).
 """
@@ -23,6 +28,11 @@ PLAY_NATIVE = 24000  # downlink rate == MaxHole native; no resample needed
 FRAME_MS = 20
 GATE_HOLD = 1.2  # s — half-duplex loop-break (see Bridge.on_capture)
 PLAY_SR = 24000  # downlink / MAX Mic rate: the playhead counts reply samples at this rate (I-26)
+# The playhead tag on the door uplink (V03 step 4): reply id, the reply sample at PLAY_SR that was at
+# the DAC when the block was captured (-1: nothing of a reply playing), and the capture position of
+# that block at CAP_RATE. The position is what pairs the tag with its block after plexpipe's resample
+# and Opus reframe; arrival order alone cannot (PLAN-V03-step4-full-duplex.md §4.2, §8).
+TAG = struct.Struct("<iii")
 
 log = logging.getLogger("maxaudiod")
 
@@ -44,6 +54,7 @@ class Status:
                      "gated_frames": 0, "speaking_frames": 0,
                      "mailbox_frames": 0,
                      "play_chunks": 0, "play_samples": 0,
+                     "tag_frames": 0, "played_reports": 0,
                      "plex_up": None, "bridge_up": None}
 
     def bump(self, **kw):
@@ -76,8 +87,11 @@ status = Status()
 
 # ---------------------------------------------------------------- controls
 # MAXBar (or a human) writes cmd-maxaudiod.json next to the heartbeat:
-#   {"link":"up"|"down", "mute_mic":bool, "mute_uplink":bool}
+#   {"link":"up"|"down", "mute_mic":bool, "mute_uplink":bool, "gate":bool}
 # polled every heartbeat tick; absent file = all permissive defaults.
+# `gate` (V03 step 4 plan §4.1): the half-duplex flag as a RUNTIME field, so full duplex and the A/B
+# fallback are one file edit. null/absent = keep the CLI default; launchd caches the CLI args, and
+# changing them needs an owner bootout+bootstrap, which a test must not need.
 CMD_PATH = os.path.join(STATUS_DIR, "cmd-maxaudiod.json")
 
 
@@ -86,6 +100,7 @@ class Controls:
         self.link = "up"
         self.mute_mic = False
         self.mute_uplink = False
+        self.gate = None          # None: follow --gate; True/False: override it
         self._mtime = None
 
     def poll(self):
@@ -95,7 +110,7 @@ class Controls:
             if self._mtime is not None:
                 log.info("cmd file gone - controls reset to defaults")
                 self.__init__()
-                status.bump(link_requested="up", mic_muted=False, uplink_muted=False)
+                status.bump(link_requested="up", mic_muted=False, uplink_muted=False, gate=None)
             return
         if m == self._mtime:
             return
@@ -106,12 +121,13 @@ class Controls:
             self.link = "down" if j.get("link") == "down" else "up"
             self.mute_mic = bool(j.get("mute_mic"))
             self.mute_uplink = bool(j.get("mute_uplink"))
-            log.info("controls: link=%s mute_mic=%s mute_uplink=%s",
-                     self.link, self.mute_mic, self.mute_uplink)
+            self.gate = j.get("gate") if isinstance(j.get("gate"), bool) else None
+            log.info("controls: link=%s mute_mic=%s mute_uplink=%s gate=%s",
+                     self.link, self.mute_mic, self.mute_uplink, self.gate)
         except Exception as e:
             log.warning("cmd file unreadable: %s", e)
         status.bump(link_requested=self.link, mic_muted=self.mute_mic,
-                    uplink_muted=self.mute_uplink)
+                    uplink_muted=self.mute_uplink, gate=self.gate)
 
 
 controls = Controls()
@@ -222,6 +238,12 @@ class PlayTrace:
         with self.lock:
             return self.total.get(rid, 0)
 
+    def clear(self):
+        """A drain: playback is being flushed, so nothing scheduled is going to the DAC any more."""
+        with self.lock:
+            self.windows.clear()
+            self.total.clear()
+
 
 # ---------------------------------------------------------------- door bridge
 class Bridge:
@@ -237,6 +259,7 @@ class Bridge:
         self.stop = threading.Event()
         self.trace = PlayTrace()          # I-26: the playhead, from the DAC clock
         self.cur_rid = 0                  # the reply whose audio the downlink is carrying
+        self.drain_pending = False        # a barge drain: flushed by the play callback, never here
         self.log_q = queue.Queue(maxsize=64)
         self._samples_logged = 0
 
@@ -283,6 +306,19 @@ class Bridge:
                                 plex_up=ctrl.get("plex_up"), bridge_up=ctrl.get("bridge_up"),
                                 server_up_frames=ctrl.get("up_frames"),
                                 server_down_frames=ctrl.get("down_frames"))
+                elif ctrl.get("t") == "reply":
+                    # A new reply's audio starts: name it, so the tag this Mac sends names the id the
+                    # voice server knows (V03 step 4). Backchannels arrive as rid 0: played, never tagged.
+                    rid = ctrl.get("rid")
+                    if isinstance(rid, int):
+                        if rid != self.cur_rid:
+                            log.info("reply rid=%d begins", rid)
+                        self.cur_rid = rid
+                elif ctrl.get("t") == "drain":
+                    # A barge: the gateway wants MAX Mic silent now. The flush itself belongs to the
+                    # play callback (it owns the queue and the carry), so only ask here.
+                    log.info("drain rid=%s from the gateway: flushing playback", ctrl.get("rid"))
+                    self.drain_pending = True
 
     def write_mailbox(self, payload: bytes):
         """Atomic latest-frame handoff for the Camera Extension (P2)."""
@@ -311,9 +347,27 @@ class Bridge:
         carry = [np.zeros(0, np.float32)]
         rid = [0]
         submitted = [0]                  # reply samples handed to the DAC for the current reply
+        pending: list = [None]           # (rid, samples, when the last of them reached the DAC)
+        reported: list = [None]          # the last rid a `played:` report has been sent for
+        cap_pos = [0]                    # samples captured on this stream (48 kHz): the tag's position
         self.play_i = 0
         self.play_samples = 0
         self.play_write_s = 0.0
+
+        def drain_now():
+            """A barge: throw away everything not yet at the DAC. Safe only from the callback."""
+            n = 0
+            while True:
+                try:
+                    self.play_q.get_nowait()
+                    n += 1
+                except queue.Empty:
+                    break
+            carry[0] = np.zeros(0, np.float32)
+            submitted[0] = 0
+            pending[0] = None
+            trace.clear()
+            log.info("drain: %d queued chunks dropped, playback writes zeros from now", n)
 
         def on_play(outdata, frames, tsi, status_info):
             """Fill MAX Mic from the downlink queue; record where the reply is at the DAC (I-26).
@@ -322,6 +376,9 @@ class Bridge:
             to `time.perf_counter()` so the input callback (a different stream) can compare. Each
             contiguous (reply id, reply sample) run that reaches the DAC this buffer goes to the trace.
             """
+            if self.drain_pending:
+                self.drain_pending = False
+                drain_now()
             out = np.zeros(frames, np.float32)
             pos = 0
             segs = []
@@ -345,15 +402,29 @@ class Bridge:
                 outdata[:, 0] = 0.0              # drained, not played: MAX Mic stays silent
                 return
             outdata[:, 0] = out
-            if not segs:
-                return
-            t0 = time.perf_counter() + (tsi.outputBufferDacTime - tsi.currentTime)
-            for start, r, first, n in segs:
-                trace.submit(t0 + start / PLAY_NATIVE, n, r, first)
-                self.play_i += 1
-                self.play_samples += n
-            status.inc("play_chunks")
-            status.bump(play_samples=int(self.play_samples))
+            if segs:
+                t0 = time.perf_counter() + (tsi.outputBufferDacTime - tsi.currentTime)
+                last_end = t0
+                for start, r, first, n in segs:
+                    trace.submit(t0 + start / PLAY_NATIVE, n, r, first)
+                    last_end = t0 + (start + n) / PLAY_NATIVE
+                    self.play_i += 1
+                    self.play_samples += n
+                status.inc("play_chunks")
+                status.bump(play_samples=int(self.play_samples))
+                # A backchannel (rid 0) plays but is never tagged or reported (playback.py:30).
+                pending[0] = (rid[0], submitted[0], last_end) if rid[0] else None
+            elif carry[0].size == 0 and self.play_q.empty():
+                # Idle with nothing queued: a reply whose audio has all reached the DAC is reported
+                # `played:<rid>:<samples>` -- that report is what ends tyger's turn honestly
+                # (app/ears/conversation.py:148-154,305-310), instead of the server's 2 s guess.
+                pr = pending[0]
+                if pr is not None and pr[2] <= time.perf_counter() and pr[0] != reported[0]:
+                    pending[0] = None
+                    reported[0] = pr[0]
+                    self.tx.put(f"played:{pr[0]}:{pr[1]}")
+                    status.inc("played_reports")
+                    log.info("played:%d:%d (all of rid %d has reached the DAC)", pr[0], pr[1], pr[0])
 
         def on_capture(indata, frames, tsi, status_info):
             # HALF-DUPLEX GATE (2026-11-12): Meet plays back Max's own voice through the speaker path
@@ -363,17 +434,25 @@ class Bridge:
             # I-26: what the user was hearing when this MAX Out block was captured, from the DAC clock
             t_adc = time.perf_counter() + (tsi.inputBufferAdcTime - tsi.currentTime)
             r, s = trace.tag(t_adc)
+            at = cap_pos[0]
+            cap_pos[0] += frames
             try:
                 self.log_q.put_nowait((r, s))
             except queue.Full:
                 pass
-            if controls.mute_uplink or (self.gate and time.time() - self.last_downlink < GATE_HOLD):
+            gate = self.gate if controls.gate is None else controls.gate
+            if controls.mute_uplink or (gate and time.time() - self.last_downlink < GATE_HOLD):
                 status.inc("gated_frames")
                 self.tx.put(b"A" + (b"\x00" * 2 * frames))
-                return
-            mono = (indata[:, 0] + indata[:, 1]) * 0.5  # L+R downmix
-            pcm = (np.clip(mono, -1, 1) * 32767).astype("<i2")  # s16le 48k mono
-            self.tx.put(b"A" + pcm.tobytes())
+            else:
+                mono = (indata[:, 0] + indata[:, 1]) * 0.5  # L+R downmix
+                pcm = (np.clip(mono, -1, 1) * 32767).astype("<i2")  # s16le 48k mono
+                self.tx.put(b"A" + pcm.tobytes())
+            # The tag rides beside the block it describes, right after it on the same socket: reply id,
+            # the reply sample at the DAC at this capture instant, and the capture position so the far
+            # side can pair tag with block through plexpipe's resample and Opus reframe.
+            self.tx.put(b"P" + TAG.pack(r, s, at))
+            status.inc("tag_frames")
 
         rx_thread = threading.Thread(target=self.reader, daemon=True)
         tx_thread = threading.Thread(target=self._send_loop, daemon=True)
@@ -389,7 +468,7 @@ class Bridge:
                     self._play_summary()
 
     def _send_loop(self):
-        """Send queued door frames ('A' uplink blocks) from a thread, never from a callback."""
+        """Send queued door frames ('A' uplink blocks, 'P' tags, `played:` reports) from a thread."""
         while not self.stop.is_set():
             try:
                 msg = self.tx.get(timeout=0.05)
@@ -399,7 +478,10 @@ class Bridge:
             if ws is None:
                 return
             try:
-                ws.send(msg, opcode=websocket.ABNF.OPCODE_BINARY)
+                if isinstance(msg, str):
+                    ws.send(msg, opcode=websocket.ABNF.OPCODE_TEXT)   # played:<rid>:<samples>
+                else:
+                    ws.send(msg, opcode=websocket.ABNF.OPCODE_BINARY)
             except Exception as e:
                 status.bump(connected=False)
                 status.inc("errors")
