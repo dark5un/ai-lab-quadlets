@@ -43,7 +43,7 @@ Every row is cited to `file:line` in `WIRE-TABLES-v03.md`. `resample.py` is the 
 | `TYGER_VOICES_URL` | `http://tyger-v1:7860/voices` | the health probe |
 | `TYGER_API_SECRET` | *unset* | set ⇒ an HS256 token is signed per connect (`aud: tyger`, `exp` 60 s, fresh `jti`). Step 2 does **not** set it: tyger stays open and loopback-only (V05 owns the posture) |
 
-## Why the downlink is paced at real time (found live, 2026-11-14)
+## Why the downlink is paced at real time
 
 tyger hands a whole reply over in a **burst** (measured 11–15× real time: 9.44 s of speech in 0.74 s).
 plexpipe drains its `sphn` Reader with **one `read_pcm()` per incoming message** (`plexpipe server.py:194-196`),
@@ -109,7 +109,7 @@ This is a MAX Mic / MaxHole property, so personaplex would hit it identically. I
 deliverable; it is a ticket against the device pair, and Gate 2 (a real Meet) is what says whether a
 meeting app hears it.
 
-## Receipts / how to reproduce
+## How to reproduce
 
 ```
 # on the ai box
