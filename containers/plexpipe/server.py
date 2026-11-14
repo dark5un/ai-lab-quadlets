@@ -4,8 +4,14 @@ One Mac session PER ROLE over the WSS door (:8991 loopback, tailnet door
 tailscale serve :8457). Protocol (JSON control + binary tag 'A'/'V'):
   C->S {"t":"hello","v":1,"caps":["audio"]|["video"]}   (role = first cap)
   C->S binary 'A' = meeting audio s16le 48k mono  (MAX Out capture)
+  C->S binary 'P' = playhead tag beside an 'A' block (V03 step 4, I-26):
+       struct("<iii", rid, reply sample at 24k [-1 none], capture position at 48k).
+       Relay only: forwarded to the plex leg as 0x03 + the same 12 bytes.
+  C->S text  "played:<rid>:<samples>"  -> relayed to the plex leg as a text frame
   S->C binary 'A' = Max's voice  s16le 24k mono   (plays into MAX Mic)
   S->C binary 'V' = JPEG 640x480 frame            (-> MAX Camera, video leg)
+  S->C {"t":"reply","rid":N} / {"t":"drain","rid":N}  the plex leg's 0x03 + JSON control,
+       relayed to the Mac (a reply begins; a barge flushes MAX Mic)
   S->C {"t":"stat",...} ~2s heartbeats (Mac watchdog + status-bar widget)
   S->C {"t":"caption","text":...} plex monologue stream (0x02, optional UI)
   C->S {"t":"testvideo","on":true|false}  (video leg: swap the real
@@ -38,6 +44,7 @@ loopback bind + tailnet-only door (owner network policy).
 import asyncio
 import json
 import os
+import struct
 import time
 from urllib.parse import quote
 
@@ -64,6 +71,9 @@ FRAME = 1920    # 80 ms at 24k
 FRAME_BYTES = FRAME * 2
 STAT_EVERY = 2.0
 RECONNECT_MAX = 15.0
+UP_STALL_S = 0.3       # no door audio for this long: the uplink has stopped, pad the stream
+UP_WATERMARK_BYTES = 4800  # 0.1 s of 24 kHz s16: above this the buffer is startup backlog, shed it
+
 
 sessions = {}  # role ("audio"/"video") -> ws ; one Mac per role at a time
 
@@ -147,8 +157,11 @@ class PcmFeed:
 
 async def plex_session(ws, stop: asyncio.Event, stats: dict,
                        ff_buf: bytearray, bridge: "BridgeFeed",
-                       renderer: "PcmFeed"):
-    """Dial personaplex and run the duplex loop for one Mac session."""
+                       renderer: "PcmFeed", ctrl_q: "asyncio.Queue"):
+    """Dial personaplex and run the duplex loop for one Mac session.
+
+    `ctrl_q` carries the door's relay items up to the plex leg: bytes = a 12-byte playhead tag
+    (sent as 0x03 + the bytes), str = a `played:` report (sent as a text frame)."""
     url = f"{PLEX_URL}/api/chat?text_prompt={quote(TEXT_PROMPT)}&voice_prompt={quote(VOICE_PROMPT)}"
     ow = sphn.OpusStreamWriter(SR)
     ordr = sphn.OpusStreamReader(SR)
@@ -170,22 +183,81 @@ async def plex_session(ws, stop: asyncio.Event, stats: dict,
             continue
         stats["plex_up"] = True
         log("plex streaming")
+        # A tag or report from the previous plex connection describes a stream that is gone: drop it,
+        # so a fresh upstream never inherits stale playhead positions.
+        while True:
+            try:
+                ctrl_q.get_nowait()
+            except asyncio.QueueEmpty:
+                break
         try:
-            # uplink pump: 80 ms ticks -> ff-resampled frames (or silence pad)
+            # uplink pump: ONE 80 ms frame per message, at 1.0x, with a bounded drain of any backlog.
+            #
+            # sphn 0.1.12's writer, like its reader, yields one page per instant: appending several
+            # frames and then calling read_bytes() ONCE drops the rest. Measured 2026-11-14 on the live
+            # chain: maxaudiod captured exactly 50.00 blocks/s and the gateway received 47.21 mic
+            # blocks/s (15,108 of 16,000 samples/s = 94.4%) while ff_buf stayed flat -- the audio was
+            # discarded inside the writer, and the ears' stream fell 3.4 s behind the capture clock
+            # every minute. So: append one frame, read it, send it, and repeat; a backlog drains in
+            # whole frames (never several inside one message) and is capped so it cannot burst.
             async def up_pump():
+                """ONE 80 ms frame per message, paced by the wall clock at exactly 1.0x.
+
+                Three measured facts from 2026-11-14, each of which cost a run:
+
+                * sphn 0.1.12's writer yields one page per instant: appending several frames before
+                  read_bytes() DROPS the rest. maxaudiod captured exactly 50.00 blocks/s while the
+                  gateway received 47.21 mic blocks/s (15,108 of 16,000 samples/s = 94.4%) with ff_buf
+                  flat -- the audio died inside the writer. Hence one append + one read per frame.
+                * `sleep(0.08)` per frame is not 80 ms (await overhead put the loop at ~86 ms), so ff_buf
+                  grew 2.7 kB/s and the same 3.4 s/min came back as buffered latency.
+                * catching a backlog up by sending several frames per tick ran the stream AHEAD of the
+                  capture clock (pos 4.08M against a newest playhead tag of 4.06M), which makes every
+                  playhead tag pair with audio that has not been captured yet.
+
+                So: the pace is the wall clock, the clock starts with the first captured frame (pace from
+                the session start instead and the startup gap is padded with silence nobody recorded),
+                and a frame is sent only while the stream is behind the clock. Never ahead, never two in
+                one message. Silence is sent only when the uplink has genuinely stopped.
+                """
+                t0 = None
+                sent = 0
+                last_data = time.monotonic()
                 while not stop.is_set():
-                    while len(ff_buf) >= FRAME_BYTES:
-                        frame = bytes(ff_buf[:FRAME_BYTES])
-                        del ff_buf[:FRAME_BYTES]
-                        pcm = np.frombuffer(frame, dtype="<i2").astype(np.float32) / 32768.0
-                        ow.append_pcm(pcm)
-                    if not len(ff_buf) and stats["up_bytes"] == stats.get("up_bytes_mark", -1):
-                        ow.append_pcm(silence)  # starved uplink: keep stream continuous
-                    stats["up_bytes_mark"] = stats["up_bytes"]
-                    b = ow.read_bytes()
-                    if b:
-                        await plex.send(b"\x01" + b)
-                    await asyncio.sleep(0.08)
+                    now = time.monotonic()
+                    if len(ff_buf) >= FRAME_BYTES:
+                        if t0 is None:
+                            t0 = now
+                        # Above the watermark the buffer is the startup backlog: audio captured while the
+                        # plex handshake ran, measured at 200 kB = 3.3 s and then flat forever, because a
+                        # 1.0x pump never consumes what it is behind. Shed it at one frame per 20 ms
+                        # iteration (up to 4x real time) -- the audio is real and in order, so positions
+                        # stay exact; only the first couple of seconds after link-up play fast.
+                        shed = len(ff_buf) > UP_WATERMARK_BYTES
+                        if shed or sent < int((now - t0) / 0.08) + 1:
+                            frame = bytes(ff_buf[:FRAME_BYTES])
+                            del ff_buf[:FRAME_BYTES]
+                            ow.append_pcm(np.frombuffer(frame, dtype="<i2").astype(np.float32) / 32768.0)
+                            payload = ow.read_bytes()
+                            if payload:
+                                await plex.send(b"\x01" + payload)
+                            sent += 1
+                            last_data = now
+                            if shed:
+                                stats["up_shed"] = stats.get("up_shed", 0) + 1
+                    elif (t0 is not None and now - last_data > UP_STALL_S
+                          and sent < int((now - t0) / 0.08) + 1):
+                        log("uplink stalled: sending silence to keep the plex stream open")
+                        ow.append_pcm(silence)
+                        payload = ow.read_bytes()
+                        if payload:
+                            await plex.send(b"\x01" + payload)
+                        sent += 1
+                        last_data = now
+                    stats["up_sent"] = sent
+                    if t0 is not None:
+                        stats["up_behind"] = int((now - t0) / 0.08) + 1 - sent
+                    await asyncio.sleep(0.02)
 
             async def down_pump():
                 async for msg in plex:
@@ -194,7 +266,20 @@ async def plex_session(ws, stop: asyncio.Event, stats: dict,
                     if msg[0] == 0x01:
                         ordr.append_bytes(msg[1:])
                         pcm = ordr.read_pcm()
-                        if pcm is None:
+                        if pcm is None or np.size(pcm) == 0:
+                            # sphn 0.1.12 needs a moment between append_bytes and read_pcm; when it
+                            # gives nothing, that frame's audio is still inside the reader. Forwarding
+                            # an EMPTY 'A' threw it away (measured 3 of 13, 3 of 10, 3 of 24 frames on
+                            # live replies), so give the decoder 5 ms and read once more; whatever is
+                            # still pending surfaces with the next message instead of being lost.
+                            await asyncio.sleep(0.005)
+                            pcm = ordr.read_pcm()
+                        if pcm is None or np.size(pcm) == 0:
+                            stats["down_empty"] = stats.get("down_empty", 0) + 1
+                            if time.time() - stats.get("down_empty_logged", 0.0) > 5.0:
+                                stats["down_empty_logged"] = time.time()
+                                log(f"sphn yielded no PCM for a downlink message "
+                                    f"({stats['down_empty']} so far this session)")
                             continue
                         if pcm.ndim > 1:
                             pcm = pcm.reshape(-1)
@@ -215,14 +300,37 @@ async def plex_session(ws, stop: asyncio.Event, stats: dict,
                         except Exception:
                             stop.set()
                             return
+                    elif msg[0] == 0x03:
+                        # The upstream's playhead controls (V03 step 4): utf8 JSON {"t":"reply"|
+                        # "drain","rid":N}. Passed to the Mac as the same JSON control; audio untouched.
+                        try:
+                            await ws.send(msg[1:].decode("utf-8", "replace"))
+                        except Exception:
+                            stop.set()
+                            return
                     elif msg[0] == 0x05:
                         log(f"plex error: {msg[1:].decode(errors='replace')}")
 
+            async def ctrl_pump():
+                """Relay the door's playhead tags and `played:` reports to the plex leg.
+
+                Additive side channel only (V03 step 4, shape A): 0x03 + the 12-byte tag, or the text
+                command as a text frame. Nothing here touches the audio path, the codec, or the pacing.
+                """
+                while not stop.is_set():
+                    item = await ctrl_q.get()
+                    try:
+                        await plex.send(item if isinstance(item, str) else b"\x03" + bytes(item))
+                    except Exception:
+                        return
+
             t1, t2 = asyncio.create_task(up_pump()), asyncio.create_task(down_pump())
-            done, _ = await asyncio.wait({t1, t2}, return_when=asyncio.FIRST_COMPLETED)
-            for t in (t1, t2):
+            t3 = asyncio.create_task(ctrl_pump())
+            done, _ = await asyncio.wait({t1, t2, t3}, return_when=asyncio.FIRST_COMPLETED)
+            for t in (t1, t2, t3):
                 t.cancel()
-            ended = "up" if t1 in done else "down"
+            names = {t1: "up", t2: "down", t3: "ctrl"}
+            ended = next(names[t] for t in names if t in done)
             exc = next(iter(done)).exception()
             log(f"plex ended ({ended}): exc={exc!r} rcvd={getattr(plex, 'rcvd', None)}")
         except Exception as e:
@@ -288,6 +396,7 @@ async def handle(ws):
     bridge = BridgeFeed()
     renderer = PcmFeed(MAXFACE_AUDIO_URL, "maxface")
     ff_buf = bytearray()
+    ctrl_q: asyncio.Queue = asyncio.Queue(maxsize=200)   # door -> plex leg side channel (V03 step 4)
 
     ff = await asyncio.create_subprocess_exec(
         "ffmpeg", "-loglevel", "error",
@@ -312,7 +421,24 @@ async def handle(ws):
                     await ff.stdin.drain()
                 except (BrokenPipeError, ConnectionResetError):
                     break
+            elif isinstance(msg, (bytes, bytearray)) and msg[:1] == b"P":
+                # V03 step 4: a playhead tag for the block just above. Relay only -- this server never
+                # interprets it, and a 12-byte frame cannot disturb the audio path.
+                stats["tag_frames"] = stats.get("tag_frames", 0) + 1
+                try:
+                    ctrl_q.put_nowait(bytes(msg[1:]))
+                except asyncio.QueueFull:
+                    pass                      # the tag queue is a side channel: drop, never block audio
             elif isinstance(msg, str):
+                if msg.startswith("played:"):
+                    # The Mac's honest report that a reply has played out: relay to the plex leg, which
+                    # carries it to the brain as the text command tyger's page would send.
+                    stats["played_reports"] = stats.get("played_reports", 0) + 1
+                    try:
+                        ctrl_q.put_nowait(msg)
+                    except asyncio.QueueFull:
+                        pass
+                    continue
                 try:
                     ctrl = json.loads(msg)
                 except json.JSONDecodeError:
@@ -324,6 +450,7 @@ async def handle(ws):
         while not stop.is_set():
             stats["bridge_up"] = bridge.up
             stats["renderer_up"] = renderer.up
+            stats["up_buffered"] = len(ff_buf)      # resampled audio not yet on the plex leg
             payload = {k: v for k, v in stats.items()
                        if not k.startswith("_") and k != "up_bytes_mark"}
             payload["t"] = "stat"
@@ -336,7 +463,7 @@ async def handle(ws):
 
     tasks = [asyncio.create_task(c) for c in
              (bridge.run(stop), renderer.run(stop),
-              plex_session(ws, stop, stats, ff_buf, bridge, renderer),
+              plex_session(ws, stop, stats, ff_buf, bridge, renderer, ctrl_q),
               ff_reader(), door_reader(), heartbeat())]
     done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
     # door_reader or plex_session finishing ends the session

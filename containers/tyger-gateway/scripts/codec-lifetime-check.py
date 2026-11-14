@@ -58,7 +58,7 @@ def main() -> int:
         def feed() -> None:
             nonlocal failures, samples
             for _ in range(4):                 # enough frames for header+tags+audio to flow
-                for payload in enc.encode(blk()):
+                for _, payload in enc.encode(blk()):
                     try:
                         out = peer.decode(payload)
                         samples += 0 if out is None else len(out)

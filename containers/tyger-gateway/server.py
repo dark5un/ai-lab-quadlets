@@ -6,14 +6,23 @@ handshake, then 0x01+Ogg/Opus at 24 kHz both ways. This process serves that role
 tyger-s2s EARS WebSocket instead of personaplex. Contracts: WIRE-TABLES-v03.md, legs C and D.
 
   leg C (plex, plexpipe <-> here)   0x01 + Ogg/Opus 24 kHz mono, both ways   (plexpipe server.py:187,194-210)
+                                    0x03 + <iii rid, reply sample at 24 kHz, capture position at 48 kHz>
+                                    = the Mac's measured playhead tag (V03 step 4, I-26), one per uplink
+                                    block, relayed by plexpipe; and a TEXT frame `played:<rid>:<samples>`
+                     downlink       0x03 + utf8 JSON {"t":"reply","rid":N} before a reply's first frame and
+                                    {"t":"drain","rid":N} on a barge -- plexpipe passes both to the Mac
   leg D (tyger /ws)  uplink         [int32 rid][int32 agent sample at 24 kHz, -1] + int16 PCM 16 kHz
                                     (app/ears/playback.py:16-18,31,45-52; 20 ms blocks = 648 B, page.py:16)
                      downlink       [int32 rid, 0 = backchannel] + int16 PCM 24 kHz (playback.py:31-32,40-42)
                      commands       played:<rid>:<samples>, reset, voice:<name>, set:<attr>:<value>
 
-What is deliberately NOT here (PLAN-V03-step2.md §6): the CoreAudio playhead (I-26 -> step 4), the barge drain
-(a barge stops this gateway's playhead and drops the rest of that reply; a real drain is step 4), secret/pages
-posture (V05: this process CAN carry a token, it does not set one), and any voice-identity work.
+The playhead is MEASURED (step 4): maxaudiod reads PortAudio's device clock and states which reply sample
+was at MAX Mic's DAC when each MAX Out block was captured; this process pairs that tag with the block by
+capture position and sends it as tyger's mic-block tag. `playhead.py` (a gateway-side wall clock) stays only
+as the fallback for when no tag arrives, and its `played:` reports stop once the Mac reports its own.
+
+What is deliberately NOT here: secret/pages posture (V05: this process CAN carry a token, it does not set
+one) and any voice-identity work.
 
 Privacy: tyger itself logs no transcripts (app/ears/conversation.py:27). This gateway logs them, because Gate 1's
 evidence is "MAX Out's transcript matches the reply text in the gateway log" (PLAN-V03-step2.md §2).
@@ -36,6 +45,7 @@ import os
 import secrets
 import struct
 import time
+from collections import deque
 
 import aiohttp
 import numpy as np
@@ -65,6 +75,17 @@ HEALTH_TTL_S = 2.0
 
 MIC_HEADER = struct.Struct("<ii")      # reply id, agent sample at 24 kHz (-1: nothing playing)
 AUDIO_HEADER = struct.Struct("<i")     # the reply's id (0: a backchannel)
+# V03 step 4 (I-26): the playhead tag the Mac sends beside each uplink block, relayed by plexpipe as
+# 0x03: reply id, the reply sample at 24 kHz that was at the DAC when the block was captured (-1: none),
+# and the capture position of that block at 48 kHz (what pairs the tag with its audio, §8 of the plan).
+TAG = struct.Struct("<iii")
+CAP_SR = 48000                         # the tag's position unit (MAX Out capture rate)
+TAG_BLOCK48 = BLOCK * CAP_SR // 16000   # 960: one 20 ms mic block, in capture positions
+TAGS_KEEP_S = 30.0                     # tags older than this are dropped. Bigger than the audio path's
+                                       # own buffering (measured 3.5 s behind at a session start), because
+                                       # the tag for a block arrives BEFORE the block does: the window has
+                                       # to cover the pipeline's latency, or the pairing has nothing left
+                                       # to pair against.
 
 SESSIONS = 0               # live plex sessions (what /health reports)
 
@@ -125,6 +146,16 @@ class PlexSession:
         self.sent_t0 = 0.0
         self.sent_t1 = 0.0
         self.playhead = Playhead(self._report_played)
+        # The Mac's measured playhead (V03 step 4): tags by capture position, and what it says was played.
+        self.tags = deque()                           # (capture position at 48 kHz, rid, sample at 24 kHz)
+        self.tag_offset = None                        # mic stream position -> capture position
+        self.tag_seen = False
+        self.mic_pos48 = 0                            # this session's mic stream position, 48 kHz units
+        self.tag_hits = self.tag_lagged = self.tag_old = 0
+        self.plex_msgs = 0                            # 0x01 messages decoded (an uplink rate probe)
+        self.mac_reports = 0                          # `played:` reports relayed from the Mac
+        self.logged_rid = None                        # the last reply whose first real tag was logged
+        self.last_tag_log = 0.0
 
     def _drop_queued(self) -> int:
         """Throw away frames not yet sent (a barge, or a new tyger conversation)."""
@@ -141,19 +172,33 @@ class PlexSession:
         if self.enc is None:
             return 0
         n = 0
-        for payload in self.enc.flush():
-            self.dl.put_nowait((self.reply_rid, payload, self.enc.frame))
+        for samples, payload in self.enc.flush():
+            self.dl.put_nowait((self.reply_rid, payload, samples))
             n += 1
         return n
 
     # ---- leg D: the client side of tyger's /ws ----
     async def _report_played(self, rid: int, samples: int) -> None:
+        """The gateway-side model says a reply has played out -- the FALLBACK once the Mac reports.
+
+        `playhead.Playhead` schedules from when audio was handed to the plex leg, so it over-reports by
+        the device + meeting loop. With step 4 in place the Mac's own `played:` report is the truth, and
+        this model stops speaking for it (a premature report ends tyger's turn early).
+        """
+        if self.tag_seen or self.mac_reports:
+            # The Mac owns the clock (its tags are on the wire), so this model must not speak for it:
+            # measured 2026-11-14, it reported played:1:19200 while the Mac played 13440, 100 ms earlier,
+            # ending tyger's turn before the reply had finished.
+            return
+        await self._send_played(rid, samples, "model")
+
+    async def _send_played(self, rid: int, samples: int, source: str) -> None:
         ws = self.tyger
         if ws is None or ws.closed:
             return
         try:
             await ws.send_str(f"played:{rid}:{samples}")
-            log(f"played:{rid}:{samples} sent")
+            log(f"played:{rid}:{samples} sent (source={source})")
         except (ConnectionError, RuntimeError):
             pass
 
@@ -227,8 +272,8 @@ class PlexSession:
                 # NOT sent here: tyger hands a whole reply over in a burst (measured 11-15x real
                 # time), and plexpipe drains one frame per incoming message. Queue the frames and
                 # let downlink() pace them; the playhead is advanced there, when they really go out.
-                for payload in self.enc.encode(a24):
-                    self.dl.put_nowait((rid, payload, self.enc.frame))
+                for samples, payload in self.enc.encode(a24):
+                    self.dl.put_nowait((rid, payload, samples))
 
     async def downlink(self):
         """Send the reply's audio to plexpipe: ONE 80 ms frame per message, paced at real time.
@@ -239,6 +284,7 @@ class PlexSession:
         """
         next_send = 0.0
         frames = 0
+        announced = None
         while not self.stop.is_set():
             rid, payload, samples = await self.dl.get()
             if rid == self.barged_rid:
@@ -249,6 +295,14 @@ class PlexSession:
             if next_send > now:
                 await asyncio.sleep(next_send - now)
                 now = time.perf_counter()
+            if rid != announced:
+                # Tell the Mac which reply it is about to hear (V03 step 4): its playhead tag names that
+                # id, and backchannel audio (0) is announced too so it is never counted into a reply.
+                announced = rid
+                try:
+                    await self.ws.send_bytes(b"\x03" + json.dumps({"t": "reply", "rid": rid}).encode())
+                except (ConnectionError, RuntimeError):
+                    return
             self.playhead.on_audio(rid, samples)      # schedule as it goes out, not as it arrived
             try:
                 await self.ws.send_bytes(b"\x01" + payload)
@@ -299,11 +353,12 @@ class PlexSession:
             log(f"barge yield={ev.get('yield')}: playback stopped, dropping the rest of reply {self.reply_rid}")
             self.barged_rid = self.reply_rid
             self.playhead.stop()
-            dropped = self._drop_queued()            # nothing more of that reply goes out (step 4 drains it properly)
+            dropped = self._drop_queued()            # nothing more of that reply goes out
             if dropped:
                 log(f"barge: {dropped} unsent frames dropped")
             if self.enc is not None:
-                self.enc.reset()
+                self.enc.reset()                     # the buffer, never the writer (plexio.py: Ogg-stream rule)
+            await self._send_drain(self.reply_rid)   # and the Mac flushes what it already holds
         elif t == "turn_done":
             tail = await self._flush_audio()
             wall = (self.reply_t1 - self.reply_t0) if self.reply_t0 and self.reply_t1 else 0.0
@@ -334,6 +389,92 @@ class PlexSession:
         elif t in ("bc_cue", "voice", "threshold", "links", "task_done", "backchannel_done"):
             log(f"{t} {json.dumps({k: v for k, v in ev.items() if k != 'type'})[:200]}")
 
+    # ---- the Mac's measured playhead (V03 step 4, I-26) ----
+    async def _send_drain(self, rid: int) -> None:
+        """A barge: tell the Mac to flush MAX Mic now, so the reply stops within one device buffer."""
+        try:
+            await self.ws.send_bytes(b"\x03" + json.dumps({"t": "drain", "rid": rid}).encode())
+            log(f"drain sent for rid {rid}")
+        except (ConnectionError, RuntimeError):
+            pass
+
+    def on_tag(self, payload: bytes) -> None:
+        """One playhead tag from the Mac, relayed by plexpipe as 0x03 (12 bytes, little-endian)."""
+        if len(payload) < TAG.size:
+            return
+        rid, at, cap = TAG.unpack_from(payload)
+        if self.tags and cap < self.tags[-1][0] - CAP_SR:
+            # The capture position jumped backwards: the Mac started a NEW capture stream (a door
+            # reconnect) while this plex session lives on. Its positions are unrelated to the old
+            # stream's, so the alignment is re-anchored on the new one instead of pairing nonsense.
+            log(f"playhead: the Mac's capture stream restarted (pos {self.tags[-1][0]} -> {cap}): "
+                f"re-aligning")
+            self.tags.clear()
+            self.tag_offset = None
+        self.tags.append((cap, rid, at))
+        while self.tags and self.tags[0][0] < cap - int(TAGS_KEEP_S * CAP_SR):
+            self.tags.popleft()
+        if not self.tag_seen:
+            self.tag_seen = True
+            log(f"playhead from the Mac: tag=r{rid}@{at} pos={cap} "
+                f"(measured at MAX Mic's DAC, not modelled)")
+
+    async def _on_plex_text(self, text: str) -> None:
+        """A text frame from plexpipe: the Mac's `played:<rid>:<samples>` report, as tyger's page sends."""
+        if not text.startswith("played:"):
+            log(f"plex text ignored: {text[:60]!r}")
+            return
+        try:
+            _, rid_s, n_s = text.split(":", 2)
+            rid, samples = int(rid_s), int(n_s)
+        except ValueError:
+            log(f"bad played report from the Mac: {text[:60]!r}")
+            return
+        self.mac_reports += 1
+        await self._send_played(rid, samples, "mac")
+
+    def tag_for(self, pos: int, t_capture: float) -> tuple[int, int, str]:
+        """(reply id, its sample at 24 kHz, source) for the mic block at stream position `pos`.
+
+        The Mac measures the tag; this attaches it to the right block. Position, not arrival order, is
+        the pairing key: the audio is resampled (48 -> 24 k) and reframed (80 ms Opus), so the block that
+        carries capture position p reaches this leg one Opus frame after the tag that describes it. The
+        offset between this session's mic stream and the Mac's capture counter is anchored on the first
+        tag of the session (usually 0: both start with the same audio) and, inside a block, the reply
+        sample is interpolated at the reply's own rate. Without any tag (a Mac build before step 4, or
+        personaplex behind the door) the wall-clock `playhead` model answers, as it did in step 2.
+        """
+        if not self.tags:
+            rid, at = self.playhead.tag(t_capture)
+            return rid, at, "model"
+        if self.tag_offset is None:
+            self.tag_offset = self.tags[0][0] - pos      # the session's first block <-> its first tag
+            log(f"playhead alignment: offset={self.tag_offset} capture positions "
+                f"(mic stream position {pos} <-> capture position {self.tags[0][0]})")
+        target = pos + self.tag_offset
+        hit = None
+        for cap, rid, at in reversed(self.tags):
+            if cap <= target:
+                hit = (cap, rid, at)
+                break
+        if hit is None:                                  # older than every tag held: use the oldest
+            cap, rid, at = self.tags[0]
+            self.tag_old += 1
+            return rid, at, "old"
+        cap, rid, at = hit
+        age = target - cap
+        at += int(age * SR_PLEX / CAP_SR)                # within the block, at the reply's own rate
+        if age >= TAG_BLOCK48:                           # the tag stream fell behind the audio: say so
+            self.tag_lagged += 1
+            now = time.perf_counter()
+            if now - self.last_tag_log > 5.0:
+                self.last_tag_log = now
+                log(f"playhead tags lag the audio by {age / CAP_SR * 1000:.0f} ms "
+                    f"(hits={self.tag_hits} lagged={self.tag_lagged} old={self.tag_old})")
+            return rid, at, "lagged"
+        self.tag_hits += 1
+        return rid, at, "mac"
+
     # ---- leg C: the plex role ----
     async def uplink(self):
         """plexpipe's 0x01 Ogg -> PCM -> the EARS rate -> 20 ms mic blocks, tagged with the playhead."""
@@ -344,12 +485,17 @@ class PlexSession:
 
         async for msg in self.ws:
             if msg.type == WSMsgType.TEXT:
-                continue                                # plexpipe sends no text on this leg
+                await self._on_plex_text(msg.data)       # the Mac's played:<rid>:<samples>, relayed
+                continue
             if msg.type != WSMsgType.BINARY or not msg.data:
                 continue
             data = msg.data
+            if data[0] == 0x03:
+                self.on_tag(data[1:])                    # the Mac's playhead tag for one block
+                continue
             if data[0] != 0x01:
-                continue                                # only the audio tag exists on this leg
+                continue                                # nothing else exists on this leg
+            self.plex_msgs += 1
             pcm = dec.decode(data[1:])
             if pcm is None:
                 continue
@@ -365,13 +511,15 @@ class PlexSession:
                 pending = pending[BLOCK:]
                 t = pending_t0
                 pending_t0 = t + BLOCK / self.sr_ears
-                await self.send_mic(blk, t)
+                pos = self.mic_pos48                  # the stream position the tag is paired against
+                self.mic_pos48 += TAG_BLOCK48
+                await self.send_mic(blk, t, pos)
 
-    async def send_mic(self, blk: np.ndarray, t_capture: float):
+    async def send_mic(self, blk: np.ndarray, t_capture: float, pos: int):
         if not self.tyger_ready or self.tyger is None or self.tyger.closed:
             self.dropped_blocks += 1
             return
-        rid, at = self.playhead.tag(t_capture)
+        rid, at, src = self.tag_for(pos, t_capture)
         try:
             await self.tyger.send_bytes(MIC_HEADER.pack(rid, at) + to_pcm16(blk).tobytes())
         except (ConnectionError, RuntimeError):
@@ -379,9 +527,17 @@ class PlexSession:
             return
         self.blocks += 1
         self.mic_bytes += BLOCK * 2
+        if at >= 0 and rid != self.logged_rid:
+            # The evidence line for the acceptance: the Mac's measured playhead, on a mic block, naming
+            # the reply and the sample that was at MAX Mic's DAC when the block was captured.
+            self.logged_rid = rid
+            log(f"mic tag=r{rid}@{at} src={src} on block {self.blocks} "
+                f"(pos={pos}, the Mac's measured playhead)")
         if self.blocks % MIC_LOG_EVERY == 0:
-            log(f"mic blocks={self.blocks} bytes={self.mic_bytes} tag=r{rid}@{at} "
-                f"dropped={self.dropped_blocks}")
+            tags = f"oldest={self.tags[0][0]} newest={self.tags[-1][0]}" if self.tags else "none"
+            log(f"mic blocks={self.blocks} bytes={self.mic_bytes} tag=r{rid}@{at} src={src} "
+                f"pos={pos} offset={self.tag_offset} {tags} msgs={self.plex_msgs} dropped={self.dropped_blocks} "
+                f"tags: hits={self.tag_hits} lagged={self.tag_lagged} old={self.tag_old}")
 
 
 async def plex_chat(request: web.Request) -> web.WebSocketResponse:
@@ -420,7 +576,9 @@ async def plex_chat(request: web.Request) -> web.WebSocketResponse:
         log(f"plex session closed: mic blocks={session.blocks} bytes={session.mic_bytes} "
             f"dropped={session.dropped_blocks} reply rid={session.reply_rid} "
             f"arrived={session.reply_samples} sent={session.sent_samples} samples "
-            f"({session.sent_samples / SR_PLEX:.2f} s on the wire) encoded={session.encoded_bytes} B")
+            f"({session.sent_samples / SR_PLEX:.2f} s on the wire) encoded={session.encoded_bytes} B "
+            f"tags: hits={session.tag_hits} lagged={session.tag_lagged} old={session.tag_old} "
+            f"mac_played={session.mac_reports}")
     return ws
 
 
