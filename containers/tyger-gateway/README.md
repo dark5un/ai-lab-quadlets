@@ -57,7 +57,7 @@ contiguous) because it emits one 80 ms frame per 80 ms. `downlink()` therefore q
 sends **one 80 ms frame per message, paced at 1.0× real time**, exactly like the brain it replaces. The
 playhead is advanced there — when a frame really goes out — so its tags describe what the door has.
 
-## Honest limits (in the plan, not discovered later)
+## Limits
 
 - The playhead is a **gateway-side** clock, not MAX Out's CoreAudio clock (I-26 → step 4). It is true while
   `maxaudiod --gate` zeroes the uplink for 1.2 s after any real downlink, so tyger never hears Max and there
