@@ -40,6 +40,7 @@ class Status:
                      "tx_frames": 0, "rx_frames": 0, "errors": 0,
                      "gated_frames": 0, "speaking_frames": 0,
                      "mailbox_frames": 0,
+                     "play_chunks": 0, "play_samples": 0,
                      "plex_up": None, "bridge_up": None}
 
     def bump(self, **kw):
@@ -246,8 +247,10 @@ class Bridge:
     def _play_chunk(self, play, chunk):
         """Write one downlink chunk to MAX Mic, accounting for what and how long it took.
 
-        A warning here means the device returned the write in less than half the time the audio
-        needs to play: it took the samples without pacing them, so the tail is not being heard."""
+        NOTE: a blocking write returns as soon as the device's buffer has room, NOT when the audio has
+        been heard, so a short write time is normal (and was wrongly read as an underrun while
+        diagnosing V03 Gate 1). What the counters are worth is the total: `play_chunks` /
+        `play_samples` in the status JSON say how much of a reply actually reached the device."""
         n = int(chunk.size)
         want = n / PLAY_NATIVE
         t0 = time.time()
@@ -256,12 +259,9 @@ class Bridge:
         self.play_i += 1
         self.play_samples += n
         self.play_write_s += dt
-        if dt < want * 0.5:
-            log.warning("play #%d: %d samples (%.0f ms of audio) written in %.0f ms - the device is "
-                        "not pacing this playback (queue %d, handed over %.2f s so far)",
-                        self.play_i, n, want * 1e3, dt * 1e3, self.play_q.qsize(),
-                        self.play_samples / PLAY_NATIVE)
-        elif self.play_i % 100 == 0:                  # one line per ~8 s of playback
+        status.inc("play_chunks")
+        status.bump(play_samples=int(self.play_samples))
+        if self.play_i % 100 == 0:                  # one line per ~8 s of playback
             log.info("play #%d: %d samples (%.0f ms), write %.0f ms, queue %d, handed over %.2f s",
                      self.play_i, n, want * 1e3, dt * 1e3, self.play_q.qsize(),
                      self.play_samples / PLAY_NATIVE)
