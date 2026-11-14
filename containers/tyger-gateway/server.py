@@ -224,9 +224,10 @@ class PlexSession:
             log(f"barge yield={ev.get('yield')}: playback stopped, dropping the rest of reply {self.reply_rid}")
             self.barged_rid = self.reply_rid
             self.playhead.stop()
-            self.enc.reset()                       # nothing more of that reply goes out (step 4 drains it properly)
+            if self.enc is not None:
+                self.enc.reset()                   # nothing more of that reply goes out (step 4 drains it properly)
         elif t == "turn_done":
-            tail = self._flush_audio()
+            tail = await self._flush_audio()
             log(f"turn_done barged={ev.get('barged')} reply=rid {self.reply_rid} "
                 f"samples={self.reply_samples} ({self.reply_samples / SR_PLEX:.2f} s) "
                 f"tail_frame={len(tail)} B encoded_total={self.encoded_bytes} B")
