@@ -276,6 +276,10 @@ async def plex_session(ws, stop: asyncio.Event, stats: dict,
                             pcm = ordr.read_pcm()
                         if pcm is None or np.size(pcm) == 0:
                             stats["down_empty"] = stats.get("down_empty", 0) + 1
+                            if time.time() - stats.get("down_empty_logged", 0.0) > 5.0:
+                                stats["down_empty_logged"] = time.time()
+                                log(f"sphn yielded no PCM for a downlink message "
+                                    f"({stats['down_empty']} so far this session)")
                             continue
                         if pcm.ndim > 1:
                             pcm = pcm.reshape(-1)

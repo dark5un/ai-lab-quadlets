@@ -154,6 +154,7 @@ class PlexSession:
         self.tag_hits = self.tag_lagged = self.tag_old = 0
         self.plex_msgs = 0                            # 0x01 messages decoded (an uplink rate probe)
         self.mac_reports = 0                          # `played:` reports relayed from the Mac
+        self.logged_rid = None                        # the last reply whose first real tag was logged
         self.last_tag_log = 0.0
 
     def _drop_queued(self) -> int:
@@ -526,6 +527,12 @@ class PlexSession:
             return
         self.blocks += 1
         self.mic_bytes += BLOCK * 2
+        if at >= 0 and rid != self.logged_rid:
+            # The evidence line for the acceptance: the Mac's measured playhead, on a mic block, naming
+            # the reply and the sample that was at MAX Mic's DAC when the block was captured.
+            self.logged_rid = rid
+            log(f"mic tag=r{rid}@{at} src={src} on block {self.blocks} "
+                f"(pos={pos}, the Mac's measured playhead)")
         if self.blocks % MIC_LOG_EVERY == 0:
             tags = f"oldest={self.tags[0][0]} newest={self.tags[-1][0]}" if self.tags else "none"
             log(f"mic blocks={self.blocks} bytes={self.mic_bytes} tag=r{rid}@{at} src={src} "
