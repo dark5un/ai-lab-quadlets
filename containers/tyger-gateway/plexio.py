@@ -89,9 +89,10 @@ class OpusEncoder:
     def reset(self) -> None:
         """A barge or a new conversation: drop the buffered tail, KEEP the writer object.
 
-        Replacing the writer here is a codec-object DROP, and under sphn 0.1.12 a single drop kills
-        every live reader in the process -- that is what broke the chain live on 2026-11-14. Only the
-        partial frame is discarded; the Opus stream continues on the same writer.
+        Building a new writer here starts a new Ogg stream, and a peer reader that was live on the old
+        stream dies for good (the storm of 2026-11-14: the gateway replaced its writer on a barge,
+        plexpipe's live reader died, the chain never recovered). Only the partial frame is discarded;
+        the Opus stream continues on the same writer.
         """
         self._buf = np.zeros(0, np.float32)
 
@@ -101,33 +102,17 @@ class OpusEncoder:
         return int(self._buf.size)
 
 
-# ---- the lifetime rule, and the one pair this process uses --------------------------------------
+# ---- the Ogg-stream rule, and where the codec pair lives ---------------------------------------
 #
-# sphn 0.1.12 keeps its codec work on a channel shared by the whole process: the moment ANY codec
-# object is garbage-collected, every reader that was already alive goes dead -- its next use silently
-# returns nothing, the use after that raises ValueError('sending on a closed channel'), for the rest
-# of the process's life. (Receipt: scripts/codec-lifetime-check.py.) So this process creates exactly
-# ONE encoder and ONE decoder and keeps them for its whole life. A barge or a new tyger conversation
-# clears the encoder's buffer (OpusEncoder.reset); it never replaces the object. Two door sessions at
-# once would share this pair; the door serves one at a time (plexpipe), which is why one shared pair
-# is correct here and why the object is process-scoped rather than held per session.
-
-
-class CodecPair:
-    """The one encoder/decoder pair this process uses, for the process's whole life."""
-
-    def __init__(self, rate: int = 24000, frame: int = FRAME):
-        self.rate = rate
-        self.dec = OpusDecoder(rate)
-        self.enc = OpusEncoder(rate, frame)
-
-
-_pair: "CodecPair | None" = None
-
-
-def codec_pair(rate: int = 24000) -> CodecPair:
-    """The process-scoped pair: created once, returned to every caller, never dropped."""
-    global _pair
-    if _pair is None:
-        _pair = CodecPair(rate)
-    return _pair
+# sphn 0.1.12 gives each OpusStreamReader/Writer its own Ogg stream. Two measured facts (probe:
+# scripts/codec-lifetime-check.py, run in the live container):
+#   * dropping a codec object is harmless -- a live reader is not affected;
+#   * a reader dies (next read silent, the one after raises ValueError('sending on a closed
+#     channel'), for the rest of the process's life) when it is fed a page from a SECOND stream, or
+#     when it starts mid-stream and never saw the header.
+# So the gateway creates ONE pair per door session, born with the session's streams (each stream's
+# header goes out first), and never replaces the writer WITHIN the session: a barge and a tyger
+# reconnect clear the encoder's buffered tail (OpusEncoder.reset); they do not build a new writer.
+# Replacing the writer mid-session restarted the Ogg stream the gateway sends plexpipe, whose live
+# reader then died and took the whole chain down (the storm of 2026-11-14). The next door session
+# gets a fresh pair, which is what plexpipe's own fresh per-session streams expect.

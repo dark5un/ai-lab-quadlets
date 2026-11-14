@@ -57,24 +57,25 @@ contiguous) because it emits one 80 ms frame per 80 ms. `downlink()` therefore q
 sends **one 80 ms frame per message, paced at 1.0× real time**, exactly like the brain it replaces. The
 playhead is advanced there — when a frame really goes out — so its tags describe what the door has.
 
-## Codec lifetime: one Ogg stream per process
+## Codec lifetime: one Ogg stream per door session
 
-The Opus encoder/decoder are **process-scoped** (`plexio.codec_pair()`): created once and kept for the
-process's whole life. A barge and a new tyger conversation clear the encoder's buffered tail
-(`OpusEncoder.reset`) instead of replacing the writer.
+The Opus encoder/decoder are built **once per door session** and are never replaced while the session
+lives. A barge and a tyger reconnect clear the encoder's buffered tail (`OpusEncoder.reset`); they do
+not build a new writer. The next door session gets a fresh pair, which is what plexpipe's own fresh
+per-session streams expect.
 
-Why it matters (sphn 0.1.12, measured in the live container): a sphn `OpusStreamReader` decodes one
-Ogg stream, and feeding it a page from a **second** stream kills its decoder thread — the next read
-returns nothing, the one after raises `ValueError('sending on a closed channel')`, for the rest of the
-process's life. A fresh `OpusStreamWriter` starts a new stream (new serial, new header). The gateway
-used per-session codecs and its barge path replaced the writer, so a barge — the owner's own voice —
-restarted the Ogg stream it sends plexpipe; plexpipe's live reader died and the chain stayed dead:
-358 `plex streaming` lines, one per second, for 6.5 minutes (2026-11-14), cleared only by restarting
-the gateway.
+Why it matters (sphn 0.1.12, measured in the live container): each codec object has its own Ogg stream.
+Dropping one is harmless, but a reader dies for good — the next read is silent, the one after raises
+`ValueError('sending on a closed channel')` — when it is fed a page from a **second** stream, or when
+it starts mid-stream and never saw the header. A fresh `OpusStreamWriter` starts a new stream. The
+gateway used to build a new writer on a barge (`reset` replaced the writer) and on every tyger
+reconnect, so each replacement restarted the Ogg stream it sends plexpipe; plexpipe's live reader died
+the moment the owner barged — his own voice — and the chain stayed dead: 358 `plex streaming` lines,
+one per second, for 6.5 minutes (2026-11-14), cleared only by restarting the gateway.
 
 Regression guard: `tests/test-tyger-gateway-codec-lifetime.sh`, which runs
 `containers/tyger-gateway/scripts/codec-lifetime-check.py` inside the container (N = 3 session-shaped
-lifecycles on one Ogg stream). It fails on the old per-session code and passes on the fix.
+lifecycles, each with a barge). It fails on the old code and passes on the fix.
 
 ## Limits
 
