@@ -72,8 +72,7 @@ FRAME_BYTES = FRAME * 2
 STAT_EVERY = 2.0
 RECONNECT_MAX = 15.0
 UP_STALL_S = 0.3       # no door audio for this long: the uplink has stopped, pad the stream
-UP_BACKLOG_BYTES = 24000  # 0.5 s of 24 kHz s16: above this, a hiccup left a backlog and it is shed
-UP_DRAIN = 3             # frames shed per 20 ms iteration while a backlog lasts
+
 
 sessions = {}  # role ("audio"/"video") -> ws ; one Mac per role at a time
 
@@ -201,53 +200,54 @@ async def plex_session(ws, stop: asyncio.Event, stats: dict,
             # every minute. So: append one frame, read it, send it, and repeat; a backlog drains in
             # whole frames (never several inside one message) and is capped so it cannot burst.
             async def up_pump():
-                """ONE 80 ms frame per message, paced by the WALL CLOCK at 1.0x.
+                """ONE 80 ms frame per message, paced by the wall clock at exactly 1.0x.
 
-                Two measured facts, both from 2026-11-14 on the live chain:
+                Three measured facts from 2026-11-14, each of which cost a run:
 
                 * sphn 0.1.12's writer yields one page per instant: appending several frames before
-                  read_bytes() DROPS the rest. maxaudiod captured exactly 50.00 blocks/s and the gateway
-                  received 47.21 mic blocks/s (15,108 of 16,000 samples/s = 94.4%) with ff_buf flat --
-                  the audio died inside the writer, and the ears' stream fell 3.4 s behind the capture
-                  clock every minute. Hence one append + one read + one message per frame.
-                * `sleep(0.08)` per frame is NOT 80 ms: await overhead put the loop at ~86 ms, so ff_buf
-                  grew by 2.7 kB/s and the same 3.4 s/min accumulated as buffered latency instead. Hence
-                  the pace is `int(elapsed / 0.08)` frames sent, checked every 20 ms.
+                  read_bytes() DROPS the rest. maxaudiod captured exactly 50.00 blocks/s while the
+                  gateway received 47.21 mic blocks/s (15,108 of 16,000 samples/s = 94.4%) with ff_buf
+                  flat -- the audio died inside the writer. Hence one append + one read per frame.
+                * `sleep(0.08)` per frame is not 80 ms (await overhead put the loop at ~86 ms), so ff_buf
+                  grew 2.7 kB/s and the same 3.4 s/min came back as buffered latency.
+                * catching a backlog up by sending several frames per tick ran the stream AHEAD of the
+                  capture clock (pos 4.08M against a newest playhead tag of 4.06M), which makes every
+                  playhead tag pair with audio that has not been captured yet.
 
-                A hiccup can still leave a backlog; above UP_BACKLOG_BYTES it is shed at up to UP_DRAIN
-                frames per iteration (real audio, one message each, never a burst inside one message).
-                Silence is sent only when the uplink has genuinely stopped: a silence frame is audio that
-                was never captured and it shifts every playhead position after it.
+                So: the pace is the wall clock, the clock starts with the first captured frame (pace from
+                the session start instead and the startup gap is padded with silence nobody recorded),
+                and a frame is sent only while the stream is behind the clock. Never ahead, never two in
+                one message. Silence is sent only when the uplink has genuinely stopped.
                 """
-                t0 = time.monotonic()
+                t0 = None
                 sent = 0
-                last_data = t0
+                last_data = time.monotonic()
                 while not stop.is_set():
-                    due = int((time.monotonic() - t0) / 0.08) + 1
-                    over = len(ff_buf) > UP_BACKLOG_BYTES
-                    n = 0
-                    while n < (UP_DRAIN if over else 1) and len(ff_buf) >= FRAME_BYTES and (over or sent < due):
-                        frame = bytes(ff_buf[:FRAME_BYTES])
-                        del ff_buf[:FRAME_BYTES]
-                        ow.append_pcm(np.frombuffer(frame, dtype="<i2").astype(np.float32) / 32768.0)
-                        payload = ow.read_bytes()
-                        if payload:
-                            await plex.send(b"\x01" + payload)
-                        last_data = time.monotonic()
-                        sent += 1
-                        n += 1
-                    if not n and sent < due and time.monotonic() - last_data > UP_STALL_S:
+                    now = time.monotonic()
+                    if len(ff_buf) >= FRAME_BYTES:
+                        if t0 is None:
+                            t0 = now
+                        if sent < int((now - t0) / 0.08) + 1:
+                            frame = bytes(ff_buf[:FRAME_BYTES])
+                            del ff_buf[:FRAME_BYTES]
+                            ow.append_pcm(np.frombuffer(frame, dtype="<i2").astype(np.float32) / 32768.0)
+                            payload = ow.read_bytes()
+                            if payload:
+                                await plex.send(b"\x01" + payload)
+                            sent += 1
+                            last_data = now
+                    elif (t0 is not None and now - last_data > UP_STALL_S
+                          and sent < int((now - t0) / 0.08) + 1):
                         log("uplink stalled: sending silence to keep the plex stream open")
                         ow.append_pcm(silence)
                         payload = ow.read_bytes()
                         if payload:
                             await plex.send(b"\x01" + payload)
                         sent += 1
-                        last_data = time.monotonic()
-                    if over and n:
-                        stats["up_drains"] = stats.get("up_drains", 0) + 1
+                        last_data = now
                     stats["up_sent"] = sent
-                    stats["up_behind"] = due - sent
+                    if t0 is not None:
+                        stats["up_behind"] = int((now - t0) / 0.08) + 1 - sent
                     await asyncio.sleep(0.02)
 
             async def down_pump():
