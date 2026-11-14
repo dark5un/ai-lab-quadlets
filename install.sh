@@ -329,6 +329,8 @@ mkdir -p "$DATA"/prometheus "$DATA"/victorialogs "$DATA"/node-exporter/textfile
 # Memory group data dirs (create BEFORE first start: statfs pitfall). The
 # embeddings dir is separate from the llama.cpp card dirs on purpose.
 mkdir -p "$DATA"/ai-lab/embeddings/models "$DATA"/ai-lab/openviking "$DATA"/ai-lab/honcho-database
+# V05.4: the door gateway writes one directory per meeting here (uplink.wav, downlink.wav).
+mkdir -p "$DATA"/ai-lab/recordings
 # files tier: syncthing config/db home + the user-editable ignore list for
 # the shared home folder (created once; afterwards the user's to edit).
 mkdir -p "$DATA"/syncthing

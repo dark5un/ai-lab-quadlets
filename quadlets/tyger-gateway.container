@@ -24,6 +24,11 @@ PublishPort=127.0.0.1:8994:8994/tcp
 Environment=GATEWAY_PORT=8994
 Environment=TYGER_URL=ws://tyger-v1:7860/ws
 Environment=TYGER_VOICES_URL=http://tyger-v1:7860/voices
+# V05.4 session recording: both legs of every door session, one directory per session
+# under ~/.local/share/ai-lab/recordings (uplink.wav = what tyger heard at 16 kHz,
+# downlink.wav = what tyger said at 24 kHz, session.txt = the numbers). Off = unset.
+Environment=GATEWAY_RECORD_DIR=/recordings
+Volume=%h/.local/share/ai-lab/recordings:/recordings
 # TYGER_API_SECRET is deliberately NOT set here: step 2 leaves tyger
 # unauthenticated and loopback-only. Setting the secret forces
 # TYGER_PAGES=false and invalidates every other client at once -- that is
