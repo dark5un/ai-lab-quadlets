@@ -1,0 +1,72 @@
+# tyger-gateway
+
+The `plex` upstream that **plexpipe** dials, speaking **tyger-s2s**'s `/ws` instead of personaplex.
+
+plexpipe, the tailnet door (`tailscale serve :8457`), `maxaudiod` and the HAL devices do not change. This
+process slots in behind plexpipe and answers the role personaplex used to answer
+(`PLAN-V03-step2.md`, `WIRE-TABLES-v03.md`).
+
+```
+MAX Mic -> maxaudiod --gate -> :8457 -> plexpipe --leg C--> tyger-gateway --leg D--> tyger-v1 /ws (5090)
+                                        <-leg C--                     <-leg D--
+```
+
+## Wire
+
+| leg | direction | frames |
+|---|---|---|
+| C, plex (plexpipe ⇄ here) | in | WS `/api/chat?text_prompt=&voice_prompt=` → `b"\x00"` handshake, then `0x01`+Ogg/Opus **24 kHz** |
+| C | out | `0x01`+Ogg/Opus **24 kHz** (reply + backchannel audio) |
+| D, tyger (`/ws`) | out | `[int32 rid][int32 agent sample at 24 kHz, -1]` + int16 PCM **16 kHz**, 20 ms blocks (648 B) |
+| D | in | `[int32 rid, 0 = backchannel]` + int16 PCM **24 kHz** |
+| D | text | `ready`, `endpoint`, `partial`, `reply`, `backchannel`, `barge`, `turn_done`, `error`, `session_end`, … |
+| D | text out | `played:<rid>:<samples>` — without it tyger ends the turn on its own guess + 2 s |
+
+Every row is cited to `file:line` in `WIRE-TABLES-v03.md`. `resample.py` is the fork's
+`app/runtime/audio.py` copied verbatim (24 → `ready.sr`); `playhead.py` is the fork's `scripts/stack/page.py`
+`PageSim` clock.
+
+## Endpoints
+
+- `GET /api/chat?text_prompt=&voice_prompt=` — the plex role. `voice_prompt` is logged and ignored; tyger
+  answers with its own character prompt (`voices.character: max` in `config/local.yaml`).
+- `GET /health` — **200 only when a real tyger answers** (`GET <TYGER_VOICES_URL>`); 503 otherwise. This is
+  what plexpipe's `ExecStartPre` gate polls, so a stopped tyger makes plexpipe refuse to start instead of
+  starting and redialling in a storm.
+
+## Env
+
+| var | default | |
+|---|---|---|
+| `GATEWAY_PORT` | `8994` | |
+| `TYGER_URL` | `ws://tyger-v1:7860/ws` | |
+| `TYGER_VOICES_URL` | `http://tyger-v1:7860/voices` | the health probe |
+| `TYGER_API_SECRET` | *unset* | set ⇒ an HS256 token is signed per connect (`aud: tyger`, `exp` 60 s, fresh `jti`). Step 2 does **not** set it: tyger stays open and loopback-only (V05 owns the posture) |
+
+## Honest limits (in the plan, not discovered later)
+
+- The playhead is a **gateway-side** clock, not MAX Out's CoreAudio clock (I-26 → step 4). It is true while
+  `maxaudiod --gate` zeroes the uplink for 1.2 s after any real downlink, so tyger never hears Max and there
+  is no echo to reject. Nothing here claims full duplex.
+- A `barge` stops this gateway's playhead and drops the rest of that reply. A real drain of what is already
+  buffered downstream is step 4.
+- `0x02` caption frames are not produced (tyger has structured `reply`/`partial` JSON; v1 logs it instead).
+- No secrets, no auth on this port: loopback publish + the stack network only.
+
+## Build and run (ai box)
+
+```
+scripts/build-images.sh --rebuild tyger-gateway
+scripts/render-units.sh tyger-gateway && systemctl --user daemon-reload && systemctl --user start tyger-gateway
+containers/tyger-gateway/scripts/dev-check.sh
+```
+
+Start order (the reconnect-storm rule, `PLAN-V03-step2.md` §3): **tyger healthy → gateway healthy →
+plexpipe → then link maxaudiod up.** Never the reverse.
+
+## Acceptance
+
+Gate 1 is the real chain without a human: `afplay` a real WAV into MAX Mic → real `maxaudiod --gate` → real
+`plexpipe` → this gateway → real tyger on the 5090 → back to MAX Out, recorded with `ffmpeg`. The six
+machine-checkable checks are in `PLAN-V03-step2.md` §2; evidence goes here, with timestamps, when it is run.
+Gate 2 is the owner in a real Meet. Merge to mainline only after Gate 2.

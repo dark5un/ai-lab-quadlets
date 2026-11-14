@@ -1,0 +1,8 @@
+# aiohttp serves the plex role (/api/chat) and /health, and is the client of tyger's /ws --
+# one framework for both faces, and the same one tyger itself uses.
+aiohttp>=3.9
+# PINNED, and for the same reason containers/plexpipe/requirements.txt pins it: sphn 0.2.x
+# REDESIGNED the Opus stream API (OpusStreamWriter lost read_bytes; the reader lost the
+# append-side API). 0.1.12 is what plexpipe and the personaplex fork run against.
+sphn==0.1.12
+numpy>=1.26
