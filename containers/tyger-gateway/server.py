@@ -180,7 +180,10 @@ class PlexSession:
         the device + meeting loop. With step 4 in place the Mac's own `played:` report is the truth, and
         this model stops speaking for it (a premature report ends tyger's turn early).
         """
-        if self.mac_reports:
+        if self.tag_seen or self.mac_reports:
+            # The Mac owns the clock (its tags are on the wire), so this model must not speak for it:
+            # measured 2026-11-14, it reported played:1:19200 while the Mac played 13440, 100 ms earlier,
+            # ending tyger's turn before the reply had finished.
             return
         await self._send_played(rid, samples, "model")
 
