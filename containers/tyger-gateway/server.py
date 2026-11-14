@@ -100,6 +100,8 @@ class PlexSession:
         self.encoded_bytes = 0
         self.reply_rid = 0
         self.reply_samples = 0
+        self.reply_t0 = 0.0
+        self.reply_t1 = 0.0
         self.barged_rid = None
         self.state_events = 0
         self.last_state = None
@@ -176,6 +178,7 @@ class PlexSession:
         self.playhead.reset()
         self.reply_rid = 0
         self.reply_samples = 0
+        self.reply_t0 = self.reply_t1 = 0.0
         self.barged_rid = None
         self.reply_text = None
         enc = self.enc = OpusEncoder(SR_PLEX)
@@ -195,7 +198,9 @@ class PlexSession:
                 if rid != BACKCHANNEL_ID:
                     if rid != self.reply_rid:
                         self.reply_rid, self.reply_samples = rid, 0
+                        self.reply_t0 = time.perf_counter()
                     self.reply_samples += len(a24)
+                    self.reply_t1 = time.perf_counter()
                 payload = enc.encode(a24)
                 if payload:
                     self.encoded_bytes += len(payload)
@@ -232,9 +237,13 @@ class PlexSession:
                 self.enc.reset()                   # nothing more of that reply goes out (step 4 drains it properly)
         elif t == "turn_done":
             tail = await self._flush_audio()
+            wall = (self.reply_t1 - self.reply_t0) if self.reply_t0 and self.reply_t1 else 0.0
             log(f"turn_done barged={ev.get('barged')} reply=rid {self.reply_rid} "
-                f"samples={self.reply_samples} ({self.reply_samples / SR_PLEX:.2f} s) "
-                f"tail_frame={len(tail)} B encoded_total={self.encoded_bytes} B")
+                f"samples={self.reply_samples} ({self.reply_samples / SR_PLEX:.2f} s of speech) "
+                f"arrived_over={wall:.2f} s wall tail_frame={len(tail)} B encoded_total={self.encoded_bytes} B")
+            if wall and self.reply_samples:
+                log(f"reply pacing: {self.reply_samples / SR_PLEX / wall:.2f}x real time "
+                    f"(>1: tyger generated faster than it plays; the door's 1.2 s gate tracks arrival, not playback)")
             if self.reply_text:
                 log(f"reply text={self.reply_text!r}")
         elif t == "error":
