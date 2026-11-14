@@ -394,6 +394,14 @@ class PlexSession:
         if len(payload) < TAG.size:
             return
         rid, at, cap = TAG.unpack_from(payload)
+        if self.tags and cap < self.tags[-1][0] - CAP_SR:
+            # The capture position jumped backwards: the Mac started a NEW capture stream (a door
+            # reconnect) while this plex session lives on. Its positions are unrelated to the old
+            # stream's, so the alignment is re-anchored on the new one instead of pairing nonsense.
+            log(f"playhead: the Mac's capture stream restarted (pos {self.tags[-1][0]} -> {cap}): "
+                f"re-aligning")
+            self.tags.clear()
+            self.tag_offset = None
         self.tags.append((cap, rid, at))
         while self.tags and self.tags[0][0] < cap - int(TAGS_KEEP_S * CAP_SR):
             self.tags.popleft()

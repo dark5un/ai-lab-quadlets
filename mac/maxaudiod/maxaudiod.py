@@ -338,6 +338,18 @@ class Bridge:
     # -- audio side
     def run(self):
         self.play_q = queue.Queue(maxsize=50)
+        # Frames left over from a previous door session (the send thread may have died mid-flight, and
+        # the capture callback can still fire a few times while the streams close) must not go out on
+        # the new socket: their capture positions belong to a stream that no longer exists.
+        stale = 0
+        while True:
+            try:
+                self.tx.get_nowait()
+                stale += 1
+            except queue.Empty:
+                break
+        if stale:
+            log.info("dropped %d stale door frames from the previous session", stale)
         mic_idx = find_device(MIC, "output")
         out_idx = find_device(OUT, "input")
         cap_frames = int(CAP_RATE * FRAME_MS / 1000)

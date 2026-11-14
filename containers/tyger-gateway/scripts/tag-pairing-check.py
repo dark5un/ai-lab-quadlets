@@ -102,6 +102,31 @@ def check_offset_anchor() -> None:
     print(f"  reconnected Mac counter: {checked} blocks paired, worst {worst} sample(s) off")
 
 
+def check_capture_restart() -> None:
+    """A Mac that restarts its capture stream mid-session is re-aligned, not paired with nonsense.
+
+    This is the 2026-11-14 failure: stale frames from the previous door session put a 16 s position at
+    the head of the new session's tag stream, the anchor was taken from it, and every block after that
+    was 'lagged' by 12 s (hits=0). A backwards jump in positions now re-anchors the alignment.
+    """
+    s, _ = new_session()
+    fed: set = set()
+    for k in range(100):                                     # stream 1: positions 0..100 blocks
+        pos = k * BLOCK48
+        feed(s, fed, pos + 4 * BLOCK48, 0)
+        s.tag_for(pos, t_capture=0.0)
+    fed2: set = set()
+    paired = 0
+    for k in range(100, 160):                                # stream 2 restarts at 0 mid-session
+        pos = k * BLOCK48
+        feed(s, fed2, (k - 100 + 4) * BLOCK48, 0)
+        rid, at, src = s.tag_for(pos, t_capture=0.0)
+        paired += src == "mac"
+    if paired < 50:
+        raise AssertionError(f"after a capture-stream restart only {paired}/60 blocks paired by the Mac's tag")
+    print(f"  capture stream restarted mid-session: re-anchored, {paired}/60 blocks paired")
+
+
 def main() -> int:
     print(f"tag-pairing-check: tag={gw.TAG.size} B, block={BLOCK48} capture positions ({BLOCK48 / CAP * 1000:.0f} ms)")
     checked, worst = check_pipeline(first_cap=0, latency_blocks=8)
@@ -110,6 +135,7 @@ def main() -> int:
     print("  no tags -> the wall-clock model answers (fallback intact)")
     check_lag_is_reported()
     check_offset_anchor()
+    check_capture_restart()
     print("tag-pairing: PASS")
     return 0
 
