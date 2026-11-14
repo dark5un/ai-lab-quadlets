@@ -42,6 +42,11 @@ PORT = int(os.environ.get("GATEWAY_PORT", "8994"))
 TYGER_WS = os.environ.get("TYGER_URL", "ws://tyger-v1:7860/ws")
 TYGER_VOICES = os.environ.get("TYGER_VOICES_URL", "http://tyger-v1:7860/voices")
 TYGER_SECRET = os.environ.get("TYGER_API_SECRET", "").strip() or None
+# Diagnostic (off unless set): append every reply's raw Ogg/Opus payload to
+# <dir>/reply-<rid>.ogg, so the audio THIS leg sends can be decoded and listened to independently of
+# the door. Not evidence on its own -- the acceptance is what a human hears off MAX Mic -- but it says
+# which side of plexpipe a defect is on.
+DUMP_DIR = os.environ.get("GATEWAY_DUMP_DIR", "").strip() or None
 
 SR_PLEX = 24000            # the plex leg's rate, both ways (plexpipe server.py:33,62)
 BLOCK = 320                # a mic block: 20 ms at the EARS rate (page.py:16)
@@ -204,6 +209,12 @@ class PlexSession:
                 payload = enc.encode(a24)
                 if payload:
                     self.encoded_bytes += len(payload)
+                    if DUMP_DIR:
+                        try:
+                            with open(os.path.join(DUMP_DIR, f"reply-{rid}.ogg"), "ab") as f:
+                                f.write(payload)
+                        except OSError as e:
+                            log(f"dump failed: {e!r}")
                     await self.ws.send_bytes(b"\x01" + payload)
 
     async def _on_event(self, ws, text: str):
