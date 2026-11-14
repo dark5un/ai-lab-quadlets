@@ -1,0 +1,36 @@
+# tyger-gateway: V03 door gateway (containers/tyger-gateway, PLAN-V03-step2.md).
+# Answers the `plex` role plexpipe dials (WS /api/chat, one-byte handshake,
+# 0x01+Ogg/Opus 24 kHz both ways) and speaks tyger-s2s's EARS /ws.
+# Loopback publish 8994 is for local probes only -- plexpipe dials it by name
+# over ai.network (ws://systemd-tyger-gateway:8994). GET /health is 200 only
+# when a real tyger answers /voices behind it; that is the gate plexpipe's
+# ExecStartPre polls, so a stopped tyger makes plexpipe refuse to start
+# instead of starting and redialling in a storm.
+# CPU-only. No [Install]: opt-in via ai-lab (avatar group, boot=false).
+# NOTE: tyger-v1 is an ad-hoc container today (V05 makes it a quadlet), so
+# there is no unit to order after; the gateway redials tyger with backoff and
+# keeps its plex leg alive meanwhile.
+
+[Unit]
+Description=V03 tyger-gateway: the plex role behind plexpipe, speaking tyger's /ws
+Wants=ai-network.service
+After=ai-network.service
+
+[Container]
+ContainerName=systemd-tyger-gateway
+Image=localhost/tyger-gateway:latest
+Network=ai.network
+PublishPort=127.0.0.1:8994:8994/tcp
+Environment=GATEWAY_PORT=8994
+Environment=TYGER_URL=ws://tyger-v1:7860/ws
+Environment=TYGER_VOICES_URL=http://tyger-v1:7860/voices
+# TYGER_API_SECRET is deliberately NOT set here: step 2 leaves tyger
+# unauthenticated and loopback-only. Setting the secret forces
+# TYGER_PAGES=false and invalidates every other client at once -- that is
+# V05's posture change, with its own acceptance.
+
+[Service]
+SuccessExitStatus=143
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30

@@ -1,0 +1,12 @@
+# tyger-gateway: the `plex` upstream plexpipe dials, speaking tyger's /ws.
+# Serves the personaplex "plex" role (WS /api/chat, b"\x00" handshake, 0x01+Ogg/Opus
+# 24 kHz both ways) and carries the audio to tyger-s2s's EARS WebSocket.
+# API: GET /api/chat (plex role), GET /health (200 only with a reachable tyger).
+# CPU-only, no GPU, no ffmpeg: the 24 -> 16 kHz resample is numpy (resample.py).
+FROM docker.io/library/python:3.12-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY resample.py playhead.py plexio.py server.py ./
+EXPOSE 8994
+CMD ["python", "-u", "server.py"]

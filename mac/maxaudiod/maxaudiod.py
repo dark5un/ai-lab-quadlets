@@ -40,6 +40,7 @@ class Status:
                      "tx_frames": 0, "rx_frames": 0, "errors": 0,
                      "gated_frames": 0, "speaking_frames": 0,
                      "mailbox_frames": 0,
+                     "play_chunks": 0, "play_samples": 0,
                      "plex_up": None, "bridge_up": None}
 
     def bump(self, **kw):
@@ -243,12 +244,47 @@ class Bridge:
         os.replace(tmp, os.path.join(mailbox, "frame.jpg"))
         status.inc("mailbox_frames")
 
+    def _play_chunk(self, play, chunk):
+        """Write one downlink chunk to MAX Mic, accounting for what and how long it took.
+
+        NOTE: a blocking write returns as soon as the device's buffer has room, NOT when the audio has
+        been heard, so a short write time is normal (and was wrongly read as an underrun while
+        diagnosing V03 Gate 1). What the counters are worth is the total: `play_chunks` /
+        `play_samples` in the status JSON say how much of a reply actually reached the device."""
+        n = int(chunk.size)
+        want = n / PLAY_NATIVE
+        t0 = time.time()
+        play.write(chunk.reshape(-1, 1))
+        dt = time.time() - t0
+        self.play_i += 1
+        self.play_samples += n
+        self.play_write_s += dt
+        status.inc("play_chunks")
+        status.bump(play_samples=int(self.play_samples))
+        if self.play_i % 100 == 0:                  # one line per ~8 s of playback
+            log.info("play #%d: %d samples (%.0f ms), write %.0f ms, queue %d, handed over %.2f s",
+                     self.play_i, n, want * 1e3, dt * 1e3, self.play_q.qsize(),
+                     self.play_samples / PLAY_NATIVE)
+
+    def _play_summary(self):
+        log.info("playback session end: %d chunks, %.2f s handed to MAX Mic, %.2f s spent in write()",
+                 self.play_i, self.play_samples / PLAY_NATIVE, self.play_write_s)
+
     # -- audio side
     def run(self):
         self.play_q = queue.Queue(maxsize=50)
         mic_idx = find_device(MIC, "output")
         out_idx = find_device(OUT, "input")
         cap_frames = int(CAP_RATE * FRAME_MS / 1000)
+        # playback accounting (V03 Gate 1 diagnosis): how much of a reply THIS side was handed, and
+        # how long the device made us wait for it. A brain that generates faster than real time
+        # delivers a whole reply in a burst of large chunks, so write() must be the thing that paces
+        # playback; if it returns in far less than the audio's own length the device is not pacing it
+        # and the audio is being dropped, not played. One summary line per session, plus a warning
+        # only for a chunk that came back suspiciously fast.
+        self.play_i = 0
+        self.play_samples = 0
+        self.play_write_s = 0.0
 
         def on_capture(indata, frames, tsi, status_info):
             # HALF-DUPLEX GATE (2026-11-12): Meet plays back Max's own voice
@@ -272,31 +308,38 @@ class Bridge:
                             blocksize=cap_frames, callback=on_capture):
             with sd.OutputStream(samplerate=PLAY_NATIVE, device=mic_idx, channels=1) as play:
                 rx_thread.start()
-                while not self.stop.is_set():
-                    while not self.tx.empty():
-                        try:
-                            self.ws.send(self.tx.get_nowait(), opcode=websocket.ABNF.OPCODE_BINARY)
-                        except Exception as e:
-                            status.bump(connected=False)
-                            status.inc("errors")
-                            log.warning("door send failed: %s", e)
-                            raise
+                self.play_q_idle_since = None
+                try:
+                    self._play_loop(play)
+                finally:
+                    self._play_summary()
+
+    def _play_loop(self, play):
+        while not self.stop.is_set():
+            while not self.tx.empty():
+                try:
+                    self.ws.send(self.tx.get_nowait(), opcode=websocket.ABNF.OPCODE_BINARY)
+                except Exception as e:
+                    status.bump(connected=False)
+                    status.inc("errors")
+                    log.warning("door send failed: %s", e)
+                    raise
+            try:
+                chunk = self.play_q.get(timeout=0.05)
+                if controls.mute_mic:
+                    pass  # drained, not played: MAX Mic stays silent
+                else:
+                    self._play_chunk(play, chunk)
+            except queue.Empty:
+                pass
+            if controls.link == "down":
+                log.info("link down requested - dropping door socket")
+                if self.ws is not None:
                     try:
-                        chunk = self.play_q.get(timeout=0.05)
-                        if controls.mute_mic:
-                            pass  # drained, not played: MAX Mic stays silent
-                        else:
-                            play.write(chunk.reshape(-1, 1))
-                    except queue.Empty:
+                        self.ws.close()
+                    except Exception:
                         pass
-                    if controls.link == "down":
-                        log.info("link down requested - dropping door socket")
-                        if self.ws is not None:
-                            try:
-                                self.ws.close()
-                            except Exception:
-                                pass
-                        return
+                return
 
     def loop(self):
         backoff = 1
