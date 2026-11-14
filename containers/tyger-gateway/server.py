@@ -172,8 +172,8 @@ class PlexSession:
         if self.enc is None:
             return 0
         n = 0
-        for payload in self.enc.flush():
-            self.dl.put_nowait((self.reply_rid, payload, self.enc.frame))
+        for samples, payload in self.enc.flush():
+            self.dl.put_nowait((self.reply_rid, payload, samples))
             n += 1
         return n
 
@@ -272,8 +272,8 @@ class PlexSession:
                 # NOT sent here: tyger hands a whole reply over in a burst (measured 11-15x real
                 # time), and plexpipe drains one frame per incoming message. Queue the frames and
                 # let downlink() pace them; the playhead is advanced there, when they really go out.
-                for payload in self.enc.encode(a24):
-                    self.dl.put_nowait((rid, payload, self.enc.frame))
+                for samples, payload in self.enc.encode(a24):
+                    self.dl.put_nowait((rid, payload, samples))
 
     async def downlink(self):
         """Send the reply's audio to plexpipe: ONE 80 ms frame per message, paced at real time.

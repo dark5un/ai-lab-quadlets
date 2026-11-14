@@ -44,15 +44,21 @@ FRAME = 1920   # 80 ms at 24 kHz: the size plexpipe feeds sphn (plexpipe server.
                # buffers and emits whole frames, exactly as plexpipe's up_pump does.
 
 
+def _is_header_page(page: bytes) -> bool:
+    """True for the Ogg stream headers (OpusHead / OpusTags) -- pages, but not audio frames."""
+    return b"OpusHead" in page or b"OpusTags" in page
+
+
 class OpusEncoder:
     """float32 PCM at `rate` in, whole `0x01` payloads out (possibly none while a frame is filling).
 
-    Returns a LIST: one item per 80 ms frame. The caller must send them ONE PER MESSAGE and paced at
-    real time -- plexpipe drains its Reader with a single read_pcm per incoming message
-    (plexpipe server.py:194-196), and sphn 0.1.12's reader only produces PCM when it gets a moment
-    between append_bytes and read_pcm. Measured live 2026-11-14: 210 messages appended and read
-    back-to-back yielded 0 samples; the same bytes read after a pause yielded all 172800 (7.2 s). A
-    burst therefore loses most of a reply (personaplex, which emits one frame per 80 ms, loses none).
+    Returns a LIST of (samples, payload): `samples` is FRAME for an audio page, 0 for a stream-header
+    page (OpusHead/OpusTags). The caller must send them ONE PER MESSAGE and paced at real time --
+    plexpipe drains its Reader with a single read_pcm per incoming message (plexpipe server.py:194-196),
+    and sphn 0.1.12's reader only produces PCM when it gets a moment between append_bytes and read_pcm.
+    Measured live 2026-11-14: 210 messages appended and read back-to-back yielded 0 samples; the same
+    bytes read after a pause yielded all 172800 (7.2 s). A burst therefore loses most of a reply
+    (personaplex, which emits one frame per 80 ms, loses none).
     """
 
     def __init__(self, rate: int = 24000, frame: int = FRAME):
@@ -61,19 +67,30 @@ class OpusEncoder:
         self._writer = sphn.OpusStreamWriter(rate)
         self._buf = np.zeros(0, np.float32)
 
-    def encode(self, pcm: np.ndarray) -> list[bytes]:
+    def encode(self, pcm: np.ndarray) -> list[tuple[int, bytes]]:
         self._buf = np.concatenate([self._buf, np.asarray(pcm, dtype=np.float32)])
-        out: list[bytes] = []
+        out: list[tuple[int, bytes]] = []
         while self._buf.size >= self.frame:
             frame = self._buf[:self.frame]
             self._buf = self._buf[self.frame:]
             self._writer.append_pcm(frame)
             b = self._writer.read_bytes()
+            # sphn 0.1.12 emits the Ogg OpusHead and OpusTags pages on its FIRST reads -- before any
+            # audio this writer produces (measured: read_bytes() right after construction returns
+            # OpusHead; the first append_pcm makes OpusTags available). Reading this stream with one
+            # read_bytes() per frame therefore spent the first two reads on headers and left the LAST
+            # two audio frames unread: every reply went out exactly 160 ms short (live: 152 frames in ->
+            # 150 out; the Mac played 288000 of 291840 samples). They are stream headers, not frames, so
+            # emit them with 0 samples (the peer reader still needs them, in order, before the audio) and
+            # read on for this frame's audio page.
+            while b and _is_header_page(b):
+                out.append((0, b))
+                b = self._writer.read_bytes()
             if b:
-                out.append(b)
+                out.append((self.frame, b))
         return out
 
-    def flush(self) -> list[bytes]:
+    def flush(self) -> list[tuple[int, bytes]]:
         """End the current turn's audio cleanly: pad the partial frame with silence and emit it.
 
         Called at a turn boundary (turn_done). Without it the tail samples of one reply sit in the
