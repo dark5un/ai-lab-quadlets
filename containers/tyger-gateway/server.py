@@ -81,7 +81,11 @@ AUDIO_HEADER = struct.Struct("<i")     # the reply's id (0: a backchannel)
 TAG = struct.Struct("<iii")
 CAP_SR = 48000                         # the tag's position unit (MAX Out capture rate)
 TAG_BLOCK48 = BLOCK * CAP_SR // 16000   # 960: one 20 ms mic block, in capture positions
-TAGS_KEEP_S = 5.0                      # tags older than this are dropped (a barge reaches back ~4 s)
+TAGS_KEEP_S = 30.0                     # tags older than this are dropped. Bigger than the audio path's
+                                       # own buffering (measured 3.5 s behind at a session start), because
+                                       # the tag for a block arrives BEFORE the block does: the window has
+                                       # to cover the pipeline's latency, or the pairing has nothing left
+                                       # to pair against.
 
 SESSIONS = 0               # live plex sessions (what /health reports)
 
