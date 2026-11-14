@@ -71,7 +71,9 @@ FRAME = 1920    # 80 ms at 24k
 FRAME_BYTES = FRAME * 2
 STAT_EVERY = 2.0
 RECONNECT_MAX = 15.0
-UP_STALL_S = 0.3   # no door audio for this long: the uplink has stopped, pad the stream
+UP_STALL_S = 0.3       # no door audio for this long: the uplink has stopped, pad the stream
+UP_BACKLOG_BYTES = 24000  # 0.5 s of 24 kHz s16: above this, a hiccup left a backlog and it is shed
+UP_DRAIN = 3             # frames shed per 20 ms iteration while a backlog lasts
 
 sessions = {}  # role ("audio"/"video") -> ws ; one Mac per role at a time
 
@@ -199,40 +201,54 @@ async def plex_session(ws, stop: asyncio.Event, stats: dict,
             # every minute. So: append one frame, read it, send it, and repeat; a backlog drains in
             # whole frames (never several inside one message) and is capped so it cannot burst.
             async def up_pump():
-                """ONE 80 ms frame per message, at 1.0x. Never two in one message, and no invented audio.
+                """ONE 80 ms frame per message, paced by the WALL CLOCK at 1.0x.
 
-                sphn 0.1.12's writer, like its reader, yields one page per instant: appending several
-                frames before read_bytes() DROPS the rest. Measured 2026-11-14 on the live chain:
-                maxaudiod captured exactly 50.00 blocks/s and the gateway received 47.21 mic blocks/s
-                (15,108 of 16,000 samples/s = 94.4%) with ff_buf flat -- the audio died inside the
-                writer, and the ears' stream fell 3.4 s behind the capture clock every minute.
+                Two measured facts, both from 2026-11-14 on the live chain:
 
-                Silence is only ever sent when the uplink has genuinely stopped (nothing from the door
-                for UP_STALL_S), never to top a tick up: a silence frame is audio that was never
-                captured, and it shifts every playhead position after it.
+                * sphn 0.1.12's writer yields one page per instant: appending several frames before
+                  read_bytes() DROPS the rest. maxaudiod captured exactly 50.00 blocks/s and the gateway
+                  received 47.21 mic blocks/s (15,108 of 16,000 samples/s = 94.4%) with ff_buf flat --
+                  the audio died inside the writer, and the ears' stream fell 3.4 s behind the capture
+                  clock every minute. Hence one append + one read + one message per frame.
+                * `sleep(0.08)` per frame is NOT 80 ms: await overhead put the loop at ~86 ms, so ff_buf
+                  grew by 2.7 kB/s and the same 3.4 s/min accumulated as buffered latency instead. Hence
+                  the pace is `int(elapsed / 0.08)` frames sent, checked every 20 ms.
+
+                A hiccup can still leave a backlog; above UP_BACKLOG_BYTES it is shed at up to UP_DRAIN
+                frames per iteration (real audio, one message each, never a burst inside one message).
+                Silence is sent only when the uplink has genuinely stopped: a silence frame is audio that
+                was never captured and it shifts every playhead position after it.
                 """
-                last_data = time.monotonic()
-                sent_total = ticks = 0
+                t0 = time.monotonic()
+                sent = 0
+                last_data = t0
                 while not stop.is_set():
-                    payload = None
-                    if len(ff_buf) >= FRAME_BYTES:
+                    due = int((time.monotonic() - t0) / 0.08) + 1
+                    over = len(ff_buf) > UP_BACKLOG_BYTES
+                    n = 0
+                    while n < (UP_DRAIN if over else 1) and len(ff_buf) >= FRAME_BYTES and (over or sent < due):
                         frame = bytes(ff_buf[:FRAME_BYTES])
                         del ff_buf[:FRAME_BYTES]
                         ow.append_pcm(np.frombuffer(frame, dtype="<i2").astype(np.float32) / 32768.0)
-                        last_data = time.monotonic()
                         payload = ow.read_bytes()
-                    elif time.monotonic() - last_data > UP_STALL_S:
+                        if payload:
+                            await plex.send(b"\x01" + payload)
+                        last_data = time.monotonic()
+                        sent += 1
+                        n += 1
+                    if not n and sent < due and time.monotonic() - last_data > UP_STALL_S:
                         log("uplink stalled: sending silence to keep the plex stream open")
                         ow.append_pcm(silence)
                         payload = ow.read_bytes()
+                        if payload:
+                            await plex.send(b"\x01" + payload)
+                        sent += 1
                         last_data = time.monotonic()
-                    if payload:
-                        await plex.send(b"\x01" + payload)
-                        sent_total += 1
-                    ticks += 1
-                    stats["up_sent"] = sent_total
-                    stats["up_ticks"] = ticks
-                    await asyncio.sleep(0.08)
+                    if over and n:
+                        stats["up_drains"] = stats.get("up_drains", 0) + 1
+                    stats["up_sent"] = sent
+                    stats["up_behind"] = due - sent
+                    await asyncio.sleep(0.02)
 
             async def down_pump():
                 async for msg in plex:
