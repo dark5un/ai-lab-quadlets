@@ -9,7 +9,9 @@ Modes:
 
 Native rates dodge resampling: capture 48k, play downlink at 24k (MaxHole kSampleRates).
 """
-import argparse, json, logging, math, os, queue, sys, threading, time
+import argparse, json, logging, math, os, queue, struct, sys, threading, time
+from collections import deque
+
 import numpy as np
 import sounddevice as sd
 import websocket  # websocket-client
@@ -20,6 +22,7 @@ CAP_RATE = 48000
 PLAY_NATIVE = 24000  # downlink rate == MaxHole native; no resample needed
 FRAME_MS = 20
 GATE_HOLD = 1.2  # s — half-duplex loop-break (see Bridge.on_capture)
+PLAY_SR = 24000  # downlink / MAX Mic rate: the playhead counts reply samples at this rate (I-26)
 
 log = logging.getLogger("maxaudiod")
 
@@ -176,6 +179,50 @@ def loopback_test():
     return 0 if not fails else 1
 
 
+# ---------------------------------------------------------------- the playhead (I-26)
+class PlayTrace:
+    """Where the reply is at the DAC, from PortAudio's own device clock.
+
+    The output callback records, for every buffer it hands the device, the DAC time of the buffer's
+    first frame and which reply sample that frame is. A captured MAX Out block then asks, for its own
+    capture time, which reply sample was at the DAC then. Both device times are re-anchored to
+    `time.perf_counter()` (each stream's own reference), so the two streams need not share a time base.
+    """
+
+    KEEP_S = 15.0   # windows older than this are dropped (a barge onset reaches back a few seconds)
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.windows = deque()          # (t0, t1, rid, first_sample) at PLAY_SR, oldest first
+        self.last_rid = 0
+        self.total = {}                 # rid -> reply samples handed to the device
+
+    def submit(self, t0, n, rid, first_sample):
+        """`n` samples of reply `rid`, whose first sample is `first_sample`, reach the DAC from `t0`."""
+        with self.lock:
+            t1 = t0 + n / PLAY_SR
+            if rid >= 0:
+                self.last_rid = rid
+                self.total[rid] = first_sample + n
+            self.windows.append((t0, t1, rid, first_sample))
+            cut = t1 - self.KEEP_S
+            while self.windows and self.windows[0][1] < cut:
+                self.windows.popleft()
+
+    def tag(self, t_capture):
+        """(reply id, its sample at PLAY_SR at the DAC at t_capture); (last rid, -1) when idle."""
+        with self.lock:
+            for t0, t1, rid, first in reversed(self.windows):
+                if t0 <= t_capture <= t1:
+                    return rid, first + int((t_capture - t0) * PLAY_SR)
+            return self.last_rid, -1
+
+    def played_total(self, rid):
+        """Reply samples of `rid` handed to the device so far (0 if none)."""
+        with self.lock:
+            return self.total.get(rid, 0)
+
+
 # ---------------------------------------------------------------- door bridge
 class Bridge:
     def __init__(self, door, gate=False, mailbox=None):
@@ -188,6 +235,10 @@ class Bridge:
         self.tx = queue.Queue()
         self.ws = None
         self.stop = threading.Event()
+        self.trace = PlayTrace()          # I-26: the playhead, from the DAC clock
+        self.cur_rid = 0                  # the reply whose audio the downlink is carrying
+        self.log_q = queue.Queue(maxsize=64)
+        self._samples_logged = 0
 
     # -- websocket side
     def connect(self):
@@ -216,7 +267,7 @@ class Bridge:
                     if len(pcm24) and float(np.sqrt(np.mean(pcm24 ** 2))) > 0.01:
                         self.last_downlink = time.time()
                         status.inc("speaking_frames")
-                    self.play_q.put(pcm24)
+                    self.play_q.put((self.cur_rid, pcm24))
                 elif tag == b"V":
                     if self.mailbox:
                         self.write_mailbox(payload)
@@ -244,31 +295,9 @@ class Bridge:
         os.replace(tmp, os.path.join(mailbox, "frame.jpg"))
         status.inc("mailbox_frames")
 
-    def _play_chunk(self, play, chunk):
-        """Write one downlink chunk to MAX Mic, accounting for what and how long it took.
-
-        NOTE: a blocking write returns as soon as the device's buffer has room, NOT when the audio has
-        been heard, so a short write time is normal (and was wrongly read as an underrun while
-        diagnosing V03 Gate 1). What the counters are worth is the total: `play_chunks` /
-        `play_samples` in the status JSON say how much of a reply actually reached the device."""
-        n = int(chunk.size)
-        want = n / PLAY_NATIVE
-        t0 = time.time()
-        play.write(chunk.reshape(-1, 1))
-        dt = time.time() - t0
-        self.play_i += 1
-        self.play_samples += n
-        self.play_write_s += dt
-        status.inc("play_chunks")
-        status.bump(play_samples=int(self.play_samples))
-        if self.play_i % 100 == 0:                  # one line per ~8 s of playback
-            log.info("play #%d: %d samples (%.0f ms), write %.0f ms, queue %d, handed over %.2f s",
-                     self.play_i, n, want * 1e3, dt * 1e3, self.play_q.qsize(),
-                     self.play_samples / PLAY_NATIVE)
-
     def _play_summary(self):
-        log.info("playback session end: %d chunks, %.2f s handed to MAX Mic, %.2f s spent in write()",
-                 self.play_i, self.play_samples / PLAY_NATIVE, self.play_write_s)
+        log.info("playback session end: %d chunks, %.2f s handed to MAX Mic",
+                 self.play_i, self.play_samples / PLAY_NATIVE)
 
     # -- audio side
     def run(self):
@@ -276,25 +305,68 @@ class Bridge:
         mic_idx = find_device(MIC, "output")
         out_idx = find_device(OUT, "input")
         cap_frames = int(CAP_RATE * FRAME_MS / 1000)
-        # playback accounting (V03 Gate 1 diagnosis): how much of a reply THIS side was handed, and
-        # how long the device made us wait for it. A brain that generates faster than real time
-        # delivers a whole reply in a burst of large chunks, so write() must be the thing that paces
-        # playback; if it returns in far less than the audio's own length the device is not pacing it
-        # and the audio is being dropped, not played. One summary line per session, plus a warning
-        # only for a chunk that came back suspiciously fast.
+        out_frames = int(PLAY_NATIVE * FRAME_MS / 1000)
+        trace = self.trace
+        # Playback state, touched only by the output callback.
+        carry = [np.zeros(0, np.float32)]
+        rid = [0]
+        submitted = [0]                  # reply samples handed to the DAC for the current reply
         self.play_i = 0
         self.play_samples = 0
         self.play_write_s = 0.0
 
+        def on_play(outdata, frames, tsi, status_info):
+            """Fill MAX Mic from the downlink queue; record where the reply is at the DAC (I-26).
+
+            The device gives the DAC time of this buffer (`time.outputBufferDacTime`); it is re-anchored
+            to `time.perf_counter()` so the input callback (a different stream) can compare. Each
+            contiguous (reply id, reply sample) run that reaches the DAC this buffer goes to the trace.
+            """
+            out = np.zeros(frames, np.float32)
+            pos = 0
+            segs = []
+            while pos < frames:
+                if carry[0].size == 0:
+                    try:
+                        new_rid, pcm = self.play_q.get_nowait()
+                    except queue.Empty:
+                        break
+                    if new_rid != rid[0]:        # a new reply: its sample index starts at 0
+                        rid[0] = new_rid
+                        submitted[0] = 0
+                    carry[0] = pcm
+                take = min(frames - pos, carry[0].size)
+                out[pos:pos + take] = carry[0][:take]
+                segs.append((pos, rid[0], submitted[0], take))
+                submitted[0] += take
+                carry[0] = carry[0][take:]
+                pos += take
+            if controls.mute_mic:
+                outdata[:, 0] = 0.0              # drained, not played: MAX Mic stays silent
+                return
+            outdata[:, 0] = out
+            if not segs:
+                return
+            t0 = time.perf_counter() + (tsi.outputBufferDacTime - tsi.currentTime)
+            for start, r, first, n in segs:
+                trace.submit(t0 + start / PLAY_NATIVE, n, r, first)
+                self.play_i += 1
+                self.play_samples += n
+            status.inc("play_chunks")
+            status.bump(play_samples=int(self.play_samples))
+
         def on_capture(indata, frames, tsi, status_info):
-            # HALF-DUPLEX GATE (2026-11-12): Meet plays back Max's own voice
-            # through the speaker path straight into MAX Out, so plexpipe
-            # hears Max and answers itself — a self-sustaining loop (observed
-            # live: downlink frame rate climbs with no human speaking).
-            # While a downlink chunk is recent, uplink is silenced. Trade-off:
-            # other participants are also muted while Max talks; permanent
-            # fix is server-side AEC/gating at P4 (doc pitfall).
+            # HALF-DUPLEX GATE (2026-11-12): Meet plays back Max's own voice through the speaker path
+            # straight into MAX Out, so plexpipe hears Max and answers itself. While a downlink chunk is
+            # recent, the uplink is silenced. Full duplex (I-26) replaces this with the playhead tag.
             status.inc("tx_frames")
+            # I-26: what the user was hearing when this MAX Out block was captured, from the DAC clock
+            t_adc = time.perf_counter() + (tsi.inputBufferAdcTime - tsi.currentTime)
+            r, s = trace.tag(t_adc)
+            try:
+                self.log_q.put_nowait((r, s))
+            except queue.Full:
+                pass
             if controls.mute_uplink or (self.gate and time.time() - self.last_downlink < GATE_HOLD):
                 status.inc("gated_frames")
                 self.tx.put(b"A" + (b"\x00" * 2 * frames))
@@ -304,42 +376,52 @@ class Bridge:
             self.tx.put(b"A" + pcm.tobytes())
 
         rx_thread = threading.Thread(target=self.reader, daemon=True)
+        tx_thread = threading.Thread(target=self._send_loop, daemon=True)
         with sd.InputStream(samplerate=CAP_RATE, device=out_idx, channels=2,
                             blocksize=cap_frames, callback=on_capture):
-            with sd.OutputStream(samplerate=PLAY_NATIVE, device=mic_idx, channels=1) as play:
+            with sd.OutputStream(samplerate=PLAY_NATIVE, device=mic_idx, channels=1,
+                                 blocksize=out_frames, callback=on_play):
                 rx_thread.start()
-                self.play_q_idle_since = None
+                tx_thread.start()
                 try:
-                    self._play_loop(play)
+                    self._log_loop()
                 finally:
                     self._play_summary()
 
-    def _play_loop(self, play):
+    def _send_loop(self):
+        """Send queued door frames ('A' uplink blocks) from a thread, never from a callback."""
         while not self.stop.is_set():
-            while not self.tx.empty():
-                try:
-                    self.ws.send(self.tx.get_nowait(), opcode=websocket.ABNF.OPCODE_BINARY)
-                except Exception as e:
-                    status.bump(connected=False)
-                    status.inc("errors")
-                    log.warning("door send failed: %s", e)
-                    raise
             try:
-                chunk = self.play_q.get(timeout=0.05)
-                if controls.mute_mic:
-                    pass  # drained, not played: MAX Mic stays silent
-                else:
-                    self._play_chunk(play, chunk)
+                msg = self.tx.get(timeout=0.05)
             except queue.Empty:
-                pass
-            if controls.link == "down":
-                log.info("link down requested - dropping door socket")
-                if self.ws is not None:
-                    try:
-                        self.ws.close()
-                    except Exception:
-                        pass
+                continue
+            ws = self.ws
+            if ws is None:
                 return
+            try:
+                ws.send(msg, opcode=websocket.ABNF.OPCODE_BINARY)
+            except Exception as e:
+                status.bump(connected=False)
+                status.inc("errors")
+                log.warning("door send failed: %s", e)
+                return
+
+    def _log_loop(self):
+        """Step 1 of V03 step 4: log the DAC playhead so it can be judged before any wire change."""
+        while not self.stop.is_set() and controls.link != "down":
+            try:
+                r, s = self.log_q.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            self._samples_logged += 1
+            if self._samples_logged % 50 == 0:      # ~1 s of 20 ms blocks
+                log.info("playhead: rid=%d sample=%d (queue %d)", r, s, self.play_q.qsize())
+        log.info("link down requested - dropping door socket")
+        if self.ws is not None:
+            try:
+                self.ws.close()
+            except Exception:
+                pass
 
     def loop(self):
         backoff = 1
