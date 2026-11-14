@@ -368,7 +368,7 @@ class Bridge:
         rid = [0]
         submitted = [0]                  # reply samples handed to the DAC for the current reply
         pending: list = [None]           # (rid, samples, when the last of them reached the DAC)
-        reported: list = [None]          # the last rid a `played:` report has been sent for
+        reported: list = [0, 0, 0.0]     # rid, samples and time of the last `played:` report
         cap_pos = [0]                    # samples captured on this stream (48 kHz): the tag's position
         level = [0.0]                    # the loudest uplink block this second (is the human arriving?)
         self.play_i = 0
@@ -436,17 +436,21 @@ class Bridge:
                 # A backchannel (rid 0) plays but is never tagged or reported (playback.py:30).
                 pending[0] = (rid[0], submitted[0], last_end) if rid[0] else None
             elif carry[0].size == 0 and self.play_q.empty():
-                # Idle with nothing queued: a reply whose audio has all reached the DAC is reported
-                # `played:<rid>:<samples>` -- that report is what ends tyger's turn honestly
-                # (app/ears/conversation.py:148-154,305-310), instead of the server's 2 s guess.
+                # Idle with nothing queued: report how much of the reply has reached the DAC as
+                # `played:<rid>:<samples>`. tyger keeps the highest report and ends the turn only when
+                # it equals what it sent (app/ears/playback.py page_played/page_done), so a report
+                # mid-reply is harmless and the LAST one is what ends the turn honestly instead of the
+                # server's 2 s guess. One report per 250 ms at most, and only when the count grew.
                 pr = pending[0]
-                if (pr is not None and pr[1] > 0 and pr[2] <= time.perf_counter()
-                        and pr[0] != reported[0]):
-                    pending[0] = None
-                    reported[0] = pr[0]
-                    self.tx.put(f"played:{pr[0]}:{pr[1]}")
-                    status.inc("played_reports")
-                    log.info("played:%d:%d (all of rid %d has reached the DAC)", pr[0], pr[1], pr[0])
+                now = time.perf_counter()
+                if pr is not None and pr[1] > 0 and pr[2] <= now:
+                    if pr[0] != reported[0]:            # a new reply starts its own count
+                        reported[0], reported[1] = pr[0], 0
+                    if pr[1] > reported[1] and now - reported[2] >= 0.25:
+                        reported[1], reported[2] = pr[1], now
+                        self.tx.put(f"played:{pr[0]}:{pr[1]}")
+                        status.inc("played_reports")
+                        log.info("played:%d:%d (at the DAC, nothing queued)", pr[0], pr[1])
 
         def on_capture(indata, frames, tsi, status_info):
             # HALF-DUPLEX GATE (2026-11-12): Meet plays back Max's own voice through the speaker path
