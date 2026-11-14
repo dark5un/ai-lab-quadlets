@@ -15,7 +15,13 @@ import sphn
 
 
 class OpusDecoder:
-    """`0x01` payload bytes in, float32 PCM at `rate` out, or None while the decoder wants more input."""
+    """`0x01` payload bytes in, float32 PCM at `rate` out, or None while the decoder wants more input.
+
+    Never drop or replace this while any other codec object is alive in the process (see the
+    lifetime rule at the foot of this file). There is deliberately no `reset()` here: the only way to
+    reset a sphn reader is to build a new one, and building a new one DROPS the old -- which kills
+    every live reader in the process.
+    """
 
     def __init__(self, rate: int = 24000):
         self.rate = rate
@@ -29,9 +35,6 @@ class OpusDecoder:
         if pcm.ndim > 1:
             pcm = pcm.reshape(-1)
         return pcm.astype(np.float32, copy=False)
-
-    def reset(self) -> None:
-        self._reader = sphn.OpusStreamReader(self.rate)
 
 
 FRAME = 1920   # 80 ms at 24 kHz: the size plexpipe feeds sphn (plexpipe server.py:63). sphn's
@@ -84,10 +87,47 @@ class OpusEncoder:
         return self.encode(np.zeros(0, np.float32))
 
     def reset(self) -> None:
-        self._writer = sphn.OpusStreamWriter(self.rate)
+        """A barge or a new conversation: drop the buffered tail, KEEP the writer object.
+
+        Replacing the writer here is a codec-object DROP, and under sphn 0.1.12 a single drop kills
+        every live reader in the process -- that is what broke the chain live on 2026-11-14. Only the
+        partial frame is discarded; the Opus stream continues on the same writer.
+        """
         self._buf = np.zeros(0, np.float32)
 
     @property
     def pending(self) -> int:
         """Samples held back waiting for a whole frame (0 between turns)."""
         return int(self._buf.size)
+
+
+# ---- the lifetime rule, and the one pair this process uses --------------------------------------
+#
+# sphn 0.1.12 keeps its codec work on a channel shared by the whole process: the moment ANY codec
+# object is garbage-collected, every reader that was already alive goes dead -- its next use silently
+# returns nothing, the use after that raises ValueError('sending on a closed channel'), for the rest
+# of the process's life. (Receipt: scripts/codec-lifetime-check.py.) So this process creates exactly
+# ONE encoder and ONE decoder and keeps them for its whole life. A barge or a new tyger conversation
+# clears the encoder's buffer (OpusEncoder.reset); it never replaces the object. Two door sessions at
+# once would share this pair; the door serves one at a time (plexpipe), which is why one shared pair
+# is correct here and why the object is process-scoped rather than held per session.
+
+
+class CodecPair:
+    """The one encoder/decoder pair this process uses, for the process's whole life."""
+
+    def __init__(self, rate: int = 24000, frame: int = FRAME):
+        self.rate = rate
+        self.dec = OpusDecoder(rate)
+        self.enc = OpusEncoder(rate, frame)
+
+
+_pair: "CodecPair | None" = None
+
+
+def codec_pair(rate: int = 24000) -> CodecPair:
+    """The process-scoped pair: created once, returned to every caller, never dropped."""
+    global _pair
+    if _pair is None:
+        _pair = CodecPair(rate)
+    return _pair

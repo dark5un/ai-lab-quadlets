@@ -17,6 +17,12 @@ posture (V05: this process CAN carry a token, it does not set one), and any voic
 
 Privacy: tyger itself logs no transcripts (app/ears/conversation.py:27). This gateway logs them, because Gate 1's
 evidence is "MAX Out's transcript matches the reply text in the gateway log" (PLAN-V03-step2.md §2).
+
+Codec lifetime: the Opus encoder/decoder are process-scoped (plexio.codec_pair()), created once and
+kept for this process's whole life; a barge or a new conversation clears the encoder's buffer instead
+of replacing it. sphn 0.1.12 kills every live reader in the process the moment any codec object is
+dropped, so per-session codecs (the old shape) let one session's teardown kill the next -- the redial
+storm of 2026-11-14. See plexio.py's lifetime rule and scripts/codec-lifetime-check.py.
 """
 from __future__ import annotations
 
@@ -35,7 +41,7 @@ import numpy as np
 from aiohttp import WSMsgType, web
 
 from playhead import BACKCHANNEL_ID, Playhead
-from plexio import OpusDecoder, OpusEncoder
+from plexio import codec_pair
 from resample import StreamingAudioResampler
 
 PORT = int(os.environ.get("GATEWAY_PORT", "8994"))
@@ -111,7 +117,7 @@ class PlexSession:
         self.state_events = 0
         self.last_state = None
         self.reply_text: str | None = None
-        self.enc: OpusEncoder | None = None
+        self.enc = codec_pair().enc       # process-scoped: never replaced, never dropped
         self.dl: asyncio.Queue = asyncio.Queue()      # (rid, payload, samples) waiting to be paced out
         self.sent_frames = 0
         self.sent_samples = 0
@@ -197,7 +203,8 @@ class PlexSession:
         self.reply_t0 = self.reply_t1 = 0.0
         self.barged_rid = None
         self.reply_text = None
-        self.enc = OpusEncoder(SR_PLEX)
+        self.enc = codec_pair().enc
+        self.enc.reset()                              # a new conversation: drop the previous tail
         self._drop_queued()                           # a new conversation: stale audio is not this reply
 
         async for msg in ws:
@@ -330,7 +337,7 @@ class PlexSession:
     # ---- leg C: the plex role ----
     async def uplink(self):
         """plexpipe's 0x01 Ogg -> PCM -> the EARS rate -> 20 ms mic blocks, tagged with the playhead."""
-        dec = OpusDecoder(SR_PLEX)
+        dec = codec_pair().dec
         rs = StreamingAudioResampler(SR_PLEX, self.sr_ears)
         pending = np.zeros(0, np.float32)
         pending_t0 = 0.0
@@ -390,6 +397,8 @@ async def plex_chat(request: web.Request) -> web.WebSocketResponse:
     await ws.send_bytes(b"\x00")
 
     SESSIONS += 1
+    if SESSIONS > 1:
+        log(f"WARNING: {SESSIONS} plex sessions share one codec pair; their audio will interleave")
     session = PlexSession(ws, request.app["http"], voice_prompt)
     tasks = [asyncio.create_task(coro, name=name) for name, coro in
              (("uplink", session.uplink()), ("tyger", session.tyger_manager()),
