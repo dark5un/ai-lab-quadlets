@@ -261,6 +261,7 @@ class PlayTrace:
         with self.lock:
             self.windows.clear()
             self.total.clear()
+            self.first_wall.clear()
 
 
 # ---------------------------------------------------------------- door bridge
@@ -364,6 +365,10 @@ class Bridge:
     # -- audio side
     def run(self):
         self.play_q = queue.Queue(maxsize=50)
+        # A new door session: the previous session's playhead trace is not this conversation's, and
+        # its reply ids start again at 1 (so a stale `total` would suppress the new session's first
+        # play stamp -- that is t4 of the latency timeline).
+        self.trace.clear()
         # Frames left over from a previous door session (the send thread may have died mid-flight, and
         # the capture callback can still fire a few times while the streams close) must not go out on
         # the new socket: their capture positions belong to a stream that no longer exists.

@@ -76,7 +76,7 @@ import subprocess,sys,time
 box=sys.argv[1]; est=[]
 for _ in range(5):
     a=time.time()
-    r=subprocess.run(["ssh",box,"date +%s.%f"],capture_output=True,text=True)
+    r=subprocess.run(["ssh",box,"date +%s.%N"],capture_output=True,text=True)
     b=time.time()
     est.append(float(r.stdout.strip())-(a+b)/2)
 est.sort()
