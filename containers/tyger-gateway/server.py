@@ -103,6 +103,7 @@ class PlexSession:
         self.barged_rid = None
         self.state_events = 0
         self.last_state = None
+        self.reply_text: str | None = None
         self.enc: OpusEncoder | None = None
         self.playhead = Playhead(self._report_played)
 
@@ -176,6 +177,7 @@ class PlexSession:
         self.reply_rid = 0
         self.reply_samples = 0
         self.barged_rid = None
+        self.reply_text = None
         enc = self.enc = OpusEncoder(SR_PLEX)
 
         async for msg in ws:
@@ -217,7 +219,9 @@ class PlexSession:
         elif t == "partial":
             pass                                        # the user's words growing; endpoint carries them whole
         elif t == "reply":
-            log(f"reply text={ev.get('text')!r}")
+            # Fires per token with the CUMULATIVE text (conversation.py:390): keep the latest and log it
+            # once, at turn_done, so the log stays readable and still carries the reply for the evidence.
+            self.reply_text = ev.get("text") or self.reply_text
         elif t == "backchannel":
             log(f"backchannel text={ev.get('text')!r}")
         elif t == "barge":
@@ -231,6 +235,8 @@ class PlexSession:
             log(f"turn_done barged={ev.get('barged')} reply=rid {self.reply_rid} "
                 f"samples={self.reply_samples} ({self.reply_samples / SR_PLEX:.2f} s) "
                 f"tail_frame={len(tail)} B encoded_total={self.encoded_bytes} B")
+            if self.reply_text:
+                log(f"reply text={self.reply_text!r}")
         elif t == "error":
             log(f"tyger error {ev.get('error')}")
         elif t == "busy":
