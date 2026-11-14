@@ -54,6 +54,8 @@ if ! grep -q "^Image=${IMAGE_REPO}:${SHA}$" "$ROOT/quadlets/${UNIT}.container.in
 fi
 
 "$ROOT/scripts/render-units.sh" "$UNIT"
+# install.sh sets AI_LAB_NO_RELOAD=1 and reloads once at its end.
+[ "${AI_LAB_NO_RELOAD:-0}" = 1 ] || systemctl --user daemon-reload
 
 if [[ ! -f "$ENV_FILE" ]]; then
     printf '\n%s is missing: the container needs HERMES_SHIM_KEY for the llm.smart\n' "$ENV_FILE" >&2
