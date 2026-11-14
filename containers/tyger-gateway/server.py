@@ -148,6 +148,7 @@ class PlexSession:
         self.tag_seen = False
         self.mic_pos48 = 0                            # this session's mic stream position, 48 kHz units
         self.tag_hits = self.tag_lagged = self.tag_old = 0
+        self.plex_msgs = 0                            # 0x01 messages decoded (an uplink rate probe)
         self.mac_reports = 0                          # `played:` reports relayed from the Mac
         self.last_tag_log = 0.0
 
@@ -486,6 +487,7 @@ class PlexSession:
                 continue
             if data[0] != 0x01:
                 continue                                # nothing else exists on this leg
+            self.plex_msgs += 1
             pcm = dec.decode(data[1:])
             if pcm is None:
                 continue
@@ -520,7 +522,7 @@ class PlexSession:
         if self.blocks % MIC_LOG_EVERY == 0:
             tags = f"oldest={self.tags[0][0]} newest={self.tags[-1][0]}" if self.tags else "none"
             log(f"mic blocks={self.blocks} bytes={self.mic_bytes} tag=r{rid}@{at} src={src} "
-                f"pos={pos} offset={self.tag_offset} {tags} dropped={self.dropped_blocks} "
+                f"pos={pos} offset={self.tag_offset} {tags} msgs={self.plex_msgs} dropped={self.dropped_blocks} "
                 f"tags: hits={self.tag_hits} lagged={self.tag_lagged} old={self.tag_old}")
 
 

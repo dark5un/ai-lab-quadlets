@@ -382,6 +382,7 @@ async def handle(ws):
         while not stop.is_set():
             stats["bridge_up"] = bridge.up
             stats["renderer_up"] = renderer.up
+            stats["up_buffered"] = len(ff_buf)      # resampled audio not yet on the plex leg
             payload = {k: v for k, v in stats.items()
                        if not k.startswith("_") and k != "up_bytes_mark"}
             payload["t"] = "stat"

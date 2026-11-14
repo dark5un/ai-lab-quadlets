@@ -305,6 +305,7 @@ class Bridge:
                     status.bump(last_stat=time.time(),
                                 plex_up=ctrl.get("plex_up"), bridge_up=ctrl.get("bridge_up"),
                                 server_up_frames=ctrl.get("up_frames"),
+                                server_up_buffered=ctrl.get("up_buffered"),
                                 server_down_frames=ctrl.get("down_frames"))
                 elif ctrl.get("t") == "reply":
                     # A new reply's audio starts: name it, so the tag this Mac sends names the id the
