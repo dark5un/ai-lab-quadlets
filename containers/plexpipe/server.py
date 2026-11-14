@@ -71,6 +71,7 @@ FRAME = 1920    # 80 ms at 24k
 FRAME_BYTES = FRAME * 2
 STAT_EVERY = 2.0
 RECONNECT_MAX = 15.0
+UP_CATCHUP = 3     # frames drained into separate messages per tick while ff_buf holds a backlog
 
 sessions = {}  # role ("audio"/"video") -> ws ; one Mac per role at a time
 
@@ -188,20 +189,35 @@ async def plex_session(ws, stop: asyncio.Event, stats: dict,
             except asyncio.QueueEmpty:
                 break
         try:
-            # uplink pump: 80 ms ticks -> ff-resampled frames (or silence pad)
+            # uplink pump: ONE 80 ms frame per message, at 1.0x, with a bounded drain of any backlog.
+            #
+            # sphn 0.1.12's writer, like its reader, yields one page per instant: appending several
+            # frames and then calling read_bytes() ONCE drops the rest. Measured 2026-11-14 on the live
+            # chain: maxaudiod captured exactly 50.00 blocks/s and the gateway received 47.21 mic
+            # blocks/s (15,108 of 16,000 samples/s = 94.4%) while ff_buf stayed flat -- the audio was
+            # discarded inside the writer, and the ears' stream fell 3.4 s behind the capture clock
+            # every minute. So: append one frame, read it, send it, and repeat; a backlog drains in
+            # whole frames (never several inside one message) and is capped so it cannot burst.
             async def up_pump():
                 while not stop.is_set():
-                    while len(ff_buf) >= FRAME_BYTES:
+                    sent = 0
+                    while sent < UP_CATCHUP and len(ff_buf) >= FRAME_BYTES:
                         frame = bytes(ff_buf[:FRAME_BYTES])
                         del ff_buf[:FRAME_BYTES]
                         pcm = np.frombuffer(frame, dtype="<i2").astype(np.float32) / 32768.0
                         ow.append_pcm(pcm)
-                    if not len(ff_buf) and stats["up_bytes"] == stats.get("up_bytes_mark", -1):
+                        b = ow.read_bytes()
+                        if b:
+                            await plex.send(b"\x01" + b)
+                        sent += 1
+                    if not sent and stats["up_bytes"] == stats.get("up_bytes_mark", -1):
                         ow.append_pcm(silence)  # starved uplink: keep stream continuous
+                        b = ow.read_bytes()
+                        if b:
+                            await plex.send(b"\x01" + b)
                     stats["up_bytes_mark"] = stats["up_bytes"]
-                    b = ow.read_bytes()
-                    if b:
-                        await plex.send(b"\x01" + b)
+                    if sent > 1:
+                        stats["up_catchup"] = stats.get("up_catchup", 0) + 1
                     await asyncio.sleep(0.08)
 
             async def down_pump():
@@ -211,7 +227,16 @@ async def plex_session(ws, stop: asyncio.Event, stats: dict,
                     if msg[0] == 0x01:
                         ordr.append_bytes(msg[1:])
                         pcm = ordr.read_pcm()
-                        if pcm is None:
+                        if pcm is None or np.size(pcm) == 0:
+                            # sphn 0.1.12 needs a moment between append_bytes and read_pcm; when it
+                            # gives nothing, that frame's audio is still inside the reader. Forwarding
+                            # an EMPTY 'A' threw it away (measured 3 of 13, 3 of 10, 3 of 24 frames on
+                            # live replies), so give the decoder 5 ms and read once more; whatever is
+                            # still pending surfaces with the next message instead of being lost.
+                            await asyncio.sleep(0.005)
+                            pcm = ordr.read_pcm()
+                        if pcm is None or np.size(pcm) == 0:
+                            stats["down_empty"] = stats.get("down_empty", 0) + 1
                             continue
                         if pcm.ndim > 1:
                             pcm = pcm.reshape(-1)
