@@ -101,6 +101,8 @@ class PlexSession:
         self.reply_rid = 0
         self.reply_samples = 0
         self.barged_rid = None
+        self.state_events = 0
+        self.last_state = None
         self.playhead = Playhead(self._report_played)
 
     # ---- leg D: the client side of tyger's /ws ----
@@ -216,7 +218,16 @@ class PlexSession:
             log("tyger busy: no free conversation slot")
         elif t == "session_end":
             log(f"session_end reason={ev.get('reason')}")
-        elif t in ("state", "bc_cue", "voice", "threshold", "links", "task_done", "backchannel_done"):
+        elif t == "state":
+            # One per hop (~3/s): log the transitions, and a heartbeat line so a soak
+            # can tell "quiet" from "dead".
+            self.state_events += 1
+            st = ev.get("state")
+            if st != self.last_state or self.state_events % 50 == 0:
+                self.last_state = st
+                log(f"state {st} (event {self.state_events}) "
+                    f"{json.dumps({k: v for k, v in ev.items() if k not in ('type', 'state')})[:160]}")
+        elif t in ("bc_cue", "voice", "threshold", "links", "task_done", "backchannel_done"):
             log(f"{t} {json.dumps({k: v for k, v in ev.items() if k != 'type'})[:200]}")
 
     # ---- leg C: the plex role ----
