@@ -391,15 +391,22 @@ async def plex_chat(request: web.Request) -> web.WebSocketResponse:
 
     SESSIONS += 1
     session = PlexSession(ws, request.app["http"], voice_prompt)
-    tasks = [asyncio.create_task(t) for t in
-             (session.uplink(), session.tyger_manager(), session.downlink())]
+    tasks = [asyncio.create_task(coro, name=name) for name, coro in
+             (("uplink", session.uplink()), ("tyger", session.tyger_manager()),
+              ("downlink", session.downlink()))]
     try:
-        await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for t in done:
+            exc = t.exception()
+            log(f"session task '{t.get_name()}' finished{'' if exc is None else f': {exc!r}'}")
     finally:
         session.stop.set()
         for t in tasks:
             t.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for t, r in zip(tasks, results):
+            if isinstance(r, BaseException) and not isinstance(r, asyncio.CancelledError):
+                log(f"session task '{t.get_name()}' raised: {r!r}")
         if session.tyger is not None and not session.tyger.closed:
             await session.tyger.close()
         SESSIONS -= 1
