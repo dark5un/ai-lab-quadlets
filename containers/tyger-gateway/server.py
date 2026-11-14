@@ -112,21 +112,32 @@ class PlexSession:
         self.last_state = None
         self.reply_text: str | None = None
         self.enc: OpusEncoder | None = None
+        self.dl: asyncio.Queue = asyncio.Queue()      # (rid, payload, samples) waiting to be paced out
+        self.sent_frames = 0
+        self.sent_samples = 0
+        self.sent_t0 = 0.0
+        self.sent_t1 = 0.0
         self.playhead = Playhead(self._report_played)
 
-    async def _flush_audio(self) -> bytes:
-        """Send the tail of the current reply as a whole frame (a turn boundary; see OpusEncoder.flush)."""
-        ws = self.tyger
-        if self.enc is None or ws is None or ws.closed:
-            return b""
-        payload = self.enc.flush()
-        if payload:
-            self.encoded_bytes += len(payload)
+    def _drop_queued(self) -> int:
+        """Throw away frames not yet sent (a barge, or a new tyger conversation)."""
+        n = 0
+        while True:
             try:
-                await ws.send_bytes(b"\x01" + payload)
-            except (ConnectionError, RuntimeError):
-                pass
-        return payload
+                self.dl.get_nowait()
+                n += 1
+            except asyncio.QueueEmpty:
+                return n
+
+    async def _flush_audio(self) -> int:
+        """Queue the tail of the current reply as a whole frame (a turn boundary; OpusEncoder.flush)."""
+        if self.enc is None:
+            return 0
+        n = 0
+        for payload in self.enc.flush():
+            self.dl.put_nowait((self.reply_rid, payload, self.enc.frame))
+            n += 1
+        return n
 
     # ---- leg D: the client side of tyger's /ws ----
     async def _report_played(self, rid: int, samples: int) -> None:
@@ -186,7 +197,8 @@ class PlexSession:
         self.reply_t0 = self.reply_t1 = 0.0
         self.barged_rid = None
         self.reply_text = None
-        enc = self.enc = OpusEncoder(SR_PLEX)
+        self.enc = OpusEncoder(SR_PLEX)
+        self._drop_queued()                           # a new conversation: stale audio is not this reply
 
         async for msg in ws:
             if msg.type == WSMsgType.TEXT:
@@ -199,23 +211,59 @@ class PlexSession:
                 a24 = np.frombuffer(data, "<i2", offset=AUDIO_HEADER.size).astype(np.float32) / 32768.0
                 if rid == self.barged_rid:            # the page stops playback on a barge
                     continue
-                self.playhead.on_audio(rid, len(a24))  # before anything can be tagged with it
                 if rid != BACKCHANNEL_ID:
                     if rid != self.reply_rid:
                         self.reply_rid, self.reply_samples = rid, 0
                         self.reply_t0 = time.perf_counter()
                     self.reply_samples += len(a24)
                     self.reply_t1 = time.perf_counter()
-                payload = enc.encode(a24)
-                if payload:
-                    self.encoded_bytes += len(payload)
-                    if DUMP_DIR:
-                        try:
-                            with open(os.path.join(DUMP_DIR, f"reply-{rid}.ogg"), "ab") as f:
-                                f.write(payload)
-                        except OSError as e:
-                            log(f"dump failed: {e!r}")
-                    await self.ws.send_bytes(b"\x01" + payload)
+                # NOT sent here: tyger hands a whole reply over in a burst (measured 11-15x real
+                # time), and plexpipe drains one frame per incoming message. Queue the frames and
+                # let downlink() pace them; the playhead is advanced there, when they really go out.
+                for payload in self.enc.encode(a24):
+                    self.dl.put_nowait((rid, payload, self.enc.frame))
+
+    async def downlink(self):
+        """Send the reply's audio to plexpipe: ONE 80 ms frame per message, paced at real time.
+
+        This is the fix for the truncation found live on 2026-11-14: a burst made plexpipe's single
+        read_pcm per message race sphn's decoder and lose ~5/6 of the reply (maxaudiod played 1.8 s
+        of 9.44 s; personaplex, which emits one frame per 80 ms, lost nothing behind the same door).
+        """
+        next_send = 0.0
+        frames = 0
+        while not self.stop.is_set():
+            rid, payload, samples = await self.dl.get()
+            if rid == self.barged_rid:
+                continue
+            if self.ws.closed:
+                return
+            now = time.perf_counter()
+            if next_send > now:
+                await asyncio.sleep(next_send - now)
+                now = time.perf_counter()
+            self.playhead.on_audio(rid, samples)      # schedule as it goes out, not as it arrived
+            try:
+                await self.ws.send_bytes(b"\x01" + payload)
+            except (ConnectionError, RuntimeError):
+                return
+            if DUMP_DIR:                              # exactly what this leg put on the wire
+                try:
+                    with open(os.path.join(DUMP_DIR, f"reply-{rid}.ogg"), "ab") as f:
+                        f.write(payload)
+                except OSError as e:
+                    log(f"dump failed: {e!r}")
+            if frames == 0:
+                self.sent_t0 = now
+            frames += 1
+            self.sent_frames += 1
+            self.sent_samples += samples
+            self.sent_t1 = now
+            self.encoded_bytes += len(payload)
+            next_send = max(next_send, now) + samples / SR_PLEX
+            if frames % 62 == 0:                      # ~5 s of audio
+                log(f"downlink: {self.sent_samples / SR_PLEX:.1f} s sent to the door, "
+                    f"queue {self.dl.qsize()} frames")
 
     async def _on_event(self, ws, text: str):
         try:
@@ -244,17 +292,21 @@ class PlexSession:
             log(f"barge yield={ev.get('yield')}: playback stopped, dropping the rest of reply {self.reply_rid}")
             self.barged_rid = self.reply_rid
             self.playhead.stop()
+            dropped = self._drop_queued()            # nothing more of that reply goes out (step 4 drains it properly)
+            if dropped:
+                log(f"barge: {dropped} unsent frames dropped")
             if self.enc is not None:
-                self.enc.reset()                   # nothing more of that reply goes out (step 4 drains it properly)
+                self.enc.reset()
         elif t == "turn_done":
             tail = await self._flush_audio()
             wall = (self.reply_t1 - self.reply_t0) if self.reply_t0 and self.reply_t1 else 0.0
             log(f"turn_done barged={ev.get('barged')} reply=rid {self.reply_rid} "
                 f"samples={self.reply_samples} ({self.reply_samples / SR_PLEX:.2f} s of speech) "
-                f"arrived_over={wall:.2f} s wall tail_frame={len(tail)} B encoded_total={self.encoded_bytes} B")
+                f"arrived_over={wall:.2f} s wall tail_frames={tail} queue={self.dl.qsize()} "
+                f"encoded_total={self.encoded_bytes} B")
             if wall and self.reply_samples:
-                log(f"reply pacing: {self.reply_samples / SR_PLEX / wall:.2f}x real time "
-                    f"(>1: tyger generated faster than it plays; the door's 1.2 s gate tracks arrival, not playback)")
+                log(f"reply arrived at {self.reply_samples / SR_PLEX / wall:.1f}x real time; "
+                    f"the downlink pump trims that to 1.0x for plexpipe (see downlink())")
             if self.reply_text:
                 log(f"reply text={self.reply_text!r}")
         elif t == "error":
@@ -339,7 +391,8 @@ async def plex_chat(request: web.Request) -> web.WebSocketResponse:
 
     SESSIONS += 1
     session = PlexSession(ws, request.app["http"], voice_prompt)
-    tasks = [asyncio.create_task(session.uplink()), asyncio.create_task(session.tyger_manager())]
+    tasks = [asyncio.create_task(t) for t in
+             (session.uplink(), session.tyger_manager(), session.downlink())]
     try:
         await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
     finally:
@@ -352,7 +405,8 @@ async def plex_chat(request: web.Request) -> web.WebSocketResponse:
         SESSIONS -= 1
         log(f"plex session closed: mic blocks={session.blocks} bytes={session.mic_bytes} "
             f"dropped={session.dropped_blocks} reply rid={session.reply_rid} "
-            f"samples={session.reply_samples} encoded={session.encoded_bytes} B")
+            f"arrived={session.reply_samples} sent={session.sent_samples} samples "
+            f"({session.sent_samples / SR_PLEX:.2f} s on the wire) encoded={session.encoded_bytes} B")
     return ws
 
 

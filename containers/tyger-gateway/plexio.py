@@ -42,7 +42,15 @@ FRAME = 1920   # 80 ms at 24 kHz: the size plexpipe feeds sphn (plexpipe server.
 
 
 class OpusEncoder:
-    """float32 PCM at `rate` in, `0x01` payload bytes out (possibly empty while the frame is filling)."""
+    """float32 PCM at `rate` in, whole `0x01` payloads out (possibly none while a frame is filling).
+
+    Returns a LIST: one item per 80 ms frame. The caller must send them ONE PER MESSAGE and paced at
+    real time -- plexpipe drains its Reader with a single read_pcm per incoming message
+    (plexpipe server.py:194-196), and sphn 0.1.12's reader only produces PCM when it gets a moment
+    between append_bytes and read_pcm. Measured live 2026-11-14: 210 messages appended and read
+    back-to-back yielded 0 samples; the same bytes read after a pause yielded all 172800 (7.2 s). A
+    burst therefore loses most of a reply (personaplex, which emits one frame per 80 ms, loses none).
+    """
 
     def __init__(self, rate: int = 24000, frame: int = FRAME):
         self.rate = rate
@@ -50,26 +58,26 @@ class OpusEncoder:
         self._writer = sphn.OpusStreamWriter(rate)
         self._buf = np.zeros(0, np.float32)
 
-    def encode(self, pcm: np.ndarray) -> bytes:
+    def encode(self, pcm: np.ndarray) -> list[bytes]:
         self._buf = np.concatenate([self._buf, np.asarray(pcm, dtype=np.float32)])
-        out = bytearray()
+        out: list[bytes] = []
         while self._buf.size >= self.frame:
             frame = self._buf[:self.frame]
             self._buf = self._buf[self.frame:]
             self._writer.append_pcm(frame)
             b = self._writer.read_bytes()
             if b:
-                out += b
-        return bytes(out)
+                out.append(b)
+        return out
 
-    def flush(self) -> bytes:
-        """End the current turn's audio cleanly: pad the partial frame with silence and send it.
+    def flush(self) -> list[bytes]:
+        """End the current turn's audio cleanly: pad the partial frame with silence and emit it.
 
-        Called at a turn boundary (turn_done / barge). Without it the tail samples of one reply sit in
-        the buffer and are emitted at the head of the NEXT reply's audio.
+        Called at a turn boundary (turn_done). Without it the tail samples of one reply sit in the
+        buffer and are emitted at the head of the NEXT reply's audio.
         """
         if not self._buf.size:
-            return b""
+            return []
         pad = (-self._buf.size) % self.frame
         if pad:
             self._buf = np.concatenate([self._buf, np.zeros(pad, np.float32)])

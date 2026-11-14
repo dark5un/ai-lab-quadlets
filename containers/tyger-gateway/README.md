@@ -43,6 +43,20 @@ Every row is cited to `file:line` in `WIRE-TABLES-v03.md`. `resample.py` is the 
 | `TYGER_VOICES_URL` | `http://tyger-v1:7860/voices` | the health probe |
 | `TYGER_API_SECRET` | *unset* | set ⇒ an HS256 token is signed per connect (`aud: tyger`, `exp` 60 s, fresh `jti`). Step 2 does **not** set it: tyger stays open and loopback-only (V05 owns the posture) |
 
+## Why the downlink is paced at real time (found live, 2026-11-14)
+
+tyger hands a whole reply over in a **burst** (measured 11–15× real time: 9.44 s of speech in 0.74 s).
+plexpipe drains its `sphn` Reader with **one `read_pcm()` per incoming message** (`plexpipe server.py:194-196`),
+and sphn 0.1.12 only yields PCM if the decoder gets a moment between `append_bytes()` and `read_pcm()`.
+Measured: 210 messages appended and read back-to-back gave **0 samples**; the same bytes read after a
+pause gave all **172,800** (7.2 s). So a burst loses most of a reply — maxaudiod played 1.8 s of a 9.44 s
+reply and the recording was 1.9 s of speech then exact digital silence.
+
+Behind the same door, **personaplex loses nothing** (maxaudiod's playback tally: 560 chunks = 44.5 s,
+contiguous) because it emits one 80 ms frame per 80 ms. `downlink()` therefore queues the frames and
+sends **one 80 ms frame per message, paced at 1.0× real time**, exactly like the brain it replaces. The
+playhead is advanced there — when a frame really goes out — so its tags describe what the door has.
+
 ## Honest limits (in the plan, not discovered later)
 
 - The playhead is a **gateway-side** clock, not MAX Out's CoreAudio clock (I-26 → step 4). It is true while
