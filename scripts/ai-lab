@@ -22,6 +22,9 @@
 #   ai-lab dictation [gpu|cpu]        live dictation accel, or switch voxtype
 #                                     between the Vulkan (4070 Ti) and AVX2
 #                                     (CPU) variants via a user drop-in
+#   ai-lab voice-brain [tyger|personaplex]  which brain the door's upstream serves
+#                                     (rewrites PLEX_URL in quadlets/plexpipe.container,
+#                                     renders, restarts plexpipe); no arg reports
 #   ai-lab strata duo [5090-VARIANT] [128k|256k|524k|1m]  a 5090 variant + the coder
 #                                     (Coder on the 4070 Ti, :11439) side by side
 #
@@ -343,6 +346,48 @@ cmd_url() {  # print the browser launch URL for a service
     echo "http://${host}:${port}/"
 }
 
+cmd_voice_brain() {  # voice-brain [tyger|personaplex]  which brain the door's upstream serves
+    # The door (plexpipe) dials one upstream. Its own code default is personaplex
+    # (containers/plexpipe/server.py:53); the repo unit sets PLEX_URL explicitly.
+    # Switching is: rewrite that one line, render, daemon-reload, restart plexpipe.
+    # No image changes, and the brains themselves are untouched - start the one you
+    # switch to (`ai-lab start tyger-s2s` / `ai-lab start personaplex`).
+    local root unit_repo unit_live want url
+    root="$(dirname "$REGISTRY")"
+    unit_repo="$root/quadlets/plexpipe.container"
+    unit_live="${QUADLET_DIR:-$HOME/.config/containers/systemd}/plexpipe.container"
+    want="${1:-}"
+    if [ -z "$want" ]; then
+        echo "repo unit:     $(grep -m1 -E '^#?Environment=PLEX_URL=' "$unit_repo" || echo 'no PLEX_URL line (plexpipe default: personaplex)')"
+        [ -f "$unit_live" ] && echo "rendered unit: $(grep -m1 -E '^#?Environment=PLEX_URL=' "$unit_live")"
+        echo "brain units:   tyger-s2s=$(svc_state tyger-s2s.service)  personaplex=$(svc_state personaplex.service)  plexpipe=$(svc_state plexpipe.service)"
+        return
+    fi
+    case "$want" in
+        tyger)       url="ws://systemd-tyger-gateway:8994" ;;
+        personaplex) url="ws://systemd-personaplex:8998" ;;
+        *) echo "ai-lab: voice-brain [tyger|personaplex]" >&2; exit 1 ;;
+    esac
+    python3 - "$unit_repo" "$url" <<'PY'
+import re, sys
+path, url = sys.argv[1], sys.argv[2]
+text = open(path).read()
+new, n = re.subn(r"(?m)^#?Environment=PLEX_URL=.*$", f"Environment=PLEX_URL={url}", text)
+if n != 1:
+    sys.exit(f"voice-brain: expected exactly one PLEX_URL line in {path}, found {n}")
+open(path, "w").write(new)
+print(f"  {path}: PLEX_URL={url}")
+PY
+    "$root/scripts/render-units.sh" plexpipe
+    systemctl --user daemon-reload
+    if [ "$(svc_state plexpipe.service)" = running ]; then
+        systemctl --user restart plexpipe.service && echo "  restarted plexpipe (it now dials $url)"
+    else
+        echo "  plexpipe is not running; it will dial $url when started"
+    fi
+    echo "  brain units: tyger-s2s=$(svc_state tyger-s2s.service)  personaplex=$(svc_state personaplex.service)"
+}
+
 action() {  # restart <name> (a single service; a group has no single unit)
     check_name "$2"
     if [ "$(registry_get "$2" name)" != "$2" ]; then
@@ -367,5 +412,6 @@ case "${1:-status}" in
     docling) shift; cmd_docling "$@" ;;
     maya)    shift; cmd_maya "$@" ;;
     dictation) shift; cmd_dictation "$@" ;;
-    *) echo "usage: ai-lab status [--json] | ports | url <name> | info [name] | start|stop|toggle <name> [--dry-run] | restart <name> | strata [5090|5090-524k|5090-1m|4070ti|4070ti-524k|4070ti-1m|both|duo [5090-variant] [256k|524k|1m]|off] [--dry-run] | coder [128k|256k|524k|1m|off] [--dry-run] | docling [cpu|4070ti|off] [--dry-run] | maya [256|512|1024|both [256|512|1024]|off] [--dry-run] | dictation [gpu|cpu]" >&2; exit 1 ;;
+    voice-brain) shift; cmd_voice_brain "$@" ;;
+    *) echo "usage: ai-lab status [--json] | ports | url <name> | info [name] | start|stop|toggle <name> [--dry-run] | restart <name> | voice-brain [tyger|personaplex] | strata [5090|5090-524k|5090-1m|4070ti|4070ti-524k|4070ti-1m|both|duo [5090-variant] [256k|524k|1m]|off] [--dry-run] | coder [128k|256k|524k|1m|off] [--dry-run] | docling [cpu|4070ti|off] [--dry-run] | maya [256|512|1024|both [256|512|1024]|off] [--dry-run] | dictation [gpu|cpu]" >&2; exit 1 ;;
 esac
