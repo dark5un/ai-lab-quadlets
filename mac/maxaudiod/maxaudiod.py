@@ -54,7 +54,7 @@ class Status:
                      "gated_frames": 0, "speaking_frames": 0,
                      "mailbox_frames": 0,
                      "play_chunks": 0, "play_samples": 0,
-                     "tag_frames": 0, "played_reports": 0,
+                     "tag_frames": 0, "played_reports": 0, "empty_downlinks": 0,
                      "plex_up": None, "bridge_up": None}
 
     def bump(self, **kw):
@@ -285,9 +285,16 @@ class Bridge:
                 if tag == b"A":
                     status.inc("rx_frames")
                     pcm24 = np.frombuffer(payload, dtype="<i2").astype(np.float32) / 32768.0
+                    if not pcm24.size:
+                        # plexpipe can forward an EMPTY 'A' when sphn's decoder yields nothing for a
+                        # message (0.1.12 needs a moment; measured 3 of 22 frames on 2026-11-14). An
+                        # empty chunk must not enter the play queue: it would be taken for a reply
+                        # sample boundary and report `played:1:0` before a single sample was played.
+                        status.inc("empty_downlinks")
+                        continue
                     # energy-aware gate: plexpipe pads the downlink with
                     # silent real-time frames — gate only on actual speech
-                    if len(pcm24) and float(np.sqrt(np.mean(pcm24 ** 2))) > 0.01:
+                    if float(np.sqrt(np.mean(pcm24 ** 2))) > 0.01:
                         self.last_downlink = time.time()
                         status.inc("speaking_frames")
                     self.play_q.put((self.cur_rid, pcm24))
@@ -433,7 +440,8 @@ class Bridge:
                 # `played:<rid>:<samples>` -- that report is what ends tyger's turn honestly
                 # (app/ears/conversation.py:148-154,305-310), instead of the server's 2 s guess.
                 pr = pending[0]
-                if pr is not None and pr[2] <= time.perf_counter() and pr[0] != reported[0]:
+                if (pr is not None and pr[1] > 0 and pr[2] <= time.perf_counter()
+                        and pr[0] != reported[0]):
                     pending[0] = None
                     reported[0] = pr[0]
                     self.tx.put(f"played:{pr[0]}:{pr[1]}")
