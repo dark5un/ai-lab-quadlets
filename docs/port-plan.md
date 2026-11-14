@@ -162,3 +162,10 @@ only, never deployed.
 | max-face   | none  | ai.network internal only (gRPC systemd-max-face:52000); Audio2Face-3D NIM, opt-in, 4070 Ti ~0.9 GB single-stream |
 | maxface    | none  | ai.network internal only (WS systemd-maxface:8993 /frames + /audio-in); QuickTalk learned-face renderer (ticket 07), opt-in, 4070 Ti ~1.5-2 GB beside personaplex |
 | tyger-gateway | 8994 | 127.0.0.1 publish for local probes; plexpipe dials it by name over ai.network (ws://systemd-tyger-gateway:8994/api/chat); `/health` (200 only with a tyger behind it) is plexpipe's ExecStartPre gate; upstream is ws://tyger-v1:7860/ws on the stack network |
+
+## Additions (2026-11-14, V05 ops hardening)
+
+| service    | port  | binding + door |
+|------------|-------|----------------|
+| tyger-s2s  | 7860  | quadlet `tyger-v1.service`, container `tyger-v1`, 127.0.0.1 publish (the classic page over `ssh -L 7860`); the gateway dials it by name over ai.network (ws://tyger-v1:7860/ws); `/voices` is its health; whole RTX 5090 (~27.8 GB), opt-in, mounts the fork clone |
+| hermes-shim | 8100 | HOST systemd user unit, not a container (`kind: host-unit` in services.json): 0.0.0.0:8100 Responses-API facade for tyger's llm.smart; `/health` reports the backend; enabled at boot |

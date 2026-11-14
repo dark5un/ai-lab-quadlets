@@ -84,12 +84,21 @@ def check_no_tags_falls_back() -> None:
 
 
 def check_lag_is_reported() -> None:
-    """Tags that fall behind the audio are counted, never silently paired as if current."""
+    """Tags that fall behind the audio are counted, never silently paired as if current.
+
+    The offset is anchored on the session's FIRST tag (server.PlexSession.tag_for), so the stream must
+    start aligned and THEN stall: handing the first tag in already 8 blocks late lets the anchor absorb
+    the whole lag into the offset, and nothing is ever counted. This check used to do exactly that and
+    failed from the day the anchor was introduced to today; measured 2026-11-14 against both the
+    then-current image and the pre-V05.4 server.py.
+    """
     s, _ = new_session()
     fed: set = set()
-    for k in range(60):
+    feed(s, fed, 0, 0)                              # the first block's tag: this anchors the offset
+    s.tag_for(0, t_capture=0.0)
+    for k in range(1, 60):
         pos = k * BLOCK48
-        feed(s, fed, pos - 8 * BLOCK48, 0)          # the Mac's tag stream stalled 8 blocks back
+        feed(s, fed, pos - 8 * BLOCK48, 0)          # then the Mac's tag stream stalls 8 blocks back
         s.tag_for(pos, t_capture=0.0)
     if s.tag_lagged == 0:
         raise AssertionError("a stalled tag stream was not reported as lagged")

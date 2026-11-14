@@ -42,6 +42,7 @@ Every row is cited to `file:line` in `WIRE-TABLES-v03.md`. `resample.py` is the 
 | `TYGER_URL` | `ws://tyger-v1:7860/ws` | |
 | `TYGER_VOICES_URL` | `http://tyger-v1:7860/voices` | the health probe |
 | `TYGER_API_SECRET` | *unset* | set ⇒ an HS256 token is signed per connect (`aud: tyger`, `exp` 60 s, fresh `jti`). Step 2 does **not** set it: tyger stays open and loopback-only (V05 owns the posture) |
+| `GATEWAY_RECORD_DIR` | *unset* | V05.4: set ⇒ every door session writes `<dir>/<utc timestamp>/{uplink.wav,downlink.wav,session.txt}`. `uplink.wav` is what tyger heard (the mic blocks sent, 16 kHz, one per 20 ms); `downlink.wav` is what tyger said (the reply audio as it arrived, 24 kHz, **before** the pacing, and a reply that was barge-halted is left out whole). The quadlet sets it to `/recordings`, mounted from `~/.local/share/ai-lab/recordings` |
 
 ## Why the downlink is paced at real time
 

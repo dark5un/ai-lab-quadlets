@@ -60,6 +60,13 @@ GPU_DEVICE_OK = {"gpu-exporter", "vscode"}   # AddDevice without a registry card
 bad = 0
 for s in json.load(open(f"{root}/services.json"))["services"]:
     name = s["name"]
+    if s.get("kind") == "host-unit":
+        # A registered HOST unit (hermes-shim): no quadlet by design, and boot=true
+        # is its normal state - systemd --user starts it with the session. The
+        # no-[Install] policy below exists for the podman tiers, not for these.
+        if not s["boot"]:
+            print(f"  FAIL: {name}: a registered host unit must be boot=true"); bad = 1
+        continue
     if s["boot"] is not (name in BOOT_OK):
         print(f"  FAIL: {name}: boot={s['boot']} violates the monitoring-tier rule"); bad = 1
     if s.get("group") in ("strata", "coder"):

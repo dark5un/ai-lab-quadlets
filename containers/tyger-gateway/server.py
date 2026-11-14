@@ -45,6 +45,7 @@ import os
 import secrets
 import struct
 import time
+import wave
 from collections import deque
 
 import aiohttp
@@ -64,6 +65,13 @@ TYGER_SECRET = os.environ.get("TYGER_API_SECRET", "").strip() or None
 # the door. Not evidence on its own -- the acceptance is what a human hears off MAX Mic -- but it says
 # which side of plexpipe a defect is on.
 DUMP_DIR = os.environ.get("GATEWAY_DUMP_DIR", "").strip() or None
+# Session recording (V05.4, off unless set): every door session writes the two legs it carries as
+# WAV, one directory per session, so a meeting can be replayed:
+#   uplink.wav    what tyger heard - the mic blocks this gateway sent it, 16 kHz, one per 20 ms
+#   downlink.wav  what tyger said  - the reply audio as it arrived, 24 kHz, before the door's pacing;
+#                 a reply that was barge-halted is left out whole
+# Plus session.txt: the numbers, so a file can be matched to a log line.
+RECORD_DIR = os.environ.get("GATEWAY_RECORD_DIR", "").strip() or None
 
 SR_PLEX = 24000            # the plex leg's rate, both ways (plexpipe server.py:33,62)
 BLOCK = 320                # a mic block: 20 ms at the EARS rate (page.py:16)
@@ -97,6 +105,67 @@ def log(*a):
 def to_pcm16(x: np.ndarray) -> np.ndarray:
     """float32 -> int16, as playback.py:36-37 does it."""
     return np.clip(np.round(x * 32767.0), -32768, 32767).astype("<i2")
+
+
+class Leg:
+    """One WAV file of a session recording. Opened on the first write: the uplink's rate is only
+    known after tyger's `ready`."""
+
+    def __init__(self, path: str, sr: int):
+        self.path, self.sr = path, sr
+        self.w = None
+        self.samples = 0
+
+    def write(self, x: np.ndarray) -> None:
+        if self.w is None:
+            self.w = wave.open(self.path, "wb")
+            self.w.setnchannels(1)
+            self.w.setsampwidth(2)
+            self.w.setframerate(self.sr)
+        self.w.writeframes(to_pcm16(x).tobytes())
+        self.samples += x.size
+
+    def close(self) -> float:
+        if self.w is not None:
+            self.w.close()
+            self.w = None
+        return self.samples / self.sr
+
+
+class SessionRecorder:
+    """The two legs of one door session, under <RECORD_DIR>/<utc timestamp>/ (V05.4).
+
+    Written by the tasks that own each stream, so a failure here cannot stop the audio path; every
+    call is guarded by the caller's `if self.rec is not None`.
+    """
+
+    def __init__(self, root: str, note: str):
+        self.dir = os.path.join(root, time.strftime("%Y-%m-%dT%H%M%SZ", time.gmtime()))
+        os.makedirs(self.dir, exist_ok=True)
+        self.note = note
+        self.uplink: Leg | None = None
+        self.downlink = Leg(os.path.join(self.dir, "downlink.wav"), SR_PLEX)
+        self.rids: set[int] = set()
+
+    def uplink_block(self, blk: np.ndarray, sr_ears: int) -> None:
+        if self.uplink is None:
+            self.uplink = Leg(os.path.join(self.dir, "uplink.wav"), sr_ears)
+        self.uplink.write(blk)
+
+    def downlink_audio(self, rid: int, a24: np.ndarray) -> None:
+        self.rids.add(rid)
+        self.downlink.write(a24)
+
+    def close(self, summary: str) -> str:
+        up = self.uplink.close() if self.uplink is not None else 0.0
+        down = self.downlink.close()
+        with open(os.path.join(self.dir, "session.txt"), "w") as f:
+            f.write(f"{self.note}\n"
+                    f"uplink.wav   {up:.1f} s (what tyger heard)\n"
+                    f"downlink.wav {down:.1f} s (what tyger said)\n"
+                    f"replies: {sorted(r for r in self.rids if r)}\n"
+                    f"{summary}\n")
+        return self.dir
 
 
 def sign_token(secret: str, ttl_s: int = TOKEN_TTL_S) -> str:
@@ -156,6 +225,7 @@ class PlexSession:
         self.mac_reports = 0                          # `played:` reports relayed from the Mac
         self.logged_rid = None                        # the last reply whose first real tag was logged
         self.last_tag_log = 0.0
+        self.rec: "SessionRecorder | None" = None     # set by plex_chat when GATEWAY_RECORD_DIR is on
 
     def _drop_queued(self) -> int:
         """Throw away frames not yet sent (a barge, or a new tyger conversation)."""
@@ -263,6 +333,8 @@ class PlexSession:
                 a24 = np.frombuffer(data, "<i2", offset=AUDIO_HEADER.size).astype(np.float32) / 32768.0
                 if rid == self.barged_rid:            # the page stops playback on a barge
                     continue
+                if self.rec is not None:              # V05.4: the reply audio, for the owner's replay
+                    self.rec.downlink_audio(rid, a24)
                 if rid != BACKCHANNEL_ID:
                     if rid != self.reply_rid:
                         self.reply_rid, self.reply_samples = rid, 0
@@ -526,6 +598,8 @@ class PlexSession:
             self.tyger_ready = False
             return
         self.blocks += 1
+        if self.rec is not None:                      # V05.4: what tyger heard, one block per 20 ms
+            self.rec.uplink_block(blk, self.sr_ears)
         self.mic_bytes += BLOCK * 2
         if at >= 0 and rid != self.logged_rid:
             # The evidence line for the acceptance: the Mac's measured playhead, on a mic block, naming
@@ -554,6 +628,12 @@ async def plex_chat(request: web.Request) -> web.WebSocketResponse:
 
     SESSIONS += 1
     session = PlexSession(ws, request.app["http"], voice_prompt)
+    if RECORD_DIR:
+        try:
+            session.rec = SessionRecorder(
+                RECORD_DIR, f"plex session from {request.remote}; voice_prompt={voice_prompt!r}")
+        except OSError as e:                    # a recording problem must not close the door
+            log(f"session recording off for this session: {e!r}")
     tasks = [asyncio.create_task(coro, name=name) for name, coro in
              (("uplink", session.uplink()), ("tyger", session.tyger_manager()),
               ("downlink", session.downlink()))]
@@ -573,12 +653,18 @@ async def plex_chat(request: web.Request) -> web.WebSocketResponse:
         if session.tyger is not None and not session.tyger.closed:
             await session.tyger.close()
         SESSIONS -= 1
-        log(f"plex session closed: mic blocks={session.blocks} bytes={session.mic_bytes} "
-            f"dropped={session.dropped_blocks} reply rid={session.reply_rid} "
-            f"arrived={session.reply_samples} sent={session.sent_samples} samples "
-            f"({session.sent_samples / SR_PLEX:.2f} s on the wire) encoded={session.encoded_bytes} B "
-            f"tags: hits={session.tag_hits} lagged={session.tag_lagged} old={session.tag_old} "
-            f"mac_played={session.mac_reports}")
+        closed = (f"plex session closed: mic blocks={session.blocks} bytes={session.mic_bytes} "
+                  f"dropped={session.dropped_blocks} reply rid={session.reply_rid} "
+                  f"arrived={session.reply_samples} sent={session.sent_samples} samples "
+                  f"({session.sent_samples / SR_PLEX:.2f} s on the wire) encoded={session.encoded_bytes} B "
+                  f"tags: hits={session.tag_hits} lagged={session.tag_lagged} old={session.tag_old} "
+                  f"mac_played={session.mac_reports}")
+        log(closed)
+        if session.rec is not None:
+            try:
+                log(f"session recording: {session.rec.close(closed)}")
+            except OSError as e:
+                log(f"session recording failed: {e!r}")
     return ws
 
 

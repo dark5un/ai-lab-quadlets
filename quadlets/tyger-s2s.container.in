@@ -1,0 +1,60 @@
+# tyger-s2s v1: the voice brain (EARS + MOUTH) on the RTX 5090, as a quadlet.
+# It replaces the ad-hoc `podman run` that lived in ~/.local/share/ai-lab/tyger/run.sh
+# (V05.1): the unit comes back with `ai-lab start tyger-s2s`, and the fork clone is
+# MOUNTED, not baked, so a config or prompt edit costs a restart, never a rebuild.
+# The image supplies the venv and the system libraries; scripts/install-tyger.sh builds
+# it from the clone (tag = the clone's commit).
+#
+# ContainerName stays `tyger-v1`: the gateway dials it by name as ws://tyger-v1:7860/ws
+# (TYGER_URL in quadlets/tyger-gateway.container) and one JWT is one conversation.
+#
+# localhost/tyger-s2s-v1:9e88db0 is the fork tip that carries V02 (hermes shim plugin,
+# llm.smart) and V06 (persona, mouth pacing). :97d011d is V01 code, kept for rollback.
+# The shim key comes from tyger.env (make-shim-env.sh), never from a command line.
+#
+# No [Install]: opt-in via ai-lab (avatar group, boot=false). Needs the whole 5090
+# (~27.8 GB peak), so the conflicts list is every unit that holds that card; starting
+# it through `ai-lab` moves strata to the 4070 Ti instead (gpu-arbiter R1).
+
+[Unit]
+Description=tyger-s2s v1: full-duplex voice brain (EARS + MOUTH) on the RTX 5090
+Wants=ai-network.service
+After=ai-network.service
+Conflicts=maya-5090-256.service maya-5090-512.service maya-5090-1024.service maya-both-256.service maya-both-512.service maya-both-1024.service comfyui-5090.service llama-cpp-5090.service llama-cpp-both.service strata-5090.service strata-5090-1m.service strata-5090-524k.service strata-both.service
+StartLimitIntervalSec=20min
+StartLimitBurst=2
+
+[Container]
+ContainerName=tyger-v1
+Image=localhost/tyger-s2s-v1:9e88db0
+Network=ai.network
+PublishPort=127.0.0.1:7860:7860
+AddDevice=nvidia.com/gpu=all
+Environment=CUDA_VISIBLE_DEVICES=__GPU_5090_UUID__
+Environment=CONFIG=config/local.yaml
+Environment=TYGER_MAX_SESSION_S=0
+Environment=FLASHINFER_WORKSPACE_BASE=/root/.cache/flashinfer
+EnvironmentFile=%h/.local/share/ai-lab/tyger/tyger.env
+# the models and the two compile caches survive a container replacement
+Volume=tyger-hf:/hf
+Volume=tyger-cache:/root/.cache
+Volume=tyger-triton:/root/.triton
+Volume=%h/.local/share/ai-lab/models/tyger-bundle:/models/tyger:ro
+# the fork clone, live (the same list the image COPYs): app code, config, prompts,
+# the voice clips and the launcher. /app/.venv and the system libraries stay in the image.
+Volume=%h/workspace/github.com/nineninesix-ai/tyger-s2s/app:/app/app:ro
+Volume=%h/workspace/github.com/nineninesix-ai/tyger-s2s/scripts/stack:/app/scripts/stack:ro
+Volume=%h/workspace/github.com/nineninesix-ai/tyger-s2s/static:/app/static:ro
+Volume=%h/workspace/github.com/nineninesix-ai/tyger-s2s/voices:/app/voices:ro
+Volume=%h/workspace/github.com/nineninesix-ai/tyger-s2s/config:/app/config
+Volume=%h/workspace/github.com/nineninesix-ai/tyger-s2s/run.sh:/app/run.sh:ro
+Volume=%h/workspace/github.com/nineninesix-ai/tyger-s2s/stop.sh:/app/stop.sh:ro
+
+[Service]
+# run.sh waits up to 3600 s for a cold first start: the engines JIT-compile their
+# kernels before they listen (warm start ~100 s from the volumes).
+TimeoutStartSec=3600
+TimeoutStopSec=60
+Restart=on-failure
+RestartSec=30
+SuccessExitStatus=143

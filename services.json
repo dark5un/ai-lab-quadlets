@@ -1272,6 +1272,34 @@
       "auth": "none",
       "note": "MaxPresence P2 video renderer (V-6a): headless chromium (SwiftShader, CPU-only) of the max-headroom v2 app at 640x480; CDP paced screenshots -> ws :8992 /frames -> plexpipe relays as 'V'; app served from apps/max-headroom/dist volume; chromium starts/stops with subscriber demand",
       "group": "avatar"
+    },
+    {
+      "name": "tyger-s2s",
+      "unit": "tyger-s2s.service",
+      "container": "tyger-v1",
+      "host_port": 7860,
+      "container_port": 7860,
+      "bind": "127.0.0.1",
+      "health": "/voices",
+      "tier": "opt-in",
+      "image": "localhost/tyger-s2s-v1:9e88db0",
+      "boot": false,
+      "auth": "none",
+      "note": "V05.1 voice brain (EARS + MOUTH, fork 9e88db0 = V02 shim plugin + V06 persona) as a quadlet; replaces the ad-hoc podman run in ~/.local/share/ai-lab/tyger/run.sh. Mounts the fork clone, so config/prompt/voice edits are a restart, not a rebuild; scripts/install-tyger.sh builds the image. Whole RTX 5090 (~27.8 GB peak), so Conflicts= is every 5090 holder and `ai-lab start tyger-s2s` moves strata to the 4070 Ti (R1). ContainerName stays tyger-v1: the gateway dials ws://tyger-v1:7860/ws. Shims in via tyger.env (HERMES_SHIM_KEY).",
+      "gpu": "5090",
+      "group": "avatar"
+    },
+    {
+      "name": "hermes-shim",
+      "unit": "hermes-shim.service",
+      "kind": "host-unit",
+      "host_port": 8100,
+      "bind": "0.0.0.0",
+      "health": "/health",
+      "tier": "opt-in",
+      "boot": true,
+      "auth": "token",
+      "note": "V02 Responses-API facade for tyger's llm.smart plugin. A HOST systemd user unit, not a quadlet (kind=host-unit): ~/.config/systemd/user/hermes-shim.service -> ~/.local/share/hermes-shim/run.sh, enabled at boot. SHIM_BACKEND=hermes -> the native gateway http://127.0.0.1:8642/v1; it needs the host loopback and ~/.hermes/.env, so it stays on the host (owner decision 2026-11-14). Key + backend in ~/.config/containers/config/hermes-shim/service.env."
     }
   ]
 }
