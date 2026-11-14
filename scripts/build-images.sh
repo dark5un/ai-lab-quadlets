@@ -112,11 +112,15 @@ for name in "${NAMES[@]}"; do
                       -f "$ROOT/containers/maxvid/Containerfile" ;;
         maxface) build maxface "$ROOT/containers/maxface" \
                       -f "$ROOT/containers/maxface/Containerfile" ;;
+        tyger-gateway) build tyger-gateway "$ROOT/containers/tyger-gateway" \
+                      -f "$ROOT/containers/tyger-gateway/Containerfile" ;;
         avatar) pull max-face;
                 build max-bridge "$ROOT/containers/max-bridge" \
                       -f "$ROOT/containers/max-bridge/Containerfile";
                 build plexpipe "$ROOT/containers/plexpipe" \
                       -f "$ROOT/containers/plexpipe/Containerfile";
+                build tyger-gateway "$ROOT/containers/tyger-gateway" \
+                      -f "$ROOT/containers/tyger-gateway/Containerfile";
                 build maxvid "$ROOT/containers/maxvid" \
                       -f "$ROOT/containers/maxvid/Containerfile";
                 build maxface "$ROOT/containers/maxface" \

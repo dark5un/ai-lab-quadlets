@@ -1244,6 +1244,21 @@
       "group": "avatar"
     },
     {
+      "name": "tyger-gateway",
+      "unit": "tyger-gateway.service",
+      "container": "systemd-tyger-gateway",
+      "host_port": 8994,
+      "container_port": 8994,
+      "bind": "127.0.0.1",
+      "health": "/health",
+      "tier": "opt-in",
+      "image": "localhost/tyger-gateway:latest",
+      "boot": false,
+      "auth": "none",
+      "note": "V03 door gateway: answers the `plex` role plexpipe dials (WS /api/chat, one-byte handshake, 0x01+Ogg/Opus 24 kHz) and speaks tyger-s2s's EARS /ws at ws://tyger-v1:7860/ws -- mic blocks tagged [rid][agent sample at 24 kHz] at 16 kHz, replies 24 kHz, played:<rid>:<samples> reports; GET /health is 200 only with a real tyger behind it (plexpipe ExecStartPre gate); container README + WIRE-TABLES-v03.md carry the contracts",
+      "group": "avatar"
+    },
+    {
       "name": "maxvid",
       "unit": "maxvid.service",
       "container": "systemd-maxvid",
