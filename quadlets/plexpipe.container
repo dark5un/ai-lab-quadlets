@@ -16,6 +16,12 @@ ContainerName=systemd-plexpipe
 Image=localhost/plexpipe:latest
 Network=ai.network
 PublishPort=127.0.0.1:8991:8991/tcp
+# V03 (branch v03/tyger-gateway): the plex upstream is the tyger gateway, not
+# personaplex. Plexpipe's own default is ws://systemd-personaplex:8998
+# (containers/plexpipe/server.py:53). FALLBACK back to personaplex = change this
+# one line back to ws://systemd-personaplex:8998, `render-units.sh plexpipe`,
+# daemon-reload, restart; nothing else in the unit or the image changes.
+Environment=PLEX_URL=ws://systemd-tyger-gateway:8994
 # same persona as the max-headroom app (apps/max-headroom/src/main2.js PERSONA)
 # persona per owner directive 2026-11-12 (facts #35/#36): Maximilian, 1970s
 # scientist, British voice (pxvoice.wav = piper ryan-high). Headroom wording
@@ -34,5 +40,14 @@ SuccessExitStatus=143
 Restart=on-failure
 RestartSec=10
 TimeoutStopSec=30
+# V03 health gate (PLAN-V03-step2.md §3, layer 2): refuse to start unless a
+# gateway with a REAL tyger behind it answers. A stopped or sick gateway then
+# makes this unit fail instead of starting and redialling once a second (the
+# reconnect storm: the redial loop lives in plex_session(), which exists only
+# while a door session is alive). Runs on the host, where the gateway is the
+# loopback publish; the name systemd-tyger-gateway is not resolvable here.
+# Verified against podman-systemd.unit(5) 6.1.4, whose own example puts
+# ExecStartPre in [Service].
+ExecStartPre=/usr/bin/curl -fsS -m 5 http://127.0.0.1:8994/health
 
 # No [Install] section by design: opt-in via ai-lab (avatar group, boot=false).
