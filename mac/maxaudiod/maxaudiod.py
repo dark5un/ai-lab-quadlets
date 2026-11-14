@@ -362,6 +362,7 @@ class Bridge:
         pending: list = [None]           # (rid, samples, when the last of them reached the DAC)
         reported: list = [None]          # the last rid a `played:` report has been sent for
         cap_pos = [0]                    # samples captured on this stream (48 kHz): the tag's position
+        level = [0.0]                    # the loudest uplink block this second (is the human arriving?)
         self.play_i = 0
         self.play_samples = 0
         self.play_write_s = 0.0
@@ -460,6 +461,7 @@ class Bridge:
                 mono = (indata[:, 0] + indata[:, 1]) * 0.5  # L+R downmix
                 pcm = (np.clip(mono, -1, 1) * 32767).astype("<i2")  # s16le 48k mono
                 self.tx.put(b"A" + pcm.tobytes())
+                level[0] = max(level[0], float(np.sqrt(np.mean(np.square(mono)))))
             # The tag rides beside the block it describes, right after it on the same socket: reply id,
             # the reply sample at the DAC at this capture instant, and the capture position so the far
             # side can pair tag with block through plexpipe's resample and Opus reframe.
@@ -475,7 +477,7 @@ class Bridge:
                 rx_thread.start()
                 tx_thread.start()
                 try:
-                    self._log_loop()
+                    self._log_loop(level)
                 finally:
                     self._play_summary()
 
@@ -500,8 +502,8 @@ class Bridge:
                 log.warning("door send failed: %s", e)
                 return
 
-    def _log_loop(self):
-        """Step 1 of V03 step 4: log the DAC playhead so it can be judged before any wire change."""
+    def _log_loop(self, level=None):
+        """Log the DAC playhead once a second (and the loudest uplink block: is the human arriving?)."""
         while not self.stop.is_set() and controls.link != "down":
             try:
                 r, s = self.log_q.get(timeout=0.5)
@@ -509,7 +511,11 @@ class Bridge:
                 continue
             self._samples_logged += 1
             if self._samples_logged % 50 == 0:      # ~1 s of 20 ms blocks
-                log.info("playhead: rid=%d sample=%d (queue %d)", r, s, self.play_q.qsize())
+                rms = 0.0
+                if level is not None:
+                    rms, level[0] = level[0], 0.0
+                log.info("playhead: rid=%d sample=%d (queue %d, uplink rms %.3f)",
+                         r, s, self.play_q.qsize(), rms)
         log.info("link down requested - dropping door socket")
         if self.ws is not None:
             try:

@@ -518,9 +518,10 @@ class PlexSession:
         self.blocks += 1
         self.mic_bytes += BLOCK * 2
         if self.blocks % MIC_LOG_EVERY == 0:
+            tags = f"oldest={self.tags[0][0]} newest={self.tags[-1][0]}" if self.tags else "none"
             log(f"mic blocks={self.blocks} bytes={self.mic_bytes} tag=r{rid}@{at} src={src} "
-                f"dropped={self.dropped_blocks} tags: hits={self.tag_hits} "
-                f"lagged={self.tag_lagged} old={self.tag_old}")
+                f"pos={pos} offset={self.tag_offset} {tags} dropped={self.dropped_blocks} "
+                f"tags: hits={self.tag_hits} lagged={self.tag_lagged} old={self.tag_old}")
 
 
 async def plex_chat(request: web.Request) -> web.WebSocketResponse:
