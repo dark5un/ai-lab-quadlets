@@ -103,7 +103,22 @@ class PlexSession:
         self.barged_rid = None
         self.state_events = 0
         self.last_state = None
+        self.enc: OpusEncoder | None = None
         self.playhead = Playhead(self._report_played)
+
+    async def _flush_audio(self) -> bytes:
+        """Send the tail of the current reply as a whole frame (a turn boundary; see OpusEncoder.flush)."""
+        ws = self.tyger
+        if self.enc is None or ws is None or ws.closed:
+            return b""
+        payload = self.enc.flush()
+        if payload:
+            self.encoded_bytes += len(payload)
+            try:
+                await ws.send_bytes(b"\x01" + payload)
+            except (ConnectionError, RuntimeError):
+                pass
+        return payload
 
     # ---- leg D: the client side of tyger's /ws ----
     async def _report_played(self, rid: int, samples: int) -> None:
@@ -161,7 +176,7 @@ class PlexSession:
         self.reply_rid = 0
         self.reply_samples = 0
         self.barged_rid = None
-        enc = OpusEncoder(SR_PLEX)
+        enc = self.enc = OpusEncoder(SR_PLEX)
 
         async for msg in ws:
             if msg.type == WSMsgType.TEXT:
@@ -209,9 +224,12 @@ class PlexSession:
             log(f"barge yield={ev.get('yield')}: playback stopped, dropping the rest of reply {self.reply_rid}")
             self.barged_rid = self.reply_rid
             self.playhead.stop()
+            self.enc.reset()                       # nothing more of that reply goes out (step 4 drains it properly)
         elif t == "turn_done":
+            tail = self._flush_audio()
             log(f"turn_done barged={ev.get('barged')} reply=rid {self.reply_rid} "
-                f"samples={self.reply_samples} ({self.reply_samples / SR_PLEX:.2f} s)")
+                f"samples={self.reply_samples} ({self.reply_samples / SR_PLEX:.2f} s) "
+                f"tail_frame={len(tail)} B encoded_total={self.encoded_bytes} B")
         elif t == "error":
             log(f"tyger error {ev.get('error')}")
         elif t == "busy":
