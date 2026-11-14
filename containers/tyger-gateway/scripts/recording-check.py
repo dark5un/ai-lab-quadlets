@@ -63,8 +63,10 @@ check("uplink.wav   1.0 s" in txt, f"session.txt uplink length wrong: {txt!r}")
 check("downlink.wav 0.2 s" in txt, f"session.txt downlink length wrong: {txt!r}")
 
 # The recorder must be inert when the feature is off: RECORD_DIR unset means no object, and the
-# callers guard on it (server.SessionRecorder is never constructed).
-check(server.RECORD_DIR in (None, ""), f"RECORD_DIR not empty in this container: {server.RECORD_DIR!r}")
+# callers guard on it. When it IS set (the quadlet sets /recordings) the directory must exist.
+print(f"recording check: RECORD_DIR={server.RECORD_DIR!r}")
+if server.RECORD_DIR:
+    check(os.path.isdir(server.RECORD_DIR), f"RECORD_DIR {server.RECORD_DIR!r} is not a directory")
 
 print(f"recording check: {'FAILED' if fail else 'passed'} ({path})")
 sys.exit(fail)
