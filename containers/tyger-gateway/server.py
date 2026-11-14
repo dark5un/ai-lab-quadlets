@@ -367,7 +367,8 @@ class PlexSession:
             if next_send > now:
                 await asyncio.sleep(next_send - now)
                 now = time.perf_counter()
-            if rid != announced:
+            first_frame = rid != announced
+            if first_frame:
                 # Tell the Mac which reply it is about to hear (V03 step 4): its playhead tag names that
                 # id, and backchannel audio (0) is announced too so it is never counted into a reply.
                 announced = rid
@@ -380,6 +381,12 @@ class PlexSession:
                 await self.ws.send_bytes(b"\x01" + payload)
             except (ConnectionError, RuntimeError):
                 return
+            if first_frame:
+                # t3 of the latency timeline (PLAN-latency.md): the instant this reply's first 80 ms
+                # frame left for the door. `podman logs -t` stamps the line; the ms since the reply's
+                # first audio says how much of the wait is the gateway's own, not tyger's.
+                wait_ms = (now - self.reply_t0) * 1000.0 if self.reply_t0 else 0.0
+                log(f"reply {rid}: first frame out after {wait_ms:.0f} ms from its first audio")
             if DUMP_DIR:                              # exactly what this leg put on the wire
                 try:
                     with open(os.path.join(DUMP_DIR, f"reply-{rid}.ogg"), "ab") as f:

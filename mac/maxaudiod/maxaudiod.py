@@ -42,6 +42,11 @@ log = logging.getLogger("maxaudiod")
 # ~3 intervals => daemon is gone. Schema is flat JSON; see mac/maxbar/.
 STATUS_DIR = os.path.join(os.path.expanduser("~"), "Library", "Application Support", "MaxPresence")
 STATUS_PATH = os.path.join(STATUS_DIR, "maxaudiod.json")
+# The latency timeline's t4 (PLAN-latency.md): one flushed line per reply, written the moment the
+# first sample of that reply reaches MAX Mic's DAC. The status file is no use for this (flushed
+# every 2 s) and this file's line is useless for the log tail (launchd block-buffers stdout), so
+# the instant gets its own append-only file, on the Mac's own clock. Read it with `tail`.
+PLAY_EVENTS = os.path.join(STATUS_DIR, "play-events.log")
 
 
 class Status:
@@ -212,18 +217,31 @@ class PlayTrace:
         self.windows = deque()          # (t0, t1, rid, first_sample) at PLAY_SR, oldest first
         self.last_rid = 0
         self.total = {}                 # rid -> reply samples handed to the device
+        self.first_wall = {}            # rid -> wall clock of its first sample at the DAC (t4)
 
     def submit(self, t0, n, rid, first_sample):
         """`n` samples of reply `rid`, whose first sample is `first_sample`, reach the DAC from `t0`."""
         with self.lock:
             t1 = t0 + n / PLAY_SR
             if rid >= 0:
+                if rid not in self.total:
+                    # t4 of the latency timeline: `t0` is in perf_counter time (the device clock), so
+                    # re-anchor this reply's first DAC instant onto the wall clock for a reader that
+                    # has no access to our perf_counter. One time.time() call, no I/O in the callback.
+                    self.first_wall[rid] = time.time() + (t0 - time.perf_counter())
                 self.last_rid = rid
                 self.total[rid] = first_sample + n
             self.windows.append((t0, t1, rid, first_sample))
             cut = t1 - self.KEEP_S
             while self.windows and self.windows[0][1] < cut:
                 self.windows.popleft()
+
+    def first_wall_events(self):
+        """Take the reply-first-sample instants not yet written out (consumed, so each is written once)."""
+        with self.lock:
+            ev = self.first_wall
+            self.first_wall = {}
+            return ev
 
     def tag(self, t_capture):
         """(reply id, its sample at PLAY_SR at the DAC at t_capture); (last rid, -1) when idle."""
@@ -243,6 +261,7 @@ class PlayTrace:
         with self.lock:
             self.windows.clear()
             self.total.clear()
+            self.first_wall.clear()
 
 
 # ---------------------------------------------------------------- door bridge
@@ -346,6 +365,10 @@ class Bridge:
     # -- audio side
     def run(self):
         self.play_q = queue.Queue(maxsize=50)
+        # A new door session: the previous session's playhead trace is not this conversation's, and
+        # its reply ids start again at 1 (so a stale `total` would suppress the new session's first
+        # play stamp -- that is t4 of the latency timeline).
+        self.trace.clear()
         # Frames left over from a previous door session (the send thread may have died mid-flight, and
         # the capture callback can still fire a few times while the streams close) must not go out on
         # the new socket: their capture positions belong to a stream that no longer exists.
@@ -515,11 +538,22 @@ class Bridge:
                 log.warning("door send failed: %s", e)
                 return
 
+    def _write_play_events(self):
+        """Append one flushed line per reply whose first sample just reached the DAC (t4 of the
+        latency timeline). Written here, off the audio callback, so the callback does no I/O."""
+        for rid, wall in self.trace.first_wall_events().items():
+            try:
+                with open(PLAY_EVENTS, "a") as f:
+                    f.write(f"{wall:.3f} first-play rid={rid}\n")
+            except OSError as e:
+                log.warning("play event write failed: %s", e)
+
     def _log_loop(self, level=None):
         """Log the DAC playhead once a second (and the loudest uplink block: is the human arriving?)."""
         while not self.stop.is_set() and controls.link != "down":
+            self._write_play_events()
             try:
-                r, s = self.log_q.get(timeout=0.5)
+                r, s = self.log_q.get(timeout=0.2)
             except queue.Empty:
                 continue
             self._samples_logged += 1
