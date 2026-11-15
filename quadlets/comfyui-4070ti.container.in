@@ -3,7 +3,8 @@
 # `ai-lab start comfyui` or the AI Lab bar widget) picks this variant or
 # comfyui-5090, and moves it when strata moves. Strata off -> the 4070 Ti.
 # Both variants share the container name and port 3101; Conflicts= keeps one.
-# No [Install]: nothing starts at boot.
+# Boot: armed (owner directive 2026-11-15) via comfyui-4070ti.container.d/
+# boot.conf; comfyui-5090 stays on demand. Template carries no [Install].
 # GPU: pinned by UUID at the CUDA layer (CUDA_VISIBLE_DEVICES), the stack's
 # convention for non-strata services. Placeholders are filled in at install.
 

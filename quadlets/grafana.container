@@ -1,4 +1,5 @@
-# Grafana (monitoring tier, on demand like the web apps — no [Install]).
+# Grafana (monitoring tier; boots with the stack - armed with a
+# grafana.container.d/boot.conf drop-in, the template stays [Install]-free).
 # LAN :3106 with login (plan D2); admin password comes from
 # config/grafana/service.env (generate-secrets.sh). Datasources, the
 # VictoriaLogs datasource plugin and every dashboard are provisioned

@@ -11,10 +11,13 @@
 #   --with-hermes            also deploy the opt-in Hermes gateway container
 #                            (this host runs Hermes natively; normally not wanted)
 #
-# Nothing is started, and nothing is enabled at boot EXCEPT the monitoring
-# tier (prometheus, exporters, logs; plan D1 - they hold no GPU/VRAM) and the
-# files tier (dufs WebDAV, syncthing - headless box, access must never gap).
-# Grafana and every GPU/web service start on demand:
+# Nothing is started, and nothing is enabled at boot EXCEPT the boot tier:
+# monitoring (prometheus, exporters, logs AND grafana), the files tier (dufs
+# WebDAV, s3-webdav, syncthing), the control plane (ailab-api), sketchlab,
+# the pipeline group (forge, forge-postgres, s3, concourse-web/worker/
+# postgres/mcp), the vscode dev box and comfyui-4070ti. GPU boot is limited
+# to the two card-disjoint units (strata-5090-1m on the 5090, comfyui-4070ti
+# on the 4070 Ti). Everything else starts on demand:
 # `scripts/ai-lab start <name>` or the AI Lab bar widget.
 set -euo pipefail
 
@@ -309,18 +312,29 @@ echo "  ✓ maya-metrics-relay.timer (15 s, on demand with maya)"
 install -m 644 "$ROOT/services/kb-watcher.timer" "$HOME/.config/systemd/user/"
 systemctl --user enable --now kb-watcher.timer >/dev/null 2>&1 || true
 echo "  ✓ kb-watcher.timer (nightly ~03:30, wakes the KB group on demand)"
-# Boot tier (plan D1): monitoring units except grafana enable at boot, plus
-# the files tier (dufs, syncthing: no GPU, must not gap while the owner is
-# away at the Mac), plus sketchlab (owner directive 2026-11-05: diagramming
-# SPA must always be available; CPU-only, proxies to strata per request).
-# The one GPU exception: the default strata variant (strata-5090-1m).
-# Control plane (ailab-api): the Mac menu-bar widget must always reach the
-# stack (owner directive 2026-11-10: all functionality from the tailnet).
-for u in prometheus node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit strata-5090-1m dufs s3-webdav syncthing sketchlab ailab-api; do
+# Boot tier (owner directive 2026-11-15): monitoring units INCLUDING grafana
+# (the dashboards must answer after a reboot), the files tier (dufs,
+# s3-webdav, syncthing: no GPU, headless box, access must never gap while the
+# owner is at the Mac), sketchlab (always-available diagramming SPA,
+# 2026-11-05), the control plane (ailab-api: the Mac menu-bar widget must
+# always reach the stack, 2026-11-10), the pipeline group (forge +
+# forge-postgres, s3, concourse-web/worker/postgres/mcp), the vscode dev box
+# and comfyui-4070ti. The GPU boot pair sits on disjoint cards (strata-5090-1m
+# on the 5090, comfyui-4070ti on the 4070 Ti); Conflicts= lines still stop
+# either when another variant takes over its card.
+# Units whose templates carry no [Install] (pipeline group, vscode,
+# comfyui-4070ti, grafana) are armed with a boot.conf drop-in; the quadlet
+# generator merges it and materializes the default.target wants link.
+for u in grafana vscode comfyui-4070ti forge forge-postgres s3 \
+         concourse-web concourse-worker concourse-postgres concourse-mcp; do
+    mkdir -p "$QUADLET_DIR/$u.container.d"
+    printf '[Install]\nWantedBy=default.target\n' > "$QUADLET_DIR/$u.container.d/boot.conf"
+done
+for u in prometheus node-exporter gpu-exporter podman-exporter blackbox-exporter victorialogs fluent-bit strata-5090-1m dufs s3-webdav syncthing sketchlab ailab-api grafana vscode comfyui-4070ti forge forge-postgres s3 concourse-web concourse-worker concourse-postgres concourse-mcp; do
     systemctl --user enable "$u.service" >/dev/null 2>&1 || true
 done
 systemctl --user daemon-reload
-echo "  ✓ daemon-reload (monitoring + default strata variant enabled at boot; grafana on demand)"
+echo "  ✓ daemon-reload (boot tier enabled at boot: monitoring incl. grafana, files, pipeline, strata-5090-1m, vscode, comfyui-4070ti)"
 
 # ─── 5. Data dirs ────────────────────────────────────────────────────────────
 say "5/6 data dirs"

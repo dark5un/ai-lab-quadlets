@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 # Quadlet policy for every repo quadlet and registry entry:
-#   - nothing starts at boot: no [Install], registry boot=false everywhere,
-#     EXCEPT the monitoring tier (plan D1): prometheus, the exporters and the
-#     log pair enable at boot; grafana stays on demand like the web apps.
-#   - AND the files tier (dufs, syncthing): no GPU, headless-box access
-#     services, must not gap while the owner works from the Mac.
-#   - the one GPU exception: strata-5090-1m is the default strata variant and
-#     boots with the session (its Conflicts= lines stop it when another
-#     variant or card user takes over).
+#   - the boot tier (owner directive 2026-11-15; monitoring/files part was
+#     plan D1): monitoring (prometheus, exporters, log pair AND grafana -
+#     dashboards must answer without a manual start), the files tier (dufs,
+#     s3-webdav, syncthing), the control plane (ailab-api), sketchlab, the
+#     pipeline group (forge + forge-postgres, s3, concourse-web/worker/
+#     postgres/mcp), the vscode dev box and comfyui-4070ti. Registry boot=
+#     true mirrors the set; units whose templates carry no [Install] are
+#     armed live with a <name>.container.d/boot.conf drop-in (install.sh
+#     writes them), so the no-[Install] rule below still holds for templates.
+#   - GPU boot services: strata-5090-1m (default variant, 5090) and
+#     comfyui-4070ti (4070 Ti) - different cards, no mutual Conflicts=, so
+#     a reboot brings both up; each unit's Conflicts= lines stop it when
+#     another variant or card user takes over.
 #   - no network-online.target dependency (podman's waiter hangs on Arch)
 #   - units on ai.network Want + start After ai-network.service
 #   - no hardcoded GPU UUID (templates carry placeholders only)
@@ -26,8 +31,10 @@ err() { echo "  FAIL: $*"; fail=1; }
 for f in "$ROOT"/quadlets/*.container "$ROOT"/quadlets/*.container.in; do
     n="$(basename "$f")"
     if grep -q '^\[Install\]' "$f"; then
-        # boot allowed only for the monitoring tier minus grafana, plus the
-        # default strata variant
+        # templates with [Install] are only allowed for the boot-tier units
+        # that carry it inline (monitoring, files tier, control plane, sketchlab,
+        # default strata variant); the drop-in-armed boot units have no
+        # [Install] in their templates at all
         case "$n" in
             prometheus.container|node-exporter.container|gpu-exporter.container|\
             podman-exporter.container|blackbox-exporter.container|\
@@ -55,7 +62,11 @@ want = {"5090": "__GPU_5090_UUID__", "4070ti": "__GPU_4070TI_UUID__",
         "both": "__GPU_5090_UUID__,__GPU_4070TI_UUID__"}
 BOOT_OK = {"prometheus", "node-exporter", "gpu-exporter", "podman-exporter",
            "blackbox-exporter", "victorialogs", "fluent-bit", "strata-5090-1m",
-           "dufs", "s3-webdav", "syncthing", "sketchlab", "ailab-api"}
+           "dufs", "s3-webdav", "syncthing", "sketchlab", "ailab-api",
+           "grafana", "vscode", "comfyui-4070ti",
+           "forge", "forge-postgres", "s3",
+           "concourse-web", "concourse-worker", "concourse-postgres",
+           "concourse-mcp"}
 GPU_DEVICE_OK = {"gpu-exporter", "vscode"}   # AddDevice without a registry card
 bad = 0
 for s in json.load(open(f"{root}/services.json"))["services"]:
