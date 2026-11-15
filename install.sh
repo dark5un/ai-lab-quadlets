@@ -302,10 +302,17 @@ systemctl --user enable --now podman.socket >/dev/null 2>&1 || true
 python3 "$ROOT/scripts/render-prometheus.py" | sed 's/^/  /'
 # Project Maya serves JSON-only /metrics: the relay turns it into text for
 # node-exporter's textfile collector (a pure read; it never starts a model).
-install -m 644 "$ROOT/services/maya-metrics-relay.service" "$HOME/.config/systemd/user/"
-install -m 644 "$ROOT/services/maya-metrics-relay.timer" "$HOME/.config/systemd/user/"
-systemctl --user enable --now maya-metrics-relay.timer >/dev/null 2>&1 || true
-echo "  ✓ maya-metrics-relay.timer (15 s, on demand with maya)"
+# Same gate as the maya block above: without the ~/src/project-maya base
+# configs there is nothing on :11440 to read, so the relay units are not
+# installed and the 15 s timer is not armed (owner directive 2026-11-15).
+if [ -f "$HOME/src/project-maya/maya-maya-s24.json" ] && [ -f "$HOME/src/project-maya/maya-maya-s-v2-iq2_xxs.json" ]; then
+    install -m 644 "$ROOT/services/maya-metrics-relay.service" "$HOME/.config/systemd/user/"
+    install -m 644 "$ROOT/services/maya-metrics-relay.timer" "$HOME/.config/systemd/user/"
+    systemctl --user enable --now maya-metrics-relay.timer >/dev/null 2>&1 || true
+    echo "  ✓ maya-metrics-relay.timer (15 s, only while maya is installed)"
+else
+    echo "  maya-relay: skipped (no ~/src/project-maya base configs)"
+fi
 # KB group (knowledge-base plan): the units stay dormant; the nightly ingest
 # is driven by this plain user timer activating the quadlet-generated
 # kb-watcher.service (podman 6.1 quadlets have no native [Timer] section).
