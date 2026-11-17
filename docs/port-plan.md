@@ -35,7 +35,7 @@ Web apps (31xx family, sequential):
 | service            | old  | new  | binding  |
 |--------------------|------|------|----------|
 | open-webui         | 3000 | 3100 | LAN      |
-| comfyui            | 8188 | 3101 | LAN      |
+| comfyui            | 8188 | 3101 | LAN (tailnet: Tailscale Service svc:comfyui -> https://comfyui.<tailnet>.ts.net, live 2026-11-17) |
 | sketchlab          | 3004 | 3102 | LAN (tailnet: Tailscale Service svc:sketchlab -> https://sketchlab.<tailnet>.ts.net; boot tier per owner directive 2026-11-05) |
 | hyperframes        | 3006 | 3103 | LAN      |
 | hermes (opt-in)    | 3003 | 3104 | LAN      |
@@ -109,6 +109,12 @@ daemon may keep saying "approval required" until `tailscale serve clear
 svc:<name>` + a few seconds + re-advertise. Verify via
 `tailscale status --json` Self.CapMap."service-host" (shows the VIP).
 The old serve-port door for sketchlab (:8447) is retired.
+
+More svc doors since: svc:forge/svc:s3/svc:concourse (pipeline group,
+2026-11-10) and `svc:comfyui` (2026-11-17) ->
+`https://comfyui.<tailnet>.ts.net`, host side `tailscale serve
+--service=svc:comfyui --https=443 http://127.0.0.1:3101`; verified via
+Self.CapMap VIP + HTTPS 200 + live `/system_stats` JSON through the door.
 
 Monitoring (added 2026-10-08, plan ~/Documents/plans/ai-lab-monitoring-plan.md):
 
